@@ -6,9 +6,10 @@ import (
 )
 
 type UserRepository interface {
-	Create(user *models.User) error
+	Create(user *models.User) (*models.User, error)
 	Get(telegramID int64) (*models.User, error)
 	Update(user *models.User) error
+	UpdateUserRoles(telegramID int64, roles []string) error
 	Delete(telegramID int64) error
 	List() ([]models.User, error)
 }
@@ -21,10 +22,10 @@ func NewUserRepository(db *DB) UserRepository {
 	return &userRepo{db: db}
 }
 
-func (r *userRepo) Create(user *models.User) error {
+func (r *userRepo) Create(user *models.User) (*models.User, error) {
 	tx, err := r.db.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback()
 
@@ -35,21 +36,24 @@ func (r *userRepo) Create(user *models.User) error {
 	err = tx.QueryRow(query, user.TelegramID, user.Username, user.FullName).
 		Scan(&user.CreatedAt, &user.UpdatedAt, &user.IsActive)
 	if err != nil {
-		return fmt.Errorf("failed to create user: %v", err)
+		return nil, fmt.Errorf("failed to create user: %v", err)
 	}
 
-	var roleID int
-	err = tx.QueryRow("SELECT id FROM roles WHERE name = $1", "user").Scan(&roleID)
+	var role models.Role
+	err = tx.QueryRow("SELECT id, name, description FROM roles WHERE name = $1", "user").
+		Scan(&role.ID, &role.Name, &role.Description)
 	if err != nil {
-		return fmt.Errorf("failed to find role user: %v", err)
+		return nil, fmt.Errorf("failed to find role user: %v", err)
 	}
 
-	_, err = tx.Exec("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)", user.TelegramID, roleID)
+	_, err = tx.Exec("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)", user.TelegramID, role.ID)
 	if err != nil {
-		return fmt.Errorf("faile to assign role: %v", err)
+		return nil, fmt.Errorf("faile to assign role: %v", err)
 	}
 
-	return tx.Commit()
+	user.Roles = append(user.Roles, role)
+
+	return user, tx.Commit()
 }
 
 func (r *userRepo) Get(telegramID int64) (*models.User, error) {
@@ -112,7 +116,7 @@ func (r *userRepo) Update(user *models.User) error {
 
 	if dbUser.Username != user.Username || dbUser.FullName != user.FullName || dbUser.IsActive != user.IsActive {
 		query := "UPDATE users SET updated_at = CURRENT_TIMESTAMP"
-		params := []interface{}{}
+		params := []any{}
 		paramCount := 1
 
 		if dbUser.Username != user.Username {
@@ -131,7 +135,7 @@ func (r *userRepo) Update(user *models.User) error {
 			paramCount++
 		}
 
-		query += fmt.Sprint(" WHERE telegram_id = $%d", paramCount)	
+		query += fmt.Sprintf(" WHERE telegram_id = $%d", paramCount)
 		params = append(params, user.TelegramID)
 
 		_, err := tx.Exec(query, params...)
@@ -140,5 +144,62 @@ func (r *userRepo) Update(user *models.User) error {
 		}
 	}
 
-	
+	return nil
+}
+
+func (r *userRepo) UpdateUserRoles(telegramID int64, roles []string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("DELETE FROM user_roles WHERE user_id = $1", telegramID)
+	if err != nil {
+		return err
+	}
+
+	for _, role := range roles {
+		var roleID int
+		err := tx.QueryRow("SELECT id FROM roles WHERE name = $1", role).Scan(&roleID)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec("INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)", telegramID, roleID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *userRepo) Delete(telegramID int64) error {
+	_, err := r.db.Exec("DELETE FROM users WHERE telegram_id = $1", telegramID)
+	return err
+}
+
+func (r *userRepo) List() ([]models.User, error) {
+	users := []models.User{}
+	query := `
+	SELECT telegram_id, username, full_name, created_at, updated_at, is_active
+	FROM users
+	`
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		user := models.User{}
+		err := rows.Scan(&user.TelegramID, &user.Username, &user.FullName,
+			&user.CreatedAt, &user.UpdatedAt, &user.IsActive)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+
+	return users, nil
 }

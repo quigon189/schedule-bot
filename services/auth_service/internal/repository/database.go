@@ -23,3 +23,7 @@ func NewDB(connectionString string) (*DB, error) {
 
 	return &DB{db}, nil
 }
+
+func (db *DB) Close() {
+	db.DB.Close()
+}
