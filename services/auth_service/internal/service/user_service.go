@@ -37,16 +37,12 @@ func (s *UserService) UpdateUser(user *models.User) error {
 	return s.userRepo.Update(user)
 }
 
-func (s *UserService) UpdateUserRoles(user *models.User) error {
-	var roles []string
-	for _, role := range user.Roles {
-		roles = append(roles, role.Name)
-	}
-	return s.userRepo.UpdateUserRoles(user.TelegramID, roles)
+func (s *UserService) UpdateUserRoles(telegramID int64, roles []string) error {
+	return s.userRepo.UpdateUserRoles(telegramID, roles)
 }
 
-func (s *UserService) DeleteUser(user *models.User) error {
-	return s.userRepo.Delete(user.TelegramID)
+func (s *UserService) DeleteUser(telegramID int64) error {
+	return s.userRepo.Delete(telegramID)
 }
 
 func(s *UserService) ListUsers() ([]models.User, error) {

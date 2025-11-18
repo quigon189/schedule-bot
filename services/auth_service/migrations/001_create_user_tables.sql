@@ -26,10 +26,10 @@ CREATE TABLE students (
 );
 
 INSERT INTO roles (name, description) VALUES
-	('admin', 'Administrator'),
-	('manager', 'Manager'),
-	('teacher', 'Teacher'),
-	('student', 'Student'),
+	('admin', 'Administrator with full access'),
+	('manager', 'Manager with limited administration access'),
+	('teacher', 'Regular teacher user'),
+	('student', 'Regular student user'),
 	('user', 'New user');
 
 -- +goose Down

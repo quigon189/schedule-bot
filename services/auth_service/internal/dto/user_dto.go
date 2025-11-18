@@ -12,12 +12,14 @@ type CreateUserRequest struct {
 }
 
 type UpdateUserRequest struct {
-	TelegramID int64    `json:"telegram_id" binding:"required"`
-	Username   string   `json:"username"`
-	FullName   string   `json:"full_name"`
-	IsActive   *bool    `json:"is_active"`
-	Group      string   `json:"group"`
-	Roles      []string `json:"roles"`
+	TelegramID int64  `json:"telegram_id" binding:"required"`
+	Username   string `json:"username"`
+	FullName   string `json:"full_name"`
+	IsActive   *bool  `json:"is_active"`
+}
+
+type UpdateUserRolesRequest struct {
+	Roles []string `json:"roles"`
 }
 
 type RoleResponse struct {
@@ -41,6 +43,15 @@ type UserResponse struct {
 	Student    *StudentResponse `json:"student,omitempty"`
 }
 
+func RequestToUser(req *UpdateUserRequest) *models.User {
+	return &models.User{
+		TelegramID: req.TelegramID,
+		Username:   req.Username,
+		FullName:   req.FullName,
+		IsActive:   *req.IsActive,
+	}
+}
+
 func ToUserResponse(user *models.User) *UserResponse {
 	if user == nil {
 		return nil
@@ -49,8 +60,8 @@ func ToUserResponse(user *models.User) *UserResponse {
 	var roles []RoleResponse
 	for _, role := range user.Roles {
 		roles = append(roles, RoleResponse{
-			ID: role.ID,
-			Name: role.Name,
+			ID:          role.ID,
+			Name:        role.Name,
 			Description: role.Description,
 		})
 	}
@@ -61,15 +72,15 @@ func ToUserResponse(user *models.User) *UserResponse {
 			GroupName: user.Student.GroupName,
 		}
 	}
-	
+
 	return &UserResponse{
 		TelegramID: user.TelegramID,
-		Username: user.Username,
-		FullName: user.FullName,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		IsActive: user.IsActive,
-		Roles: roles,
-		Student: student,
+		Username:   user.Username,
+		FullName:   user.FullName,
+		CreatedAt:  user.CreatedAt,
+		UpdatedAt:  user.UpdatedAt,
+		IsActive:   user.IsActive,
+		Roles:      roles,
+		Student:    student,
 	}
 }
