@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/pressly/goose/v3"
 )
 
 func main() {
@@ -27,6 +29,10 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 	defer db.Close()
+
+	if err := Migrations(db.DB, "./migrations"); err != nil {
+		log.Fatal("Failed to migrate:", err)
+	}
 
 	userRepo := repository.NewUserRepository(db)
 	userService := service.NewUserService(userRepo)
@@ -48,4 +54,13 @@ func main() {
 
 	log.Printf("Server starting on port %s", cfg.SevrverPort)
 	log.Fatal(http.ListenAndServe(":"+cfg.SevrverPort, r))
+}
+
+func Migrations(db *sql.DB, path string) error {
+	err := goose.SetDialect("postgres")
+	if err != nil {
+		return nil
+	}
+
+	return goose.Up(db, path)
 }

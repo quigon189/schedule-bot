@@ -6,16 +6,14 @@ import (
 )
 
 type CreateUserRequest struct {
-	TelegramID int64  `json:"telegram_id" binding:"required"`
-	Username   string `json:"username" binding:"required"`
+	TelegramID int64  `json:"telegram_id"`
+	Username   string `json:"username"`
 	FullName   string `json:"full_name"`
 }
 
 type UpdateUserRequest struct {
-	TelegramID int64  `json:"telegram_id" binding:"required"`
 	Username   string `json:"username"`
 	FullName   string `json:"full_name"`
-	IsActive   *bool  `json:"is_active"`
 }
 
 type UpdateUserRolesRequest struct {
@@ -43,12 +41,11 @@ type UserResponse struct {
 	Student    *StudentResponse `json:"student,omitempty"`
 }
 
-func RequestToUser(req *UpdateUserRequest) *models.User {
+func RequestToUser(id int64, req *UpdateUserRequest) *models.User {
 	return &models.User{
-		TelegramID: req.TelegramID,
+		TelegramID: id,
 		Username:   req.Username,
 		FullName:   req.FullName,
-		IsActive:   *req.IsActive,
 	}
 }
 

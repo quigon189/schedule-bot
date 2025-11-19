@@ -67,13 +67,14 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if id != req.TelegramID {
-		utils.ErrorResponse(w, http.StatusBadRequest, "invalid request body")
+	user := dto.RequestToUser(id, &req)
+	if err := h.userService.UpdateUser(user); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	user := dto.RequestToUser(&req)
-	if err := h.userService.UpdateUser(user); err != nil {
+	user, err = h.userService.GetUser(user.TelegramID)
+	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}

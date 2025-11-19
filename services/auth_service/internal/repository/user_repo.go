@@ -3,6 +3,7 @@ package repository
 import (
 	"auth_service/internal/models"
 	"fmt"
+	"log"
 )
 
 type UserRepository interface {
@@ -114,7 +115,7 @@ func (r *userRepo) Update(user *models.User) error {
 	}
 	defer tx.Rollback()
 
-	if dbUser.Username != user.Username || dbUser.FullName != user.FullName || dbUser.IsActive != user.IsActive {
+	if dbUser.Username != user.Username || dbUser.FullName != user.FullName {
 		query := "UPDATE users SET updated_at = CURRENT_TIMESTAMP"
 		params := []any{}
 		paramCount := 1
@@ -129,11 +130,6 @@ func (r *userRepo) Update(user *models.User) error {
 			params = append(params, user.FullName)
 			paramCount++
 		}
-		if dbUser.IsActive != user.IsActive {
-			query += fmt.Sprintf(", is_active = $%d", paramCount)
-			params = append(params, user.IsActive)
-			paramCount++
-		}
 
 		query += fmt.Sprintf(" WHERE telegram_id = $%d", paramCount)
 		params = append(params, user.TelegramID)
@@ -144,7 +140,7 @@ func (r *userRepo) Update(user *models.User) error {
 		}
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (r *userRepo) UpdateUserRoles(telegramID int64, roles []string) error {
