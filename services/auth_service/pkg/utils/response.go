@@ -22,7 +22,7 @@ func SuccessResponse(w http.ResponseWriter, message string, data any) {
 	response := Response{
 		Success: true,
 		Message: message,
-		Data: data,
+		Data:    data,
 	}
 	JSONResponse(w, http.StatusOK, response)
 }
@@ -30,7 +30,7 @@ func SuccessResponse(w http.ResponseWriter, message string, data any) {
 func ErrorResponse(w http.ResponseWriter, status int, message string) {
 	response := Response{
 		Success: false,
-		Error: message,
+		Error:   message,
 	}
 	JSONResponse(w, status, response)
 }

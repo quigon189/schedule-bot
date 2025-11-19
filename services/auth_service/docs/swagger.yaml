@@ -1,0 +1,134 @@
+basePath: /api/v1
+definitions:
+  dto.CreateUserRequest:
+    properties:
+      full_name:
+        type: string
+      telegram_id:
+        type: integer
+      username:
+        type: string
+    type: object
+  dto.RoleResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  dto.StudentResponse:
+    properties:
+      group_name:
+        type: string
+    type: object
+  dto.UserResponse:
+    properties:
+      created_at:
+        type: string
+      full_name:
+        type: string
+      id_active:
+        type: boolean
+      roles:
+        items:
+          $ref: '#/definitions/dto.RoleResponse'
+        type: array
+      student:
+        $ref: '#/definitions/dto.StudentResponse'
+      telegram_id:
+        type: integer
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  utils.Response:
+    properties:
+      data: {}
+      error:
+        type: string
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+host: loacalhost:8080
+info:
+  contact: {}
+  description: Microservice for user managment and authentication
+  title: Schedule-bot auth service
+  version: "0.1"
+paths:
+  /users:
+    post:
+      consumes:
+      - application/json
+      description: Создает нового пользователя
+      parameters:
+      - description: Данные пользователя
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UserResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Создать пользователя
+      tags:
+      - users
+  /users/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает информацию о пользователе по telegram id
+      parameters:
+      - description: TelegramID пользователя
+        format: int64
+        in: path
+        name: telegram_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UserResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Получить пользователя
+      tags:
+      - users
+swagger: "2.0"

@@ -20,6 +20,18 @@ func NewUserHandler(userService *service.UserService) *UserHandler {
 	return &UserHandler{userService: userService}
 }
 
+// CreateUser создает нового пользователя
+//
+//	@Summary		Создать пользователя
+//	@Description	Создает нового пользователя
+//	@Tags			users
+//	@Accept			json
+//	@Produce		json
+//	@Param			user	body		dto.CreateUserRequest	true	"Данные пользователя"
+//	@Success		200		{object}	utils.Response{data=dto.UserResponse}
+//	@Failure		400		{object}	utils.Response
+//	@Failure		500		{object}	utils.Response
+//	@Router			/users [post]
 func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -36,6 +48,18 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, "user created", dto.ToUserResponse(user))
 }
 
+// GetUser получить информацию о пользователе
+//
+//	@Summary		Получить пользователя
+//	@Description	Возвращает информацию о пользователе по telegram id
+//	@Tags			users
+//	@Accept			json
+//	@Produce		json
+//	@Param			telegram_id	path		int64	true	"TelegramID пользователя"
+//	@Success		200			{object}	utils.Response{data=dto.UserResponse}
+//	@Failure		400			{object}	utils.Response
+//	@Failure		500			{object}	utils.Response
+//	@Router			/users/{id} [get]
 func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -62,13 +86,13 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req dto.UpdateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	user := dto.RequestToUser(id, &req)
-	if err := h.userService.UpdateUser(user); err != nil {
+	if err = h.userService.UpdateUser(user); err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -91,12 +115,12 @@ func (h *UserHandler) UpdateUserRoles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req dto.UpdateUserRolesRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	if err := h.userService.UpdateUserRoles(id, req.Roles); err != nil {
+	if err = h.userService.UpdateUserRoles(id, req.Roles); err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}

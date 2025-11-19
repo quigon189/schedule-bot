@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	_ "auth_service/docs"
 	"auth_service/internal/config"
 	"auth_service/internal/handlers"
 	"auth_service/internal/repository"
@@ -14,8 +15,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/pressly/goose/v3"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
+// @title			Schedule-bot auth service
+// @version		0.1
+// @description	Microservice for user managment and authentication
+// @host			loacalhost:8080
+// @BasePath		/api/v1
 func main() {
 	cfg := config.Load()
 
@@ -51,6 +58,10 @@ func main() {
 			r.Delete("/{id}", userHandler.DeleteUser)
 		})
 	})
+
+	r.Get("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
+	))
 
 	log.Printf("Server starting on port %s", cfg.SevrverPort)
 	log.Fatal(http.ListenAndServe(":"+cfg.SevrverPort, r))

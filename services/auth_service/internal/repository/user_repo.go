@@ -3,7 +3,6 @@ package repository
 import (
 	"auth_service/internal/models"
 	"fmt"
-	"log"
 )
 
 type UserRepository interface {

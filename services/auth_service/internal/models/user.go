@@ -15,12 +15,12 @@ type User struct {
 }
 
 type Role struct {
-	ID int `json:"id"`
-	Name string `json:"name"`
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
 type Student struct {
-	UserID int64 `json:"user_id"`
+	UserID    int64  `json:"user_id"`
 	GroupName string `json:"group_name"`
 }

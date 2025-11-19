@@ -22,8 +22,8 @@ func (s *UserService) CreateUser(req *dto.CreateUserRequest) (*models.User, erro
 
 	user := models.User{
 		TelegramID: req.TelegramID,
-		Username: req.Username,
-		FullName: req.FullName,
+		Username:   req.Username,
+		FullName:   req.FullName,
 	}
 
 	return s.userRepo.Create(&user)
@@ -45,6 +45,6 @@ func (s *UserService) DeleteUser(telegramID int64) error {
 	return s.userRepo.Delete(telegramID)
 }
 
-func(s *UserService) ListUsers() ([]models.User, error) {
+func (s *UserService) ListUsers() ([]models.User, error) {
 	return s.userRepo.List()
 }

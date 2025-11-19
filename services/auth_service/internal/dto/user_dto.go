@@ -12,8 +12,8 @@ type CreateUserRequest struct {
 }
 
 type UpdateUserRequest struct {
-	Username   string `json:"username"`
-	FullName   string `json:"full_name"`
+	Username string `json:"username"`
+	FullName string `json:"full_name"`
 }
 
 type UpdateUserRolesRequest struct {
