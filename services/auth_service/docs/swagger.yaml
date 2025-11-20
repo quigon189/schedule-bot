@@ -23,6 +23,13 @@ definitions:
       group_name:
         type: string
     type: object
+  dto.UpdateUserRequest:
+    properties:
+      full_name:
+        type: string
+      username:
+        type: string
+    type: object
   dto.UserResponse:
     properties:
       created_at:
@@ -54,10 +61,10 @@ definitions:
       success:
         type: boolean
     type: object
-host: loacalhost:8080
+host: auth-service:8080
 info:
   contact: {}
-  description: Microservice for user managment and authentication
+  description: Микросервис для управления учетными пользователями бота расписания
   title: Schedule-bot auth service
   version: "0.1"
 paths:
@@ -96,14 +103,41 @@ paths:
       summary: Создать пользователя
       tags:
       - users
-  /users/{id}:
+  /users/{telegram_id}:
+    delete:
+      consumes:
+      - application/json
+      description: Удалить пользователя из базы данных
+      parameters:
+      - description: TelegramID пользователя
+        in: path
+        name: telegram_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Удалить пользователя
+      tags:
+      - users
     get:
       consumes:
       - application/json
       description: Возвращает информацию о пользователе по telegram id
       parameters:
       - description: TelegramID пользователя
-        format: int64
         in: path
         name: telegram_id
         required: true
@@ -129,6 +163,40 @@ paths:
           schema:
             $ref: '#/definitions/utils.Response'
       summary: Получить пользователя
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Обновить данные пользователя
+      parameters:
+      - description: Данные пользователя
+        in: body
+        name: UpdateUserRequest
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UserResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Обновить пользователя
       tags:
       - users
 swagger: "2.0"

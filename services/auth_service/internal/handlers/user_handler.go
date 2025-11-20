@@ -59,7 +59,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 //	@Success		200			{object}	utils.Response{data=dto.UserResponse}
 //	@Failure		400			{object}	utils.Response
 //	@Failure		500			{object}	utils.Response
-//	@Router			/users/{id} [get]
+//	@Router			/users/{telegram_id} [get]
 func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -77,6 +77,17 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, "user sent", dto.ToUserResponse(user))
 }
 
+// UpdateUser обновить данные пользователя
+// @Summary Обновить пользователя
+// @Description Обновить данные пользователя
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param UpdateUserRequest body dto.UpdateUserRequest true "Данные пользователя"
+// @Success 200 {object} utils.Response{data=dto.UserResponse}
+//	@Failure		400			{object}	utils.Response
+//	@Failure		500			{object}	utils.Response
+//	@Router			/users/{telegram_id} [put]
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -134,6 +145,17 @@ func (h *UserHandler) UpdateUserRoles(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, "user roles updated", dto.ToUserResponse(user))
 }
 
+// DeleteUser удаленип пользователя
+// @Summary Удалить пользователя
+// @Description Удалить пользователя из базы данных
+// @Tags users
+// @Accept json
+// @Produce json
+// @Param telegram_id path int64 true "TelegramID пользователя"
+// @Success 200 {object} utils.Response
+//	@Failure		400			{object}	utils.Response
+//	@Failure		500			{object}	utils.Response
+//	@Router			/users/{telegram_id} [delete]
 func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)

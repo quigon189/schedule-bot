@@ -18,6 +18,7 @@ WORKDIR /app
 
 COPY --from=builder /app/auth-service .
 COPY --from=builder /app/migrations ./migrations
+COPY --from=builder /app/docs ./docs
 
 USER app
 

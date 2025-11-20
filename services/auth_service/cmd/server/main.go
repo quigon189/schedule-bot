@@ -15,13 +15,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/pressly/goose/v3"
-	httpSwagger "github.com/swaggo/http-swagger"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 // @title			Schedule-bot auth service
 // @version		0.1
-// @description	Microservice for user managment and authentication
-// @host			loacalhost:8080
+// @description	Микросервис для управления учетными данными пользователей бота расписания
+// @host			auth-service:8080
 // @BasePath		/api/v1
 func main() {
 	cfg := config.Load()
@@ -59,9 +59,7 @@ func main() {
 		})
 	})
 
-	r.Get("/swagger/*", httpSwagger.Handler(
-		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
-	))
+	r.Mount("/swagger", httpSwagger.WrapHandler)
 
 	log.Printf("Server starting on port %s", cfg.SevrverPort)
 	log.Fatal(http.ListenAndServe(":"+cfg.SevrverPort, r))
