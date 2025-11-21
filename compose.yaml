@@ -49,6 +49,25 @@ services:
       postgres:
         condition: service_healthy
 
+  telegram-bot:
+    build:
+      context: ./services/bot_service
+    ports:
+      - "8000:8000"
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - AUTH_SERVICE_URL=http://auth-service:8080
+      - DEBUG=${DEBUG:-false}
+    depends_on:
+      - auth-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
 volumes:
   db_data:
   n8n_data:
