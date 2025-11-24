@@ -5,7 +5,6 @@ from app.config import settings
 from app.models import CreateUserRequest, AuthResponse, UserResponse
 
 logging.basicConfig(level=logging.DEBUG)
-logging.debug("Это отладочное сообщение")
 
 
 class AuthService:
@@ -42,6 +41,8 @@ class AuthService:
                     headers={"ContentType": "application/json"}
                 )
 
+                logging.debug(f"response data: {response.json()}")
+
                 # TODO: необходимо переделать
                 # проверяем ответ, если пользователь создан, то возвращаем его
                 # иначе возвращаем None
@@ -51,7 +52,8 @@ class AuthService:
                     if auth_response.success:
                         return auth_response.data
 
-                logging.debug(f"Error: {response.status_code} {response.json()}")
+                logging.debug(
+                    f"Error: {response.status_code} {response.json()}")
 
                 return None
 

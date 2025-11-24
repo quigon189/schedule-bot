@@ -36,7 +36,7 @@ type UserResponse struct {
 	FullName   string           `json:"full_name"`
 	CreatedAt  time.Time        `json:"created_at"`
 	UpdatedAt  time.Time        `json:"updated_at"`
-	IsActive   bool             `json:"id_active"`
+	IsActive   bool             `json:"is_active"`
 	Roles      []RoleResponse   `json:"roles"`
 	Student    *StudentResponse `json:"student,omitempty"`
 }
