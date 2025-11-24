@@ -1,7 +1,11 @@
 from typing import Optional
 import httpx
+import logging
 from app.config import settings
 from app.models import CreateUserRequest, AuthResponse, UserResponse
+
+logging.basicConfig(level=logging.DEBUG)
+logging.debug("Это отладочное сообщение")
 
 
 class AuthService:
@@ -42,15 +46,17 @@ class AuthService:
                 # проверяем ответ, если пользователь создан, то возвращаем его
                 # иначе возвращаем None
                 # (так же можно сделать лог пока через print)
-                if response.status_code == "200":
+                if response.status_code == 200:
                     auth_response = AuthResponse(**response.json())
                     if auth_response.success:
                         return auth_response.data
 
+                logging.debug(f"Error: {response.status_code} {response.json()}")
+
                 return None
 
         except Exception as e:
-            print(f"Error creating user in auth service: {e}")
+            logging.debug(f"Error creating user in auth service: {e}")
             return None
 
     async def get_user(self, telegram_id: int) -> Optional[UserResponse]:
@@ -61,7 +67,7 @@ class AuthService:
                     f"{self.base_url}/api/v1/users/{telegram_id}"
                 )
 
-                if response.status_code == "200":
+                if response.status_code == 200:
                     auth_response = AuthResponse(**response.json())
 
                     if auth_response.success:
