@@ -6,7 +6,7 @@ services:
     ports:
       - "5678:5678"
     volumes:
-      - n8n_data:/home/node/.n8n
+      - ./data/n8n_data:/home/node/.n8n
 
   postgres:
     image: docker.io/postgres:16-alpine
@@ -34,15 +34,15 @@ services:
     depends_on:
       - auth-service
 
-  # ollama:
-  #   image: docker.io/ollama/ollama:latest
-  #   ports:
-  #     - "11434:11434"
-  #   volumes:
-  #     - ollama_data:/root/.ollama
-  #   environment:
-  #     - OLLAMA_HOST=0.0.0.0
-  #   restart: always
+  ollama:
+    image: docker.io/ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    restart: always
 
   auth-service:
     build: ./services/auth_service
@@ -80,5 +80,5 @@ services:
 
 volumes:
   db_data:
-  n8n_data:
+  # n8n_data:
   ollama_data:
