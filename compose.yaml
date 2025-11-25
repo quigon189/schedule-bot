@@ -34,6 +34,16 @@ services:
     depends_on:
       - auth-service
 
+  # ollama:
+  #   image: docker.io/ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   environment:
+  #     - OLLAMA_HOST=0.0.0.0
+  #   restart: always
+
   auth-service:
     build: ./services/auth_service
     restart: always
@@ -71,3 +81,4 @@ services:
 volumes:
   db_data:
   n8n_data:
+  ollama_data:
