@@ -59,6 +59,18 @@ services:
       postgres:
         condition: service_healthy
 
+  schedule-service:
+    build: ./services/schedule_service
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: admin
+      DB_PASSWORD: ghjgecr123
+      DB_NAME: schedule_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   telegram-bot:
     build:
       context: ./services/bot_service

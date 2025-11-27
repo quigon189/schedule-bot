@@ -35,7 +35,7 @@ CREATE TABLE study_periods (
 	CHECK(half_year BETWEEN 1 AND 2)
 );
 
-CREATE TABLE group_study_periods (
+CREATE TABLE group_schedules (
 	study_period_id INTEGER REFERENCES study_periods(id),	
 	group_id INTEGER REFERENCES groups(id),
 	semester INTEGER NOT NULL UNIQUE,
@@ -69,6 +69,7 @@ CREATE TABLE changes (
 	id SERIAL PRIMARY KEY,
 	change_date DATE NOT NULL,
 	change_image_url VARCHAR(500),
+	change_description TEXT,
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -93,7 +94,7 @@ CREATE INDEX idx_changes_date ON changes(change_date);
 DROP TABLE IF EXISTS schedule_changes;
 DROP TABLE IF EXISTS changes;
 DROP TABLE IF EXISTS schedule;
-DROP TABLE IF EXISTS group_study_periods;
+DROP TABLE IF EXISTS group_schedules;
 DROP TABLE IF EXISTS study_periods;
 DROP TABLE IF EXISTS teachers;
 DROP TABLE IF EXISTS classrooms;
