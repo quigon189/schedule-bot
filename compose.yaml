@@ -12,14 +12,14 @@ services:
     image: docker.io/postgres:16-alpine
     restart: always
     environment:
-      POSTGRES_USER: admin
+      POSTGRES_USER: admin # должен совпадать с пользователем в скрипте init_db.sql
       POSTGRES_PASSWORD: ghjgecr123
-      POSTGRES_DB: db
     ports:
       - "5431:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin"]
     volumes:
+      - ./scripts/postgres/init-dbs.sql:/docker-entrypoint-initdb.d/init-dbs.sql # создает 2 бд auth_db и schedule_db
       - db_data:/var/lib/postgresql/data
 
   swagger-ui:
@@ -52,7 +52,7 @@ services:
       DB_PORT: 5432
       DB_USER: admin
       DB_PASSWORD: ghjgecr123
-      DB_NAME: db
+      DB_NAME: auth_db
     volumes:
       - ./swagger-spec:/app/docs
     depends_on:
