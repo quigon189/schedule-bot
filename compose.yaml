@@ -61,6 +61,8 @@ services:
 
   schedule-service:
     build: ./services/schedule_service
+    ports:
+      - "8181:8080"
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
