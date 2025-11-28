@@ -6,7 +6,7 @@ services:
     ports:
       - "5678:5678"
     volumes:
-      - ./data/n8n_data:/home/node/.n8n
+      - n8n_data:/home/node/.n8n
 
   postgres:
     image: docker.io/postgres:16-alpine
@@ -92,5 +92,5 @@ services:
 
 volumes:
   db_data:
-  # n8n_data:
+  n8n_data:
   ollama_data:
