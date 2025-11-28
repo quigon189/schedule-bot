@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"schedule-service/internal/config"
-	"schedule-service/internal/repository"
 	"syscall"
 	"time"
+
+	"schedule-service/internal/config"
+	"schedule-service/internal/handlers"
+	"schedule-service/internal/repository"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -45,8 +47,10 @@ func main() {
 
 	})
 
+	r.Get("/health", handlers.HealthCheck)
+
 	server := http.Server{
-		Addr: ":"+cfg.ServerPort,
+		Addr:    ":" + cfg.ServerPort,
 		Handler: r,
 	}
 
