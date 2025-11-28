@@ -35,3 +35,6 @@ LEFT JOIN subjects sub_sub ON sc.substituted_subject_id = sub_sub.id
 LEFT JOIN classrooms c_sub ON sc.substituted_classroom_id = c_sub.id
 LEFT JOIN teachers t_sub ON sc.substituted_teacher_id = t_sub.id
 ORDER BY sp.academic_year DESC, sp.half_year DESC, g.name, s.day_of_week, s.lesson_number;
+
+-- +goose Down
+DROP VIEW schedule_with_changes;

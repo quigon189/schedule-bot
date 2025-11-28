@@ -39,9 +39,10 @@ CREATE TABLE group_schedules (
 	study_period_id INTEGER REFERENCES study_periods(id),	
 	group_id INTEGER REFERENCES groups(id),
 	semester INTEGER NOT NULL UNIQUE,
-	schedule_image_url VARCHAR(500),
+	schedule_image_url VARCHAR(500) UNIQUE,
 
-	PRIMARY KEY(study_period_id, group_id)
+	PRIMARY KEY(study_period_id, group_id),
+	CHECK(semester BETWEEN 1 AND 10)
 );
 
 CREATE TABLE schedule (
@@ -68,7 +69,7 @@ CREATE TABLE schedule (
 CREATE TABLE changes (
 	id SERIAL PRIMARY KEY,
 	change_date DATE NOT NULL,
-	change_image_url VARCHAR(500),
+	change_image_url VARCHAR(500) UNIQUE,
 	change_description TEXT,
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
