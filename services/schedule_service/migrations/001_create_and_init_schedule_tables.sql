@@ -40,6 +40,7 @@ CREATE TABLE group_schedules (
 	group_id INTEGER REFERENCES groups(id),
 	semester INTEGER NOT NULL UNIQUE,
 	schedule_image_url VARCHAR(500) UNIQUE,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
 	PRIMARY KEY(study_period_id, group_id),
 	CHECK(semester BETWEEN 1 AND 10)
