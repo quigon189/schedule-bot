@@ -2,7 +2,7 @@ package models
 
 import "time"
 
-type Gropup struct {
+type Group struct {
 	ID        int
 	Name      string
 	CreatedAt time.Time
@@ -19,7 +19,7 @@ type StudyPeriod struct {
 
 type GroupSchedule struct {
 	StudyPeriod    StudyPeriod
-	Group          Gropup
+	Group          Group
 	Semester       int
 	ScheduleImgURL string
 	CreatedAt      time.Time
