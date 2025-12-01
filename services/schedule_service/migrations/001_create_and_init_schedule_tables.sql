@@ -38,12 +38,13 @@ CREATE TABLE study_periods (
 CREATE TABLE group_schedules (
 	study_period_id INTEGER REFERENCES study_periods(id),	
 	group_id INTEGER REFERENCES groups(id),
-	semester INTEGER NOT NULL UNIQUE,
+	semester INTEGER NOT NULL,
 	schedule_image_url VARCHAR(500) UNIQUE,
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
 	PRIMARY KEY(study_period_id, group_id),
-	CHECK(semester BETWEEN 1 AND 10)
+	CHECK(semester BETWEEN 1 AND 10),
+	UNIQUE(semester, group_id)
 );
 
 CREATE TABLE schedule (

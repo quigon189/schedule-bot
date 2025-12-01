@@ -9,7 +9,7 @@ import (
 type ScheduleRepository interface {
 	AddGroupSchedule(gs *models.GroupSchedule) error
 	// UpdateGroupSchedule(sp *models.StudyPeriod, scheduleImgURL string) (*models.GroupSchedule, error)
-	GetGroupSchedule(sp *models.StudyPeriod, g *models.Group) (*models.GroupSchedule, error)
+	GetGroupSchedules(filter *models.GroupScheduleFilter) ([]models.GroupSchedule, error)
 	RemoveGroupSchedule(gs *models.GroupSchedule) error
 }
 
@@ -63,34 +63,86 @@ func (r *scheduleRepo) AddGroupSchedule(gs *models.GroupSchedule) error {
 // 	return &models.GroupSchedule{}, nil
 // }
 
-func (r *scheduleRepo) GetGroupSchedule(sp *models.StudyPeriod, g *models.Group) (*models.GroupSchedule, error) {
+func (r *scheduleRepo) GetGroupSchedules(filter *models.GroupScheduleFilter) ([]models.GroupSchedule, error) {
 	tx, err := r.db.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
-
-	if err := getGroup(tx, g); err != nil {
-		return nil, err
-	}
-
-	if err := getStudyPeriod(tx, sp); err != nil {
-		return nil, err
-	}
-
-	gs := &models.GroupSchedule{
-		Group:       *g,
-		StudyPeriod: *sp,
-	}
+	defer tx.Rollback()
 
 	query := `
-	SELECT semester, schedule_image_url, created_at FROM group_schedules WHERE study_period_id = $1 AND group_id = $2
+	SELECT study_period_id, academic_year, half_year, start_date, end_date,
+		   group_id, group_name, semester, schedule_image_url, created_at
+	FROM group_schedules_view
 	`
-	err = tx.QueryRow(query, gs.StudyPeriod.ID, gs.Group.ID).Scan(&gs.Semester, &gs.ScheduleImgURL, &gs.CreatedAt)
+	paramsCount := 0
+	params := []any{}
+
+	if filter.HalfYear != 0 ||
+		filter.AcademicYear != "" ||
+		filter.GroupName != "" ||
+		filter.Semester != 0 {
+		query += "WHERE"
+
+		if filter.AcademicYear != "" {
+			paramsCount++
+			params = append(params, filter.AcademicYear)
+			query += fmt.Sprintf(" academic_year = $%d", paramsCount)
+		}
+		if filter.HalfYear != 0 {
+			if paramsCount != 0 {
+				query += " AND"
+			}
+			paramsCount++
+			params = append(params, filter.HalfYear)
+			query += fmt.Sprintf(" half_year = $%d", paramsCount)
+		}
+		if filter.Semester != 0 {
+			if paramsCount != 0 {
+				query += " AND"
+			}
+			paramsCount++
+			params = append(params, filter.Semester)
+			query += fmt.Sprintf(" semester = $%d", paramsCount)
+		}
+		if filter.GroupName != "" {
+			if paramsCount != 0 {
+				query += " AND"
+			}
+			paramsCount++
+			params = append(params, filter.GroupName)
+			query += fmt.Sprintf(" group_name = $%d", paramsCount)
+		}
+	}
+
+	gss := []models.GroupSchedule{}
+
+	rows, err := tx.Query(query, params...)
 	if err != nil {
 		return nil, err
 	}
 
-	return gs, nil
+	for rows.Next() {
+		gs := models.GroupSchedule{}
+		err := rows.Scan(
+			&gs.StudyPeriod.ID,
+			&gs.StudyPeriod.AcademicYear,
+			&gs.StudyPeriod.HalfYear,
+			&gs.StudyPeriod.StrartDate,
+			&gs.StudyPeriod.EndDate,
+			&gs.Group.ID,
+			&gs.Group.Name,
+			&gs.Semester,
+			&gs.ScheduleImgURL,
+			&gs.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		gss = append(gss, gs)
+	}
+
+	return gss, nil
 }
 
 func (r *scheduleRepo) RemoveGroupSchedule(gs *models.GroupSchedule) error {

@@ -25,6 +25,13 @@ type GroupSchedule struct {
 	CreatedAt      time.Time
 }
 
+type GroupScheduleFilter struct {
+	GroupName    string
+	AcademicYear string
+	HalfYear     int
+	Semester     int
+}
+
 type Change struct {
 	ID          int
 	Date        string

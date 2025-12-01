@@ -36,16 +36,14 @@ func (s *ScheduleService) AddGroupSchedule(req *dto.AddGroupScheduleRequest) (*m
 	return gs, nil
 }
 
-func (s *ScheduleService) GetGroupSchedule(req *dto.GroupScheduleQueryParams) (*models.GroupSchedule, error) {
-	g := &models.Group{
-		Name: req.GroupName,
-	}
-	sp := &models.StudyPeriod{
-		HalfYear:     req.HalfYear,
+func (s *ScheduleService) GetGroupSchedule(req *dto.GroupScheduleQueryParams) ([]models.GroupSchedule, error) {
+	filter := &models.GroupScheduleFilter{
 		AcademicYear: req.AcademicYear,
-	}
+		HalfYear: req.HalfYear,
+		GroupName: req.GroupName,
+	}	
 
-	gs, err := s.repo.GetGroupSchedule(sp, g)
+	gs, err := s.repo.GetGroupSchedules(filter)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to get group schedule: %v", err)
 	}
@@ -54,22 +52,17 @@ func (s *ScheduleService) GetGroupSchedule(req *dto.GroupScheduleQueryParams) (*
 }
 
 func (s *ScheduleService) RemoveScheduleService(req *dto.GroupScheduleQueryParams) error {
-	gs := &models.GroupSchedule{
-		Group: models.Group{
-			Name: req.GroupName,
-		},	
-		StudyPeriod: models.StudyPeriod{
-			AcademicYear: req.AcademicYear,
-			HalfYear: req.HalfYear,
-		},
+	filter := &models.GroupScheduleFilter{
+		AcademicYear: req.AcademicYear,
+		HalfYear: req.HalfYear,
+		GroupName: req.GroupName,
 	}
-
-	gs, err := s.repo.GetGroupSchedule(&gs.StudyPeriod, &gs.Group)
+	gs, err := s.repo.GetGroupSchedules(filter)
 	if err != nil {
 		return err
 	}
 
-	err = s.repo.RemoveGroupSchedule(gs)
+	err = s.repo.RemoveGroupSchedule(&gs[0])
 	if err != nil {
 		return fmt.Errorf("Failed to remove group schedule: %v", err)
 	}

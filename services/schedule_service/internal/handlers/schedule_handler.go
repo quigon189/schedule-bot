@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"schedule-service/internal/dto"
+	"schedule-service/internal/models"
 	"schedule-service/internal/repository"
 	"schedule-service/internal/service"
 	"schedule-service/pkg/utils"
@@ -16,7 +17,7 @@ type ScheduleHandler struct {
 	service *service.ScheduleService
 }
 
-func NewScheduleHandler(db *repository.DB) *ScheduleHandler{
+func NewScheduleHandler(db *repository.DB) *ScheduleHandler {
 	repo := repository.NewScheduleRepository(db)
 	return &ScheduleHandler{service: service.NewScheduleService(&repo)}
 }
@@ -25,7 +26,7 @@ func (h *ScheduleHandler) AddGroupSchedule(w http.ResponseWriter, r *http.Reques
 	req := &dto.AddGroupScheduleRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("AddGroupSchedule handler error: %v", err)
-		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")	
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
@@ -33,19 +34,10 @@ func (h *ScheduleHandler) AddGroupSchedule(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		log.Printf("AddGroupSchedule handler error: %v", err)
 		utils.ErrorResponse(w, http.StatusInternalServerError, err.Error())
-		return 
+		return
 	}
 
-	resp := dto.GroupScheduleResponse{
-		GroupName: gs.Group.Name,
-		AcademicYear: gs.StudyPeriod.AcademicYear,
-		HalfYear: gs.StudyPeriod.HalfYear,
-		Semester: gs.Semester,
-		ScheduleImgURL: gs.ScheduleImgURL,
-		CreatedAt: gs.CreatedAt,
-	}
-
-	utils.SuccessResponse(w, "Group schedule added", resp)
+	utils.SuccessResponse(w, "Group schedule added", gsToResponse(gs))
 }
 
 func (h *ScheduleHandler) GetGroupSchedule(w http.ResponseWriter, r *http.Request) {
@@ -56,20 +48,16 @@ func (h *ScheduleHandler) GetGroupSchedule(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	gs, err := h.service.GetGroupSchedule(&gsQueryParams)
+	gss, err := h.service.GetGroupSchedule(&gsQueryParams)
 	if err != nil {
 		log.Printf("GetGroupSchedule handler error: %v", err)
 		utils.ErrorResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	resp := dto.GroupScheduleResponse{
-		GroupName: gs.Group.Name,
-		AcademicYear: gs.StudyPeriod.AcademicYear,
-		HalfYear: gs.StudyPeriod.HalfYear,
-		Semester: gs.Semester,
-		ScheduleImgURL: gs.ScheduleImgURL,
-		CreatedAt: gs.CreatedAt,
+	resp := []dto.GroupScheduleResponse{}
+	for _, gs := range gss {
+		resp = append(resp, gsToResponse(&gs))
 	}
 
 	utils.SuccessResponse(w, "Group schedule sent", resp)
@@ -91,4 +79,15 @@ func (h *ScheduleHandler) RemoveGroupSchedule(w http.ResponseWriter, r *http.Req
 	}
 
 	utils.SuccessResponse(w, "Group schedule removed", nil)
+}
+
+func gsToResponse(gs *models.GroupSchedule) dto.GroupScheduleResponse {
+	return dto.GroupScheduleResponse{
+		GroupName:      gs.Group.Name,
+		AcademicYear:   gs.StudyPeriod.AcademicYear,
+		HalfYear:       gs.StudyPeriod.HalfYear,
+		Semester:       gs.Semester,
+		ScheduleImgURL: gs.ScheduleImgURL,
+		CreatedAt:      gs.CreatedAt,
+	}
 }
