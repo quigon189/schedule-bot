@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"schedule-service/internal/dto"
@@ -10,16 +11,21 @@ import (
 	"schedule-service/internal/service"
 	"schedule-service/pkg/utils"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/schema"
 )
 
 type ScheduleHandler struct {
-	service *service.ScheduleService
+	service  *service.ScheduleService
+	validate *validator.Validate
 }
 
 func NewScheduleHandler(db *repository.DB) *ScheduleHandler {
 	repo := repository.NewScheduleRepository(db)
-	return &ScheduleHandler{service: service.NewScheduleService(&repo)}
+	return &ScheduleHandler{
+		service:  service.NewScheduleService(&repo),
+		validate: dto.NewValidator(),
+	}
 }
 
 func (h *ScheduleHandler) AddGroupSchedule(w http.ResponseWriter, r *http.Request) {
@@ -27,6 +33,12 @@ func (h *ScheduleHandler) AddGroupSchedule(w http.ResponseWriter, r *http.Reques
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("AddGroupSchedule handler error: %v", err)
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if err := h.validate.Struct(req); err != nil {
+		log.Printf("Invalid request: %v", err)
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
 		return
 	}
 
@@ -45,6 +57,12 @@ func (h *ScheduleHandler) GetGroupSchedule(w http.ResponseWriter, r *http.Reques
 	if err := schema.NewDecoder().Decode(&gsQueryParams, r.URL.Query()); err != nil {
 		log.Printf("GetGroupSchedule handler error: %v", err)
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid query params")
+		return
+	}
+
+	if err := h.validate.Struct(gsQueryParams); err != nil {
+		log.Printf("Invalid request: %v", err)
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
 		return
 	}
 
@@ -68,6 +86,18 @@ func (h *ScheduleHandler) RemoveGroupSchedule(w http.ResponseWriter, r *http.Req
 	if err := schema.NewDecoder().Decode(&gsQueryParams, r.URL.Query()); err != nil {
 		log.Printf("GetGroupSchedule handler error: %v", err)
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid query params")
+		return
+	}
+
+	if gsQueryParams.AcademicYear == "" || gsQueryParams.HalfYear == 0 || gsQueryParams.GroupName == "" {
+		log.Print("Invalid request: all field required")
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request: all field required")
+		return
+	}
+
+	if err := h.validate.Struct(gsQueryParams); err != nil {
+		log.Printf("Invalid request: %v", err)
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
 		return
 	}
 
