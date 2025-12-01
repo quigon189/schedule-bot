@@ -38,13 +38,19 @@ func main() {
 		log.Fatalf("Failed to apply migrations: %v", err)
 	}
 
+	schedulesHandler := handlers.NewScheduleHandler(db)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
 	r.Route("/api/v1", func(r chi.Router) {
-
+		r.Route("/group_schedules", func(r chi.Router) {
+			r.Get("/", schedulesHandler.GetGroupSchedule)
+			r.Post("/", schedulesHandler.AddGroupSchedule)
+			r.Delete("/", schedulesHandler.RemoveGroupSchedule)
+		})
 	})
 
 	r.Get("/health", handlers.HealthCheck)

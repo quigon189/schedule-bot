@@ -1,5 +1,9 @@
 package dto
 
+import (
+	"time"
+)
+
 type AddGroupScheduleRequest struct {
 	AcademicYear   string `json:"academic_year" example:"2025/2026"`
 	HalfYear       int    `json:"half_year" example:"1"`
@@ -13,13 +17,16 @@ type UpdateGroupScheduleRequest struct {
 }
 
 type GroupScheduleQueryParams struct {
-	AcademicYear string `json:"academic_year" example:"2025/2026"`
-	HalfYear     int    `json:"half_year" example:"1"`
-	GroupName    string `json:"group_name" example:"CA-501"`
+	AcademicYear string `schema:"academic_year" example:"2025/2026"`
+	HalfYear     int    `schema:"half_year" example:"1"`
+	GroupName    string `schema:"group_name" example:"CA-501"`
 }
 
 type GroupScheduleResponse struct {
-	GroupName      string `json:"group_name" example:"СА-501"`
-	Semester       int    `json:"semester" example:"5"`
-	ScheduleImgURL string `json:"schedule_img_url" example:"https://example.com/schedule.jpg"`
+	GroupName      string    `json:"group_name" example:"СА-501"`
+	AcademicYear   string    `json:"academic_year" example:"2025/2026"`
+	HalfYear       int       `json:"half_year" example:"1"`
+	Semester       int       `json:"semester" example:"5"`
+	ScheduleImgURL string    `json:"schedule_img_url" example:"https://example.com/schedule.jpg"`
+	CreatedAt      time.Time `json:"created_at"`
 }
