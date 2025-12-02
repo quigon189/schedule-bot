@@ -39,6 +39,7 @@ func main() {
 	}
 
 	schedulesHandler := handlers.NewScheduleHandler(db)
+	changesHandler := handlers.NewChangeHandler(db)
 
 	r := chi.NewRouter()
 
@@ -50,6 +51,11 @@ func main() {
 			r.Get("/", schedulesHandler.GetGroupSchedule)
 			r.Post("/", schedulesHandler.AddGroupSchedule)
 			r.Delete("/", schedulesHandler.RemoveGroupSchedule)
+		})
+		r.Route("/changes", func(r chi.Router) {
+			r.Get("/", changesHandler.GetChange)
+			r.Post("/", changesHandler.AddChange)
+			r.Delete("/{id}", changesHandler.RemoveChange)
 		})
 	})
 
