@@ -25,8 +25,14 @@ services:
   swagger-ui:
     image: docker.io/swaggerapi/swagger-ui
     environment:
-      SWAGGER_JSON: /swagger/swagger.json
+      SWAGGER_JSON: /swagger/auth-service.json
       BASE_URL: /swagger
+      URL: ""
+      URLS: |
+        [ 
+          { url: "/swagger/auth-service.json", name: "AtuhService" },
+          { url: "/swagger/schedule-service.json", name: "ScheduleService" }
+        ]
     ports:
       - "8081:8080"
     volumes:

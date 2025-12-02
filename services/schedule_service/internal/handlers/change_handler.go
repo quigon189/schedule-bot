@@ -29,6 +29,18 @@ func NewChangeHandler(db *repository.DB) *ChangeHandler {
 	}
 }
 
+// AddChange добавляет изменение в расписании на заданную дату
+//
+//	@Summary		Добавить изменения в расписании
+//	@Description	Добавляет изменения в расписании
+//	@Tags			changes
+//	@Accept			json
+//	@Produce		json
+//	@Param			change	body		dto.AddChangeRequest	true	"Запрос на добавление изменения расписания"
+//	@Success		200		{object}	utils.Response{data=dto.ChangeResponse}
+//	@Failure		400		{object}	utils.Response
+//	@Failure		500		{object}	utils.Response
+//	@Router			/changes [post]
 func (h *ChangeHandler) AddChange(w http.ResponseWriter, r *http.Request) {
 	req := dto.AddChangeRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -53,6 +65,21 @@ func (h *ChangeHandler) AddChange(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, "Changes added", dto.ToChangeResponse(sc))
 }
 
+// GetChange возвращает изменения в расписании на заданную дату
+//
+//	@Summary		Получить изменения в расписании
+//	@Description	Возвращает изменения в расписании
+//	@Description	Если параметры не заданы, показывает изменения на текущую дату
+//	@Tags			changes
+//	@Accept			json
+//	@Produce		json
+//	@Param			date		query		string	false	"Дата изменений ISO	Example: ГГГГ-ММ-ДД"
+//	@Param			image_url	query		string	false	"url изображения изменений Example: http://example.com/img.jpg"
+//	@Param			description	query		string	false	"Дополнительное описание"
+//	@Success		200			{object}	utils.Response{data=[]dto.ChangeResponse}
+//	@Failure		400			{object}	utils.Response
+//	@Failure		500			{object}	utils.Response
+//	@Router			/changes [get]
 func (h *ChangeHandler) GetChange(w http.ResponseWriter, r *http.Request) {
 	dateStr := r.URL.Query().Get("date")
 
@@ -77,6 +104,18 @@ func (h *ChangeHandler) GetChange(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, "Changes sent", resp)
 }
 
+// RemoveChange  удаляет изменение в расписании по id
+//
+//	@Summary		Удалить изменения в расписании
+//	@Description	Удаляет изменения в расписании по id
+//	@Tags			changes
+//	@Accept			json
+//	@Produce		json
+//	@Param			id	path		int	true	"id удаляемого изменения"	example=1
+//	@Success		200	{object}	utils.Response
+//	@Failure		400	{object}	utils.Response
+//	@Failure		500	{object}	utils.Response
+//	@Router			/changes [delete]
 func (h *ChangeHandler) RemoveChange(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {

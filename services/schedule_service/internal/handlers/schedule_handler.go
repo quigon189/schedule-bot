@@ -28,6 +28,18 @@ func NewScheduleHandler(db *repository.DB) *ScheduleHandler {
 	}
 }
 
+// AddGroupSchedule добавляет расписание группы для заданного учебного периода
+//
+//	@Summary		Добавить расписание для группы
+//	@Description	Добавляет расписание группы для заданного учебного периода
+//	@Tags			group_schedules
+//	@Accept			json
+//	@Produce		json
+//	@Param			group_schedule	body		dto.AddGroupScheduleRequest	true	"Запрос на добавление расписания"
+//	@Success		200				{object}	utils.Response{data=dto.GroupScheduleResponse}
+//	@Failure		400				{object}	utils.Response
+//	@Failure		500				{object}	utils.Response
+//	@Router			/group_schedules [post]
 func (h *ScheduleHandler) AddGroupSchedule(w http.ResponseWriter, r *http.Request) {
 	req := &dto.AddGroupScheduleRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -52,6 +64,18 @@ func (h *ScheduleHandler) AddGroupSchedule(w http.ResponseWriter, r *http.Reques
 	utils.SuccessResponse(w, "Group schedule added", gsToResponse(gs))
 }
 
+// AddGroupSchedule возвращает расписание группы
+//
+//	@Summary		Получить расписание для группы
+//	@Description	Возвращает расписание группы по заданым парметрам из query
+//	@Tags			group_schedules
+//	@Accept			json
+//	@Produce		json
+//	@Param			query	query		dto.GroupScheduleQueryParams	false	"Параметры запроса"
+//	@Success		200		{object}	utils.Response{data=[]dto.GroupScheduleResponse}
+//	@Failure		400		{object}	utils.Response
+//	@Failure		500		{object}	utils.Response
+//	@Router			/group_schedules [get]
 func (h *ScheduleHandler) GetGroupSchedule(w http.ResponseWriter, r *http.Request) {
 	gsQueryParams := dto.GroupScheduleQueryParams{}
 	if err := schema.NewDecoder().Decode(&gsQueryParams, r.URL.Query()); err != nil {
@@ -81,6 +105,18 @@ func (h *ScheduleHandler) GetGroupSchedule(w http.ResponseWriter, r *http.Reques
 	utils.SuccessResponse(w, "Group schedule sent", resp)
 }
 
+// AddGroupSchedule удаляет расписание группы
+//
+//	@Summary		Удалить расписание для группы
+//	@Description	Удаляет расписание группы по id
+//	@Tags			group_schedules
+//	@Accept			json
+//	@Produce		json
+//	@Param			id	path		int	true	"id"	example=1
+//	@Success		200	{object}	utils.Response
+//	@Failure		400	{object}	utils.Response
+//	@Failure		500	{object}	utils.Response
+//	@Router			/group_schedules [delete]
 func (h *ScheduleHandler) RemoveGroupSchedule(w http.ResponseWriter, r *http.Request) {
 	gsQueryParams := dto.GroupScheduleQueryParams{}
 	if err := schema.NewDecoder().Decode(&gsQueryParams, r.URL.Query()); err != nil {

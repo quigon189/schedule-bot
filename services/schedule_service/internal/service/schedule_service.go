@@ -39,9 +39,9 @@ func (s *ScheduleService) AddGroupSchedule(req *dto.AddGroupScheduleRequest) (*m
 func (s *ScheduleService) GetGroupSchedule(req *dto.GroupScheduleQueryParams) ([]models.GroupSchedule, error) {
 	filter := &models.GroupScheduleFilter{
 		AcademicYear: req.AcademicYear,
-		HalfYear: req.HalfYear,
-		GroupName: req.GroupName,
-	}	
+		HalfYear:     req.HalfYear,
+		GroupName:    req.GroupName,
+	}
 
 	gs, err := s.repo.GetGroupSchedules(filter)
 	if err != nil {
@@ -54,8 +54,8 @@ func (s *ScheduleService) GetGroupSchedule(req *dto.GroupScheduleQueryParams) ([
 func (s *ScheduleService) RemoveScheduleService(req *dto.GroupScheduleQueryParams) error {
 	filter := &models.GroupScheduleFilter{
 		AcademicYear: req.AcademicYear,
-		HalfYear: req.HalfYear,
-		GroupName: req.GroupName,
+		HalfYear:     req.HalfYear,
+		GroupName:    req.GroupName,
 	}
 	gs, err := s.repo.GetGroupSchedules(filter)
 	if err != nil {

@@ -17,9 +17,9 @@ type UpdateGroupScheduleRequest struct {
 }
 
 type GroupScheduleQueryParams struct {
-	AcademicYear string `schema:"academic_year" example:"2025/2026" validate:"omitempty,academic_year"`
-	HalfYear     int    `schema:"half_year" example:"1" validate:"omitempty,min=1,max=2"`
-	GroupName    string `schema:"group_name" example:"CA-501" validate:"omitempty,group_name"`
+	AcademicYear string `schema:"academic_year" query:"academic_year" example:"2025/2026" validate:"omitempty,academic_year"`
+	HalfYear     int    `schema:"half_year" query:"half_year" example:"1" validate:"omitempty,min=1,max=2"`
+	GroupName    string `schema:"group_name" query:"group_name" example:"CA-501" validate:"omitempty,group_name"`
 }
 
 type GroupScheduleResponse struct {

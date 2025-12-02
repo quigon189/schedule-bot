@@ -1,0 +1,314 @@
+basePath: /api/v1
+definitions:
+  dto.AddChangeRequest:
+    properties:
+      date:
+        example: "2025-09-01"
+        type: string
+      description:
+        type: string
+      image_url:
+        example: http://example.com/change.jpg
+        type: string
+    required:
+    - date
+    - image_url
+    type: object
+  dto.AddGroupScheduleRequest:
+    properties:
+      academic_year:
+        example: 2025/2026
+        type: string
+      group_name:
+        example: СА-501
+        type: string
+      half_year:
+        example: 1
+        maximum: 2
+        minimum: 1
+        type: integer
+      schedule_img_url:
+        example: https://example.com/schedule.jpg
+        type: string
+      semester:
+        example: 5
+        maximum: 10
+        minimum: 1
+        type: integer
+    required:
+    - academic_year
+    - group_name
+    - half_year
+    - schedule_img_url
+    - semester
+    type: object
+  dto.ChangeResponse:
+    properties:
+      created_at:
+        type: string
+      date:
+        example: "2025-09-01"
+        type: string
+      description:
+        type: string
+      id:
+        example: 1
+        type: integer
+      image_url:
+        example: http://example.com/change.jpg
+        type: string
+    type: object
+  dto.GroupScheduleResponse:
+    properties:
+      academic_year:
+        example: 2025/2026
+        type: string
+      created_at:
+        type: string
+      group_name:
+        example: СА-501
+        type: string
+      half_year:
+        example: 1
+        type: integer
+      schedule_img_url:
+        example: https://example.com/schedule.jpg
+        type: string
+      semester:
+        example: 5
+        type: integer
+    type: object
+  utils.Response:
+    properties:
+      data: {}
+      error:
+        type: string
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+host: schedule-service:8080
+info:
+  contact: {}
+  description: |-
+    Микросервис для доступа к учебному расписанию групп
+    А так же для доступа к изменениям расписания
+  title: Schedule-bot schedule service
+  version: "0.1"
+paths:
+  /changes:
+    delete:
+      consumes:
+      - application/json
+      description: Удаляет изменения в расписании по id
+      parameters:
+      - description: id удаляемого изменения
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Удалить изменения в расписании
+      tags:
+      - changes
+    get:
+      consumes:
+      - application/json
+      description: |-
+        Возвращает изменения в расписании
+        Если параметры не заданы, показывает изменения на текущую дату
+      parameters:
+      - description: "Дата изменений ISO\tExample: ГГГГ-ММ-ДД"
+        in: query
+        name: date
+        type: string
+      - description: 'url изображения изменений Example: http://example.com/img.jpg'
+        in: query
+        name: image_url
+        type: string
+      - description: Дополнительное описание
+        in: query
+        name: description
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.ChangeResponse'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Получить изменения в расписании
+      tags:
+      - changes
+    post:
+      consumes:
+      - application/json
+      description: Добавляет изменения в расписании
+      parameters:
+      - description: Запрос на добавление изменения расписания
+        in: body
+        name: change
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AddChangeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.ChangeResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Добавить изменения в расписании
+      tags:
+      - changes
+  /group_schedules:
+    delete:
+      consumes:
+      - application/json
+      description: Удаляет расписание группы по id
+      parameters:
+      - description: id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Удалить расписание для группы
+      tags:
+      - group_schedules
+    get:
+      consumes:
+      - application/json
+      description: Возвращает расписание группы по заданым парметрам из query
+      parameters:
+      - example: 2025/2026
+        in: query
+        name: academicYear
+        type: string
+      - example: CA-501
+        in: query
+        name: groupName
+        type: string
+      - example: 1
+        in: query
+        maximum: 2
+        minimum: 1
+        name: halfYear
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/dto.GroupScheduleResponse'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Получить расписание для группы
+      tags:
+      - group_schedules
+    post:
+      consumes:
+      - application/json
+      description: Добавляет расписание группы для заданного учебного периода
+      parameters:
+      - description: Запрос на добавление расписания
+        in: body
+        name: group_schedule
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AddGroupScheduleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.GroupScheduleResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Добавить расписание для группы
+      tags:
+      - group_schedules
+swagger: "2.0"

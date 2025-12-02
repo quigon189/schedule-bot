@@ -20,6 +20,12 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
+// @title			Schedule-bot schedule service
+// @version		0.1
+// @description	Микросервис для доступа к учебному расписанию групп
+// @description	А так же для доступа к изменениям расписания
+// @host			schedule-service:8080
+// @BasePath		/api/v1
 func main() {
 	cfg := config.Load()
 
