@@ -17,13 +17,13 @@ func NewChangeService(repo repository.ChangeRepository) *ChangeService {
 }
 
 func (s *ChangeService) AddChange(req dto.AddChangeRequest) (*models.ScheduleChange, error) {
-	date, err := time.Parse("2006-01-02", req.Date)
+	date, err := parseDate(req.Date)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to parse date: %v", err)
 	}
 	sc := models.ScheduleChange{
-		Date: date,
-		ImgURL: req.ImgURL,
+		Date:        date,
+		ImgURL:      req.ImgURL,
 		Description: req.Description,
 	}
 
@@ -34,10 +34,25 @@ func (s *ChangeService) AddChange(req dto.AddChangeRequest) (*models.ScheduleCha
 	return &sc, nil
 }
 
-func (s *ChangeService) GetChanges(date time.Time) ([]models.ScheduleChange, error) {
+func (s *ChangeService) GetChanges(dateStr string) ([]models.ScheduleChange, error) {
+	var date time.Time
+	var err error
+	if dateStr == "" {
+		date = time.Now()
+	} else {
+		date, err = parseDate(dateStr)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to parse date: %v", err)
+		}
+	}
+
 	return s.repo.GetChange(date)
 }
 
 func (s *ChangeService) RemoveChange(id int) error {
 	return s.repo.RemoveChange(id)
+}
+
+func parseDate(dateStr string) (time.Time, error) {
+	return time.Parse("2006-01-02", dateStr)
 }

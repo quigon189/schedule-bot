@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
-	"time"
 
 	"schedule-service/internal/dto"
 	"schedule-service/internal/repository"
@@ -13,15 +13,20 @@ import (
 	"schedule-service/pkg/utils"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/validator/v10"
 )
 
 type ChangeHandler struct {
-	service *service.ChangeService
+	service  *service.ChangeService
+	validate *validator.Validate
 }
 
 func NewChangeHandler(db *repository.DB) *ChangeHandler {
 	repo := repository.NewChangeRepo(db)
-	return &ChangeHandler{service: service.NewChangeService(repo)}
+	return &ChangeHandler{
+		service:  service.NewChangeService(repo),
+		validate: dto.NewChangeValidator(),
+	}
 }
 
 func (h *ChangeHandler) AddChange(w http.ResponseWriter, r *http.Request) {
@@ -32,6 +37,12 @@ func (h *ChangeHandler) AddChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.validate.Struct(req); err != nil {
+		log.Printf("Invalid request body: %v", err)
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body: %v", err))
+		return
+	}
+
 	sc, err := h.service.AddChange(req)
 	if err != nil {
 		log.Printf("Internal error: %v", err)
@@ -39,33 +50,19 @@ func (h *ChangeHandler) AddChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := dto.ChangeResponse{
-		ID:          sc.ID,
-		Date:        sc.Date,
-		ImgURL:      sc.ImgURL,
-		Description: sc.Description,
-		CreatedAt:   sc.CreatedAt,
-	}
-
-	utils.SuccessResponse(w, "Changes added", resp)
+	utils.SuccessResponse(w, "Changes added", dto.ToChangeResponse(sc))
 }
 
 func (h *ChangeHandler) GetChange(w http.ResponseWriter, r *http.Request) {
 	dateStr := r.URL.Query().Get("date")
-	var date time.Time
-	var err error
-	if dateStr == "" {
-		date = time.Now()
-	} else {
-		date, err = time.Parse("2006-01-02", dateStr)
-		if err != nil {
-			log.Printf("Invalid date format: %v", err)
-			utils.ErrorResponse(w, http.StatusBadRequest, "Invalid date format")
-			return
-		}
+
+	if err := h.validate.Var(dateStr, "omitempty,date"); err != nil {
+		log.Printf("Invalid date format: %v", err)
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid date format")
+		return
 	}
 
-	chs, err := h.service.GetChanges(date)
+	chs, err := h.service.GetChanges(dateStr)
 	if err != nil {
 		log.Printf("Invalid date format: %v", err)
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid date format")
@@ -74,13 +71,7 @@ func (h *ChangeHandler) GetChange(w http.ResponseWriter, r *http.Request) {
 
 	resp := []dto.ChangeResponse{}
 	for _, sc := range chs {
-		resp = append(resp, dto.ChangeResponse{
-			ID:          sc.ID,
-			Date:        sc.Date,
-			ImgURL:      sc.ImgURL,
-			Description: sc.Description,
-			CreatedAt:   sc.CreatedAt,
-		})
+		resp = append(resp, *dto.ToChangeResponse(&sc))
 	}
 
 	utils.SuccessResponse(w, "Changes sent", resp)

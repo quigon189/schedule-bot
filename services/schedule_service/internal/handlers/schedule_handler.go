@@ -24,7 +24,7 @@ func NewScheduleHandler(db *repository.DB) *ScheduleHandler {
 	repo := repository.NewScheduleRepository(db)
 	return &ScheduleHandler{
 		service:  service.NewScheduleService(&repo),
-		validate: dto.NewValidator(),
+		validate: dto.NewScheduleValidator(),
 	}
 }
 
