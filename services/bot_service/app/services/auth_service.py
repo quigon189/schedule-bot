@@ -2,7 +2,7 @@ from typing import Optional
 import httpx
 import logging
 from app.config import settings
-from app.models import CreateUserRequest, AuthResponse, UserResponse
+from app.models import CreateUserRequest, ServiceResponse, UserResponse
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -48,9 +48,10 @@ class AuthService:
                 # иначе возвращаем None
                 # (так же можно сделать лог пока через print)
                 if response.status_code == 200:
-                    auth_response = AuthResponse(**response.json())
+                    auth_response = ServiceResponse(**response.json())
                     if auth_response.success:
-                        return auth_response.data
+                        data = UserResponse(**auth_response.data)
+                        return data
 
                 logging.debug(
                     f"Error: {response.status_code} {response.json()}")
@@ -70,10 +71,10 @@ class AuthService:
                 )
 
                 if response.status_code == 200:
-                    auth_response = AuthResponse(**response.json())
+                    auth_response = ServiceResponse(**response.json())
 
                     if auth_response.success:
-                        return auth_response.data
+                        return UserResponse(**auth_response.data)
 
                 return None
 

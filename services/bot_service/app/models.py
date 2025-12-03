@@ -1,6 +1,6 @@
 from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel
+from typing import Any, List, Optional
+from pydantic import BaseModel, Field
 
 
 class CreateUserRequest(BaseModel):
@@ -10,7 +10,7 @@ class CreateUserRequest(BaseModel):
     full_name: str  # обязательное поле содержащее имя и фамилию
 
 
-class AuthResponse(BaseModel):
+class ServiceResponse(BaseModel):
     """
     Модель ответа auth-service
     дальше возможно заменим на 2 типо ответа:
@@ -21,7 +21,7 @@ class AuthResponse(BaseModel):
     message: Optional[str] = None
     error: Optional[str] = None
     # содержит инфу о пользователе в успешных ответах
-    data: Optional["UserResponse"] = None
+    data: Any
 
 
 class UserResponse(BaseModel):
@@ -41,6 +41,23 @@ class Role(BaseModel):
     id: int
     name: str
     description: str
+
+
+class GroupScheduleRequest(BaseModel):
+    """Модель запроса расписания"""
+    academic_year: str = Field(pattern=r"^(\d{4})/(\d{4})$")
+    half_year: int = Field(ge=1, le=2)
+    group_name: str
+
+
+class GroupScheduleResponse(BaseModel):
+    """Ответ от сервиса расписаний"""
+    academic_year: str = Field(pattern=r"^(\d{4})/(\d{4})$")
+    half_year: int = Field(ge=1, le=2)
+    group_name: str
+    semester: int = Field(ge=1, le=10)
+    schedule_img_url: str
+    created_at: datetime
 
 
 class TelegramUser(BaseModel):

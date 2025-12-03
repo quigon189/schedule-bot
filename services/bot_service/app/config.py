@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -10,7 +9,8 @@ class Settings(BaseSettings):
     AUTH_SERVICE_URL: str = "http://auth-service:8080"
     AUTH_SERVICE_TIMEOUT: int = 30
 
-    SCHEDULES_SERVICE_URL: Optional[str] = None
+    SCHEDULE_SERVICE_URL: str = "http://schedule-service:8080"
+    SCHEDULE_SERVICE_TIMEOUT: int = 30
 
     class Config:
         env_file = ".env"
