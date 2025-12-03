@@ -115,7 +115,7 @@ func (h *ChangeHandler) GetChange(w http.ResponseWriter, r *http.Request) {
 //	@Success		200	{object}	utils.Response
 //	@Failure		400	{object}	utils.Response
 //	@Failure		500	{object}	utils.Response
-//	@Router			/changes [delete]
+//	@Router			/changes/{id} [delete]
 func (h *ChangeHandler) RemoveChange(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {

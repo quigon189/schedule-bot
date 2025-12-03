@@ -112,7 +112,7 @@ func (h *ScheduleHandler) GetGroupSchedule(w http.ResponseWriter, r *http.Reques
 //	@Tags			group_schedules
 //	@Accept			json
 //	@Produce		json
-//	@Param			id	path		int	true	"id"	example=1
+//	@Param			query	query		dto.GroupScheduleQueryParams	true	"Параметры запроса"
 //	@Success		200	{object}	utils.Response
 //	@Failure		400	{object}	utils.Response
 //	@Failure		500	{object}	utils.Response

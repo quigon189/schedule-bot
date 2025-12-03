@@ -98,34 +98,6 @@ info:
   version: "0.1"
 paths:
   /changes:
-    delete:
-      consumes:
-      - application/json
-      description: Удаляет изменения в расписании по id
-      parameters:
-      - description: id удаляемого изменения
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/utils.Response'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/utils.Response'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/utils.Response'
-      summary: Удалить изменения в расписании
-      tags:
-      - changes
     get:
       consumes:
       - application/json
@@ -204,16 +176,54 @@ paths:
       summary: Добавить изменения в расписании
       tags:
       - changes
+  /changes/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Удаляет изменения в расписании по id
+      parameters:
+      - description: id удаляемого изменения
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Удалить изменения в расписании
+      tags:
+      - changes
   /group_schedules:
     delete:
       consumes:
       - application/json
       description: Удаляет расписание группы по id
       parameters:
-      - description: id
-        in: path
-        name: id
-        required: true
+      - example: 2025/2026
+        in: query
+        name: academicYear
+        type: string
+      - example: CA-501
+        in: query
+        name: groupName
+        type: string
+      - example: 1
+        in: query
+        maximum: 2
+        minimum: 1
+        name: halfYear
         type: integer
       produces:
       - application/json
