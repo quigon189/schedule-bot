@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	_ "auth_service/docs"
 	"auth_service/internal/config"
@@ -61,8 +66,32 @@ func main() {
 
 	r.Mount("/swagger", httpSwagger.WrapHandler)
 
-	log.Printf("Server starting on port %s", cfg.SevrverPort)
-	log.Fatal(http.ListenAndServe(":"+cfg.SevrverPort, r))
+	server := http.Server{
+		Addr: ":"+cfg.SevrverPort,
+		Handler: r,	
+	}
+
+	log.Printf("Auth server starting on port %s", cfg.SevrverPort)
+	go func() {
+		if err := server.ListenAndServe(); err != nil || err != http.ErrServerClosed {
+			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	<-quit
+
+	log.Println("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("Server shutdown failed: %v", err)
+	}
+
+	log.Println("Server stoped")
 }
 
 func Migrations(db *sql.DB, path string) error {

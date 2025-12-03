@@ -77,6 +77,13 @@ services:
       postgres:
         condition: service_healthy
 
+  mcp-server:
+    build: ./services/mcp_server
+    environment:
+      SCHEUDLE_SERVICE_URL: "http://schedule-service:8080"
+      TIMEOUT: 30
+    restart: always
+
   telegram-bot:
     build:
       context: ./services/bot_service
