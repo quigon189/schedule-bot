@@ -1,0 +1,137 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -160
+      ],
+      "id": "b0b30363-4557-460d-9ce0-fbc4c00bea0d",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -192,
+        -160
+      ],
+      "id": "6d4e342a-7365-4253-937c-358979b2ba4b",
+      "name": "When chat message received",
+      "webhookId": "6143cad1-44b2-4c1e-9504-d038561b0410"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "Ты интелектуальный ассисетнт, помогаешь студентам искать зменения в расписании в локальносм сервисе расписаний."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        16,
+        -160
+      ],
+      "id": "c2f13227-3748-4017-a920-d198f5158e80",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://mcp-server:8080/mcp",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        32
+      ],
+      "id": "a92f154f-5075-4aa6-8fe9-a20d6c37008a",
+      "name": "MCP Client"
+    },
+    {
+      "parameters": {
+        "model": "GigaChat",
+        "options": {}
+      },
+      "type": "n8n-nodes-gigachat.lmGigaChat",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        32
+      ],
+      "id": "cf979eaf-c05c-4717-851e-6f2fb95f3dda",
+      "name": "GigaChat Model",
+      "credentials": {
+        "gigaChatApi": {
+          "id": "Uc9vngvNe6TNRy9f",
+          "name": "GigaChat account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Client": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GigaChat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "cb57b788-bb33-4a6c-b127-805aa40a61cb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3c0422e6b5b06682de399aa719797b68e76b13b48055a65615dee1a47dc8a9da"
+  },
+  "id": "g8KO2QujNhGBYbi3",
+  "tags": []
+}
