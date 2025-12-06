@@ -9,12 +9,12 @@ from keyboards.common_keyboards import start_menu
 @router.callback_query(F.data == "schedule_changes")
 async def schedule_callback_changes(callback: CallbackQuery):
     await ScheduleService.get_group_schedule()
-    await callback.anwser()
+    await callback.answer()
 
 @router.callback_query(F.data == "schedule_main")
 async def schedule_callback_main(callback: CallbackQuery):
     await ScheduleService.get_group_schedule()
-    await callback.anwser()
+    await callback.answer()
 
 @router.callback_query(F.data == "change_profile")
 async def ch_prof(callback: CallbackQuery):

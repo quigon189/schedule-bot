@@ -1,10 +1,12 @@
 from aiogram.types import CallbackQuery
 from aiogram import F
+from aiogram import Router
 from aiogram.utils.callback_answer import CallbackAnswer
 from aiogram.filters.callback_data import CallbackData
 from keyboards.user_keyboards import schedule_menu, profile_menu
-from handlers.common import router
 from keyboards.common_keyboards import start_menu
+
+router = Router(name="common_router")
 
 @router.callback_query(F.data == "profile_menu")
 async def profile_menu(callback: CallbackQuery):
@@ -13,7 +15,7 @@ async def profile_menu(callback: CallbackQuery):
         "Меню профилей:",
         reply_markup=keyboard
     )
-    await callback.anwser()
+    await callback.answer()
 
 @router.callback_query(F.data == "schedule_menu")
 async def schedule_menu(callback: CallbackQuery):
@@ -22,7 +24,7 @@ async def schedule_menu(callback: CallbackQuery):
         "Меню расписаний:",
         reply_markup=keyboard
     )
-    await callback.anwser()
+    await callback.answer()
 
 @router.callback_query(F.data == "back_to_main")
 async def back_to_main(callback: CallbackQuery):
