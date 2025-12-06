@@ -64,9 +64,8 @@ cd <папка-проекта>
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
 
 # База данных
-POSTGRES_DB=auth_db
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=password
+DB_ADMIN=postgres
+DB_PASS=password
 
 # Сервисы
 DEBUG=true
