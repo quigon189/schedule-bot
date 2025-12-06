@@ -5,6 +5,8 @@ from aiogram.filters import Command
 from app.models import TelegramUser
 from app.services.user_service import user_service
 
+from app.keyboards.common_keyboards import start_menu
+
 command_router = Router()
 
 
@@ -41,6 +43,8 @@ async def cmd_start(message: Message):
 
 Теперь вы можете использовать все возможности бота!
         """
+        keyboard = start_menu(),
+        await message.answer("Добро пожаловать! Доступные функции:", reply_markup= keyboard)
     else:
         welcome_text = f"""
 👋 Привет, {user.full_name}!
