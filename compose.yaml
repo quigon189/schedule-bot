@@ -51,6 +51,8 @@ services:
   auth-service:
     build: ./services/auth_service
     restart: always
+    ports:
+      - "8182:8080"
     environment:
       DB_HOST: postgres
       DB_PORT: 5432

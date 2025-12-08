@@ -2,6 +2,14 @@ package models
 
 import "time"
 
+const (
+	AdminRole   = "admin"
+	ManagerRole = "manager"
+	StudentRole = "student"
+	TeacherRole = "teacher"
+	UserRole    = "user"
+)
+
 type User struct {
 	TelegramID int64     `json:"telegram_id"`
 	Username   string    `json:"username"`
