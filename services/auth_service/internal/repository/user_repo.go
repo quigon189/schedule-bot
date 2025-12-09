@@ -60,11 +60,11 @@ func (r *userRepo) Create(user *models.User) (*models.User, error) {
 
 func (r *userRepo) AddStudent(telegramID int64, groupName string) error {
 	query := `
-	INSERT INTO students(user_id, group_name)
+	INSERT INTO students (user_id, group_name)
 	VALUES ($1, $2)
 	`
 
-	_, err := r.db.Exec(query, groupName)
+	_, err := r.db.Exec(query, telegramID, groupName)
 	if err != nil {
 		return err
 	}

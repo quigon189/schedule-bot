@@ -136,6 +136,7 @@ func (s *RegistrationCodeService) RegisterWithCode(req *dto.RegisterUserRequest)
 	}
 
 	if validation.Role.Name == models.StudentRole {
+		log.Printf("Creatu user with group: %s", *validation.GroupName)
 		err = s.userRepo.AddStudent(user.TelegramID, *validation.GroupName)
 		if err != nil {
 			log.Printf("failed to add student group: %v", err)
