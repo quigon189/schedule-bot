@@ -15,19 +15,23 @@ CREATE INDEX idx_registration_codes_code ON registration_codes(code);
 CREATE INDEX idx_registration_codes_created_by ON registration_codes(created_by);
 CREATE INDEX idx_registration_codes_expires_at ON registration_codes(expires_at);
 
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION delete_expired_codes()
-RETURNS void AS $$
+RETURNS TRIGGER
+AS $$
 BEGIN
 	DELETE FROM registration_codes
-	WHERE expires_at < NOW()
-	   OR current_uses >= max_uses;
+	WHERE expires_at < NOW() OR current_uses >= max_uses;
+	RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$
+LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_check_expiration
-	BEFORE INSERT OR UPDATE registration_codes
+	BEFORE INSERT OR UPDATE ON registration_codes
 	FOR EACH ROW
-	EXECUTE delete_expired_codes();
+	EXECUTE FUNCTION delete_expired_codes();
+-- +goose StatementEnd
 
 -- +goose Down
 DROP TABLE IF EXISTS registration_codes;
