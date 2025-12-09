@@ -8,8 +8,10 @@ import (
 type UserRepository interface {
 	Create(user *models.User) (*models.User, error)
 	Get(telegramID int64) (*models.User, error)
+	GetByRole(role string) ([]models.User, error)
 	Update(user *models.User) error
 	UpdateUserRoles(telegramID int64, roles []string) error
+	AddStudent(telegramID int64, groupName string) error
 	Delete(telegramID int64) error
 	List() ([]models.User, error)
 }
@@ -56,6 +58,20 @@ func (r *userRepo) Create(user *models.User) (*models.User, error) {
 	return user, tx.Commit()
 }
 
+func (r *userRepo) AddStudent(telegramID int64, groupName string) error {
+	query := `
+	INSERT INTO students(user_id, group_name)
+	VALUES ($1, $2)
+	`
+
+	_, err := r.db.Exec(query, groupName)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (r *userRepo) Get(telegramID int64) (*models.User, error) {
 	user := &models.User{}
 	query := `
@@ -100,6 +116,43 @@ func (r *userRepo) Get(telegramID int64) (*models.User, error) {
 	}
 
 	return user, nil
+}
+
+func (r *userRepo) GetByRole(role string) ([]models.User, error) {
+	users := []models.User{}
+	query := `
+	SELECT u.telegram_id, u.username, u.full_name, u.created_at, u.updated_at, u.is_active
+	FROM users u
+	JOIN user_roles ur ON ur.user_id = u.telegram_id
+	JOIN roles r ON r.id = ur.role_id
+	WHERE r.name = $1
+	`
+	rows, err := r.db.Query(query, role)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		user := models.User{}
+		err := rows.Scan(
+			&user.TelegramID, &user.Username, &user.FullName,
+			&user.CreatedAt, &user.UpdatedAt, &user.IsActive,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		var student models.Student
+		err = r.db.QueryRow("SELECT user_id, group_name FROM students WHERE user_id = $1", user.TelegramID).
+			Scan(&student.UserID, &student.GroupName)
+		if err == nil {
+			user.Student = &student
+		}
+
+		users = append(users, user)
+	}
+
+	return users, nil
 }
 
 func (r *userRepo) Update(user *models.User) error {
@@ -167,7 +220,7 @@ func (r *userRepo) UpdateUserRoles(telegramID int64, roles []string) error {
 		}
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (r *userRepo) Delete(telegramID int64) error {

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -16,6 +17,8 @@ type Config struct {
 	CodeCharset      string
 	CodeLength       int
 	MaxGenerateTries int
+
+	Admins []int64
 }
 
 func Load() *Config {
@@ -30,6 +33,17 @@ func Load() *Config {
 	if err != nil {
 		maxTries = 10
 	}
+
+	adminsStr := getEnv("ADMINS", "1")
+	var admins []int64
+	for adminStr := range strings.SplitSeq(adminsStr, " ") {
+		id, err := strconv.ParseInt(adminStr, 10, 64)
+		if err != nil {
+			continue
+		}
+		admins = append(admins, id)
+	}
+
 	return &Config{
 		DBHost:           getEnv("DB_HOST", "localhost"),
 		DBPort:           getEnv("DB_PORT", "5432"),
@@ -40,6 +54,7 @@ func Load() *Config {
 		CodeCharset:      getEnv("CODE_CHARSET", "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"),
 		CodeLength:       codeLength,
 		MaxGenerateTries: maxTries,
+		Admins:           admins,
 	}
 }
 

@@ -55,6 +55,8 @@ func main() {
 	userHandler := handlers.NewUserHandler(userService)
 	codeHahdler := handlers.NewRegistrationCodeHandler(codeService)
 
+	initAdmins(cfg, userRepo)	
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -76,8 +78,8 @@ func main() {
 	r.Mount("/swagger", httpSwagger.WrapHandler)
 
 	server := http.Server{
-		Addr: ":"+cfg.SevrverPort,
-		Handler: r,	
+		Addr:    ":" + cfg.SevrverPort,
+		Handler: r,
 	}
 
 	log.Printf("Auth server starting on port %s", cfg.SevrverPort)

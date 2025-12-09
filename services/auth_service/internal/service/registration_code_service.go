@@ -43,7 +43,22 @@ func (s *RegistrationCodeService) CreateCode(req *dto.CreateRegistrationCodeRequ
 		return nil, fmt.Errorf("not allowed")
 	}
 
-	return s.codeRepo.CreateCode(req)
+	code, err := s.codeRepo.CreateCode(req)
+	if err != nil {
+		return nil, err
+	}
+
+	code.Creater, err = s.userRepo.Get(*code.CreatedBy)
+	if err != nil {
+		return nil, err
+	}
+
+	if code.GroupName == nil {
+		nullGroup := ""
+		code.GroupName = &nullGroup
+	}
+
+	return code, nil
 }
 
 func (s *RegistrationCodeService) ValidateCode(req *dto.ValidateCodeRequest) *dto.ValidateCodeResponse {
@@ -84,11 +99,7 @@ func (s *RegistrationCodeService) RegisterWithCode(req *dto.RegisterUserRequest)
 		return nil, fmt.Errorf("code not valid")
 	}
 
-	err := s.codeRepo.UseCode(req.Code)
-	if err != nil {
-		return nil, err
-	}
-	
+	var err error
 	user, _ := s.userRepo.Get(req.TelegramID)
 	if user == nil {
 		user, err = s.userRepo.Create(&models.User{
@@ -101,6 +112,17 @@ func (s *RegistrationCodeService) RegisterWithCode(req *dto.RegisterUserRequest)
 		}
 	}
 
+	for _, role := range user.Roles {
+		if role.Name == validation.Role.Name {
+			return nil, fmt.Errorf("user already has this role")
+		}
+	}
+
+	err = s.codeRepo.UseCode(req.Code)
+	if err != nil {
+		return nil, err
+	}
+	
 	roles := []string{}
 	for _, role := range user.Roles {
 		roles = append(roles, role.Name)
@@ -113,7 +135,12 @@ func (s *RegistrationCodeService) RegisterWithCode(req *dto.RegisterUserRequest)
 		return nil, err
 	}
 
-	// TODO: добавить изменение группы студента
+	if validation.Role.Name == models.StudentRole {
+		err = s.userRepo.AddStudent(user.TelegramID, *validation.GroupName)
+		if err != nil {
+			log.Printf("failed to add student group: %v", err)
+		}
+	}
 	
 	user, err = s.userRepo.Get(user.TelegramID)
 	if err != nil {

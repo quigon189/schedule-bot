@@ -5,6 +5,7 @@ import (
 	"auth_service/internal/service"
 	"auth_service/pkg/utils"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 )
@@ -28,7 +29,7 @@ func (h *RegistrationCodeHandler) CreateCode(w http.ResponseWriter, r *http.Requ
 	code, err := h.codeService.CreateCode(&req)
 	if err != nil {
 		log.Printf("Failed to create code: %v", err)
-		utils.ErrorResponse(w, http.StatusInternalServerError, "failed to create code")
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create code: %v", err))
 		return
 	}
 
@@ -64,7 +65,7 @@ func (h *RegistrationCodeHandler) RegisterWithCode(w http.ResponseWriter, r *htt
 	user, err := h.codeService.RegisterWithCode(&req)
 	if err != nil {
 		log.Printf("Failed to register user: %v", err)
-		utils.ErrorResponse(w, http.StatusInternalServerError, "failed to register user")
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to register user: %v", err))
 		return
 	}
 

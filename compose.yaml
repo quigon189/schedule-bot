@@ -59,6 +59,7 @@ services:
       DB_USER: ${DB_ADMIN}
       DB_PASSWORD: ${DB_PASS}
       DB_NAME: auth_db
+      ADMINS: ${BOT_ADMINS}
     volumes:
       - ./swagger-spec:/app/docs
     depends_on:

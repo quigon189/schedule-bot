@@ -9,7 +9,7 @@ type RegistrationCode struct {
 	GroupName   *string
 	MaxUses     int
 	CurrentUses int
-	CreatedBy   *int
+	CreatedBy   *int64
 	ExpiresAt   time.Time
 	CreatedAt   time.Time
 

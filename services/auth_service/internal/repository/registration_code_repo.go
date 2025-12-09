@@ -42,7 +42,6 @@ func (r *RegCodeRepository) CreateCode(req *dto.CreateRegistrationCodeRequest) (
 	if err != nil {
 		return nil, err
 	}
-	role.Name = req.RoleName
 
 	maxTries := r.cfg.MaxGenerateTries
 	var code string
@@ -95,6 +94,16 @@ func (r *RegCodeRepository) CreateCode(req *dto.CreateRegistrationCodeRequest) (
 		return nil, err
 	}
 
+	r.db.QueryRow(
+		"SELECT id, name, description FROM roles WHERE id = $1",
+		registrationCode.RoleID,
+	).Scan(
+		&registrationCode.Role.ID,
+		&registrationCode.Role.Name,
+		&registrationCode.Role.Description,
+	)
+
+
 	return &registrationCode, nil
 }
 
@@ -121,6 +130,20 @@ func (r *RegCodeRepository) GetCode(code string) (*models.RegistrationCode, erro
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	r.db.QueryRow(
+		"SELECT id, name, description FROM roles WHERE id = $1",
+		registrationCode.RoleID,
+	).Scan(
+		&registrationCode.Role.ID,
+		&registrationCode.Role.Name,
+		&registrationCode.Role.Description,
+	)
+
+	if registrationCode.GroupName == nil {
+		nullGroup := ""
+		registrationCode.GroupName = &nullGroup
 	}
 	
 	return &registrationCode, nil
