@@ -1,1 +1,521 @@
-{"swagger":"2.0","info":{"description":"Микросервис для управления учетными пользователями бота расписания","title":"Schedule-bot auth service","contact":{},"version":"0.1"},"host":"auth-service:8080","basePath":"/api/v1","paths":{"/users":{"post":{"description":"Создает нового пользователя","consumes":["application/json"],"produces":["application/json"],"tags":["users"],"summary":"Создать пользователя","parameters":[{"description":"Данные пользователя","name":"user","in":"body","required":true,"schema":{"$ref":"#/definitions/dto.CreateUserRequest"}}],"responses":{"200":{"description":"OK","schema":{"allOf":[{"$ref":"#/definitions/utils.Response"},{"type":"object","properties":{"data":{"$ref":"#/definitions/dto.UserResponse"}}}]}},"400":{"description":"Bad Request","schema":{"$ref":"#/definitions/utils.Response"}},"500":{"description":"Internal Server Error","schema":{"$ref":"#/definitions/utils.Response"}}}}},"/users/{telegram_id}":{"get":{"description":"Возвращает информацию о пользователе по telegram id","consumes":["application/json"],"produces":["application/json"],"tags":["users"],"summary":"Получить пользователя","parameters":[{"type":"integer","description":"TelegramID пользователя","name":"telegram_id","in":"path","required":true}],"responses":{"200":{"description":"OK","schema":{"allOf":[{"$ref":"#/definitions/utils.Response"},{"type":"object","properties":{"data":{"$ref":"#/definitions/dto.UserResponse"}}}]}},"400":{"description":"Bad Request","schema":{"$ref":"#/definitions/utils.Response"}},"500":{"description":"Internal Server Error","schema":{"$ref":"#/definitions/utils.Response"}}}},"put":{"description":"Обновить данные пользователя","consumes":["application/json"],"produces":["application/json"],"tags":["users"],"summary":"Обновить пользователя","parameters":[{"description":"Данные пользователя","name":"UpdateUserRequest","in":"body","required":true,"schema":{"$ref":"#/definitions/dto.UpdateUserRequest"}}],"responses":{"200":{"description":"OK","schema":{"allOf":[{"$ref":"#/definitions/utils.Response"},{"type":"object","properties":{"data":{"$ref":"#/definitions/dto.UserResponse"}}}]}},"400":{"description":"Bad Request","schema":{"$ref":"#/definitions/utils.Response"}},"500":{"description":"Internal Server Error","schema":{"$ref":"#/definitions/utils.Response"}}}},"delete":{"description":"Удалить пользователя из базы данных","consumes":["application/json"],"produces":["application/json"],"tags":["users"],"summary":"Удалить пользователя","parameters":[{"type":"integer","description":"TelegramID пользователя","name":"telegram_id","in":"path","required":true}],"responses":{"200":{"description":"OK","schema":{"$ref":"#/definitions/utils.Response"}},"400":{"description":"Bad Request","schema":{"$ref":"#/definitions/utils.Response"}},"500":{"description":"Internal Server Error","schema":{"$ref":"#/definitions/utils.Response"}}}}}},"definitions":{"dto.CreateUserRequest":{"type":"object","properties":{"full_name":{"type":"string"},"telegram_id":{"type":"integer"},"username":{"type":"string"}}},"dto.RoleResponse":{"type":"object","properties":{"description":{"type":"string"},"id":{"type":"integer"},"name":{"type":"string"}}},"dto.StudentResponse":{"type":"object","properties":{"group_name":{"type":"string"}}},"dto.UpdateUserRequest":{"type":"object","properties":{"full_name":{"type":"string"},"username":{"type":"string"}}},"dto.UserResponse":{"type":"object","properties":{"created_at":{"type":"string"},"full_name":{"type":"string"},"id_active":{"type":"boolean"},"roles":{"type":"array","items":{"$ref":"#/definitions/dto.RoleResponse"}},"student":{"$ref":"#/definitions/dto.StudentResponse"},"telegram_id":{"type":"integer"},"updated_at":{"type":"string"},"username":{"type":"string"}}},"utils.Response":{"type":"object","properties":{"data":{},"error":{"type":"string"},"message":{"type":"string"},"success":{"type":"boolean"}}}}}
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "Микросервис для управления учетными данными пользователей бота расписания",
+        "title": "Schedule-bot auth service",
+        "contact": {},
+        "version": "0.1"
+    },
+    "host": "auth-service:8080",
+    "basePath": "/api/v1",
+    "paths": {
+        "/code/create": {
+            "post": {
+                "description": "Создает новый код доступа для пользователя\nСоздать код могут только администраторы или менеджеры\nОбязательные поля: created_by, role_name\nПоле  role_name имеет значения: student (group_name становится обязательным), teacher, manager",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "code"
+                ],
+                "summary": "Создать код доступа",
+                "parameters": [
+                    {
+                        "description": "Параметры кода доступа",
+                        "name": "code",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateRegistrationCodeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.RegistrationCodeResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/users": {
+            "post": {
+                "description": "Создает нового пользователя",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Создать пользователя",
+                "parameters": [
+                    {
+                        "description": "Данные пользователя",
+                        "name": "user",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.UserResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/register": {
+            "post": {
+                "description": "Регистрирует нового или уже существующего пользователя используя код доступа\nДобавляет пользователю роль связанную с кодом\nЕсли при создании кода указана роль student, то также добавляет пользователя в группу",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "code",
+                    "users"
+                ],
+                "summary": "Зарегистрировать пользователя",
+                "parameters": [
+                    {
+                        "description": "Параметр пользователя и код",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.RegisterUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.UserResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{telegram_id}": {
+            "get": {
+                "description": "Возвращает информацию о пользователе по telegram id",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Получить пользователя",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "TelegramID пользователя",
+                        "name": "telegram_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.UserResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Обновить данные пользователя",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Обновить пользователя",
+                "parameters": [
+                    {
+                        "description": "Данные пользователя",
+                        "name": "UpdateUserRequest",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/dto.UserResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Удалить пользователя из базы данных",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Удалить пользователя",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "TelegramID пользователя",
+                        "name": "telegram_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "dto.CreateRegistrationCodeRequest": {
+            "type": "object",
+            "properties": {
+                "created_by": {
+                    "type": "integer",
+                    "example": 12345678
+                },
+                "expires_at": {
+                    "type": "string",
+                    "default": "current time + 6 hours",
+                    "example": "2006-01-02T03:04:05Z"
+                },
+                "group_name": {
+                    "type": "string",
+                    "example": "СА-501"
+                },
+                "max_uses": {
+                    "type": "integer",
+                    "default": 1,
+                    "maximum": 50,
+                    "example": 10
+                },
+                "role_name": {
+                    "type": "string",
+                    "enum": [
+                        "student",
+                        "teacher",
+                        "manager"
+                    ],
+                    "example": "student"
+                }
+            }
+        },
+        "dto.CreateUserRequest": {
+            "type": "object",
+            "properties": {
+                "full_name": {
+                    "type": "string"
+                },
+                "telegram_id": {
+                    "type": "integer"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.RegisterUserRequest": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "ABC123"
+                },
+                "full_name": {
+                    "type": "string"
+                },
+                "telegram_id": {
+                    "type": "integer",
+                    "example": 12345678
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.RegistrationCodeResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "$ref": "#/definitions/dto.UserResponse"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "group_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "max_uses": {
+                    "type": "integer"
+                },
+                "role": {
+                    "$ref": "#/definitions/dto.RoleResponse"
+                }
+            }
+        },
+        "dto.RoleResponse": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.StudentResponse": {
+            "type": "object",
+            "properties": {
+                "group_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.UpdateUserRequest": {
+            "type": "object",
+            "properties": {
+                "full_name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.UserResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "full_name": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RoleResponse"
+                    }
+                },
+                "student": {
+                    "$ref": "#/definitions/dto.StudentResponse"
+                },
+                "telegram_id": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "utils.Response": {
+            "type": "object",
+            "properties": {
+                "data": {},
+                "error": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        }
+    }
+}

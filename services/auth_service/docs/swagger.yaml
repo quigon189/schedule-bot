@@ -1,5 +1,30 @@
 basePath: /api/v1
 definitions:
+  dto.CreateRegistrationCodeRequest:
+    properties:
+      created_by:
+        example: 12345678
+        type: integer
+      expires_at:
+        default: current time + 6 hours
+        example: "2006-01-02T03:04:05Z"
+        type: string
+      group_name:
+        example: СА-501
+        type: string
+      max_uses:
+        default: 1
+        example: 10
+        maximum: 50
+        type: integer
+      role_name:
+        enum:
+        - student
+        - teacher
+        - manager
+        example: student
+        type: string
+    type: object
   dto.CreateUserRequest:
     properties:
       full_name:
@@ -8,6 +33,38 @@ definitions:
         type: integer
       username:
         type: string
+    type: object
+  dto.RegisterUserRequest:
+    properties:
+      code:
+        example: ABC123
+        type: string
+      full_name:
+        type: string
+      telegram_id:
+        example: 12345678
+        type: integer
+      username:
+        type: string
+    type: object
+  dto.RegistrationCodeResponse:
+    properties:
+      code:
+        type: string
+      created_at:
+        type: string
+      created_by:
+        $ref: '#/definitions/dto.UserResponse'
+      expires_at:
+        type: string
+      group_name:
+        type: string
+      id:
+        type: integer
+      max_uses:
+        type: integer
+      role:
+        $ref: '#/definitions/dto.RoleResponse'
     type: object
   dto.RoleResponse:
     properties:
@@ -36,7 +93,7 @@ definitions:
         type: string
       full_name:
         type: string
-      id_active:
+      is_active:
         type: boolean
       roles:
         items:
@@ -64,10 +121,49 @@ definitions:
 host: auth-service:8080
 info:
   contact: {}
-  description: Микросервис для управления учетными пользователями бота расписания
+  description: Микросервис для управления учетными данными пользователей бота расписания
   title: Schedule-bot auth service
   version: "0.1"
 paths:
+  /code/create:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Создает новый код доступа для пользователя
+        Создать код могут только администраторы или менеджеры
+        Обязательные поля: created_by, role_name
+        Поле  role_name имеет значения: student (group_name становится обязательным), teacher, manager
+      parameters:
+      - description: Параметры кода доступа
+        in: body
+        name: code
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateRegistrationCodeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.RegistrationCodeResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Создать код доступа
+      tags:
+      - code
   /users:
     post:
       consumes:
@@ -110,6 +206,7 @@ paths:
       description: Удалить пользователя из базы данных
       parameters:
       - description: TelegramID пользователя
+        format: int64
         in: path
         name: telegram_id
         required: true
@@ -138,6 +235,7 @@ paths:
       description: Возвращает информацию о пользователе по telegram id
       parameters:
       - description: TelegramID пользователя
+        format: int64
         in: path
         name: telegram_id
         required: true
@@ -198,5 +296,44 @@ paths:
             $ref: '#/definitions/utils.Response'
       summary: Обновить пользователя
       tags:
+      - users
+  /users/register:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Регистрирует нового или уже существующего пользователя используя код доступа
+        Добавляет пользователю роль связанную с кодом
+        Если при создании кода указана роль student, то также добавляет пользователя в группу
+      parameters:
+      - description: Параметр пользователя и код
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RegisterUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.UserResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Зарегистрировать пользователя
+      tags:
+      - code
       - users
 swagger: "2.0"
