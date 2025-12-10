@@ -1,6 +1,8 @@
 from typing import Optional
+import functools
 import httpx
 import logging
+from cachetools import TTLCache
 from app.config import settings
 from app.models import CreateUserRequest, ServiceResponse, UserResponse
 
@@ -15,8 +17,11 @@ class AuthService:
     """
 
     def __init__(self):
+        ttl = settings.AUTH_SERVICE_CACHE_TTL
+        maxsize = settings.AUTH_SERVICE_CACHE_MAX
         self.base_url = settings.AUTH_SERVICE_URL
         self.timeout = settings.AUTH_SERVICE_TIMEOUT
+        self._cache = TTLCache(maxsize=maxsize, ttl=ttl)
 
     async def create_user(self, telegram_id: int, username: Optional[str],
                           full_name: str) -> Optional[UserResponse]:
@@ -63,6 +68,23 @@ class AuthService:
             return None
 
     async def get_user(self, telegram_id: int) -> Optional[UserResponse]:
+        if telegram_id in self._cache:
+            return self._cache[telegram_id]
+
+        user = await self._get_user(telegram_id)
+
+        if user:
+            self._cache[telegram_id] = user
+
+        return user
+
+    async def invalidate_cache(self, telegram_id: Optional[int] = None):
+        if telegram_id:
+            self._cache.pop(telegram_id, None)
+        else:
+            self._cache.clear()
+
+    async def _get_user(self, telegram_id: int) -> Optional[UserResponse]:
         """Получить пользователя с auth-service"""
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:

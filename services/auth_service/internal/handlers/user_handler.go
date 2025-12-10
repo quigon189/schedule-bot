@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -35,12 +36,20 @@ func NewUserHandler(userService *service.UserService) *UserHandler {
 func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("failed to decode body: %v", err)
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		log.Printf("failed to validate request: %v", err)
+		utils.ErrorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	user, err := h.userService.CreateUser(&req)
 	if err != nil {
+		log.Printf("failed to create user: %v", err)
 		utils.ErrorResponse(w, http.StatusInternalServerError, err.Error())
 		return
 	}
