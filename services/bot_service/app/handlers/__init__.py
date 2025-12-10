@@ -1,4 +1,8 @@
-from .commands import command_router
-from .echo import echo_router
+from aiogram import Router
+from . import commands, user, echo
 
-__all__ = ['command_router', 'echo_router']
+router = Router()
+
+router.include_router(commands.router)
+router.include_router(user.router)
+router.include_router(echo.router)

@@ -1,56 +1,104 @@
-from aiogram import Router
-from aiogram.types import Message
+from aiogram import Router, types
 from aiogram.filters import Command
+from aiogram.types import Message
+from services.auth_service import AuthService
+from services.schedule_service import ScheduleService
+from keyboards.user_keyboards import get_main_menu_keyboard
+from web.bot import bot
+import logging
 
-from app.models import TelegramUser
-from app.services.user_service import user_service
+router = Router()
+auth_service = AuthService()
+schedule_service = ScheduleService()
 
-from app.keyboards.common_keyboards import start_menu
-
-command_router = Router()
-
-
-@command_router.message(Command("help"))
-async def cmd_help(message: Message):
-    help_text = """
-🤖 Доступные команды:
-
-/start - Начать работу с ботом
-/help - Показать эту справку
-
-Бот отвечает на ваши сообщения эхом.
-    """
-
-    await message.answer(help_text)
+async def IsRegistred(telegram_id: int) -> bool:
+    """Проверка регистрации пользователя"""
+    user = await auth_service.get_user(telegram_id)
+    return user is not None
 
 
-@command_router.message(Command("start"))
+@router.message(Command("start"))
 async def cmd_start(message: Message):
-    user = TelegramUser(
-        id=message.from_user.id,
-        username=message.from_user.username,
-        first_name=message.from_user.first_name,
-        last_name=message.from_user.last_name
+    """Обработчик команды /start"""
+    telegram_id = message.from_user.id
+    username = message.from_user.username
+    full_name = message.from_user.full_name
+    
+    # Проверяем регистрацию
+    if not await IsRegistred(telegram_id):
+        # Если не зарегистрирован, создаем пользователя
+        user = await auth_service.create_user(telegram_id, username, full_name)
+        if user:
+            await message.answer(
+                f"Привет, {full_name}! Вы успешно зарегистрированы.\n"
+                f"Используйте команду /menu для доступа к функциям.",
+                reply_markup=get_main_menu_keyboard()
+            )
+        else:
+            await message.answer("Ошибка регистрации. Пожалуйста, попробуйте позже.")
+    else:
+        await message.answer(
+            f"С возвращением, {full_name}!",
+            reply_markup=get_main_menu_keyboard()
+        )
+
+
+@router.message(Command("menu"))
+async def cmd_menu(message: Message):
+    """Обработчик команды /menu"""
+    telegram_id = message.from_user.id
+    
+    # Проверяем регистрацию
+    if not await IsRegistred(telegram_id):
+        await message.answer("Вы не зарегистрированы. Используйте /start для регистрации.")
+        return
+    
+    await message.answer(
+        "Главное меню:",
+        reply_markup=get_main_menu_keyboard()
     )
 
-    registered_user = await user_service.register_user(user)
 
-    if registered_user:
-        welcome_text = f"""
-✅ Добро пожаловать, {user.full_name}!
-
-Вы успешно зарегистрированы в системе.
-
-Теперь вы можете использовать все возможности бота!
-        """
-        keyboard = start_menu(),
-        await message.answer("Добро пожаловать! Доступные функции:", reply_markup= keyboard)
+@router.message(Command("profile"))
+async def cmd_profile(message: Message):
+    """Обработчик команды /profile"""
+    telegram_id = message.from_user.id
+    
+    # Проверяем регистрацию
+    if not await IsRegistred(telegram_id):
+        await message.answer("Вы не зарегистрированы. Используйте /start для регистрации.")
+        return
+    
+    # Получаем данные пользователя
+    user = await auth_service.get_user(telegram_id)
+    if user:
+        await message.answer(
+            f"📋 *Ваш профиль*\n\n"
+            f"👤 *Имя:* {user.full_name}\n"
+            f"🆔 *Telegram ID:* {user.telegram_id}\n"
+            f"📧 *Username:* @{user.username if user.username else 'не указан'}\n"
+            f"📅 *Дата регистрации:* {user.created_at}",
+            parse_mode="Markdown"
+        )
     else:
-        welcome_text = f"""
-👋 Привет, {user.full_name}!
+        await message.answer("Не удалось загрузить данные профиля.")
 
-К сожалению, не удалось завершить регистрацию.
-Попробуйте позже или обратитесь к администратору.
-        """
 
-    await message.answer(welcome_text)
+@router.message(Command("schedule"))
+async def cmd_schedule(message: Message):
+    """Обработчик команды /schedule"""
+    telegram_id = message.from_user.id
+    
+    # Проверяем регистрацию
+    if not await IsRegistred(telegram_id):
+        await message.answer("Вы не зарегистрированы. Используйте /start для регистрации.")
+        return
+    
+    # Здесь можно добавить логику для получения группы пользователя
+    # и запроса расписания
+    await message.answer(
+        "📅 *Расписание*\n\n"
+        "Выберите действие:",
+        parse_mode="Markdown",
+        reply_markup=get_main_menu_keyboard()
+    )

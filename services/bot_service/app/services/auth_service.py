@@ -84,11 +84,11 @@ class AuthService:
 
     # TODO: добавить остальные методы
 
-async def CheckIfRegistred():
-    user = auth_service.get_user
-    if user:
-        IsRegistred = True
-    else:
-        return None
+    async def CheckIfRegistred():
+        user = auth_service.get_user
+        if user:
+            IsRegistred = True
+        else:
+            return None
     
 auth_service = AuthService()

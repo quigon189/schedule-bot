@@ -3,8 +3,8 @@ from aiogram import F
 from aiogram import Router
 from aiogram.utils.callback_answer import CallbackAnswer
 from aiogram.filters.callback_data import CallbackData
-from keyboards.user_keyboards import schedule_menu, profile_menu
-from keyboards.common_keyboards import start_menu
+from app.keyboards.user_keyboards import schedule_menu, profile_menu
+from app.keyboards.common_keyboards import start_menu
 
 router = Router(name="common_router")
 
