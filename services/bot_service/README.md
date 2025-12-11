@@ -54,6 +54,6 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    Alice->>Bob: Hello!
-    Bob->>Alice: KU!
+    Alice->>Bob: Привет!
+    Bob->>Alice: Здравствуй!
 ```
