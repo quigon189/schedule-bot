@@ -53,7 +53,7 @@ sequenceDiagram
 ```
 
 ```mermaid
-seqenceDiagram
+sequenceDiagram
     Alice->>Bob: Hello!
     Bob->>Alice: KU!
 ```
