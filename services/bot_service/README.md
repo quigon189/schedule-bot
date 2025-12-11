@@ -10,12 +10,10 @@ sequenceDiagram
     participant R as Router
     participant H as Handler
     participant DB as Database/Service
-
     Note over U,DB: Пользователь отправляет сообщение
     U->>TG: Отправляет сообщение/команду
     TG->>B: Передаёт Update
-    B->>DP: Передаёт Update
-    
+    B->>DP: Передаёт Updat    
     Note over DP,MW: Middleware Layer
     DP->>MW: Проверка пользователя
     MW->>DB: Проверка регистрации
@@ -27,7 +25,6 @@ sequenceDiagram
     else Зарегистрирован
         MW-->>DP: Пропускает дальше
     end
-    
     Note over DP,R: Router Dispatch
     DP->>R: Выбор подходящего Router
     alt Команда (/start, /help)
@@ -46,14 +43,7 @@ sequenceDiagram
         R->>Other: Соответствующий Router
         Other->>OH: Другие Handlers
         OH-->>B: Формирует ответ
-    end
-    
+    end 
     B->>TG: Отправляет ответ
     TG->>U: Показывает сообщение
-```
-
-```mermaid
-sequenceDiagram
-    Alice->>Bob: Привет!
-    Bob->>Alice: Здравствуй!
 ```
