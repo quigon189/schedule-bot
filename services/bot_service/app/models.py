@@ -1,6 +1,8 @@
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field
+
+Roles = Literal["student", "teacher", "manager"]
 
 
 class CreateUserRequest(BaseModel):
@@ -8,6 +10,14 @@ class CreateUserRequest(BaseModel):
     telegram_id: int  # обязательное поле
     username: Optional[str] = None  # может быть пустым
     full_name: str  # обязательное поле содержащее имя и фамилию
+
+
+class CreateCodeRequest(BaseModel):
+    role_name: Roles
+    group_name: Optional[str]
+    created_by: int
+    max_uses: Optional[int]
+    expiration: Optional[int]
 
 
 class ServiceResponse(BaseModel):
@@ -34,6 +44,17 @@ class UserResponse(BaseModel):
     is_active: bool
     roles: Optional[List["Role"]] = None  # содержит список ролей пользователя
     group: Optional[str] = None
+
+
+class CodeResponse(BaseModel):
+    id: int
+    code: str
+    role: "Role"
+    group_name: Optional[str] = None
+    max_uses: int
+    created_by: Optional[UserResponse]
+    expires_at: datetime
+    created_at: datetime
 
 
 class Role(BaseModel):

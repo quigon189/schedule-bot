@@ -5,10 +5,10 @@ definitions:
       created_by:
         example: 12345678
         type: integer
-      expires_at:
-        default: current time + 6 hours
-        example: "2006-01-02T03:04:05Z"
-        type: string
+      expiration:
+        default: 21600
+        example: 3600
+        type: integer
       group_name:
         example: СА-501
         type: string
@@ -206,7 +206,6 @@ paths:
       description: Удалить пользователя из базы данных
       parameters:
       - description: TelegramID пользователя
-        format: int64
         in: path
         name: telegram_id
         required: true
@@ -235,7 +234,6 @@ paths:
       description: Возвращает информацию о пользователе по telegram id
       parameters:
       - description: TelegramID пользователя
-        format: int64
         in: path
         name: telegram_id
         required: true

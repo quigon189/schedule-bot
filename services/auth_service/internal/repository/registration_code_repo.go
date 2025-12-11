@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"math/rand"
+	"time"
 )
 
 type RegCodeRepository struct {
@@ -70,6 +71,8 @@ func (r *RegCodeRepository) CreateCode(req *dto.CreateRegistrationCodeRequest) (
 	RETURNING id, code, role_id, group_name, max_uses, current_uses, created_by, expires_at, created_at
 	`
 
+	expiriesAt := time.Now().Add(time.Duration(req.Expiration) * time.Second)
+
 	var registrationCode models.RegistrationCode
 	err = r.db.QueryRow(
 		query,
@@ -78,7 +81,7 @@ func (r *RegCodeRepository) CreateCode(req *dto.CreateRegistrationCodeRequest) (
 		req.GroupName,
 		req.MaxUses,
 		req.CreatedBy,
-		req.ExpiresAt,
+		expiriesAt,
 	).Scan(
 		&registrationCode.ID,
 		&registrationCode.Code,

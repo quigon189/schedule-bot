@@ -5,11 +5,11 @@ import (
 )
 
 type CreateRegistrationCodeRequest struct {
-	RoleName  string    `json:"role_name" enums:"student,teacher,manager" example:"student"`
-	GroupName *string   `json:"group_name,omitempty" example:"СА-501"`
-	MaxUses   int       `json:"max_uses" maximum:"50" default:"1" example:"10"`
-	ExpiresAt time.Time `json:"expires_at" default:"current time + 6 hours" example:"2006-01-02T03:04:05Z"`
-	CreatedBy int64     `json:"created_by" example:"12345678"`
+	RoleName   string  `json:"role_name" enums:"student,teacher,manager" example:"student"`
+	GroupName  *string `json:"group_name,omitempty" example:"СА-501"`
+	MaxUses    int     `json:"max_uses" maximum:"50" default:"1" example:"10"`
+	Expiration int     `json:"expiration" default:"21600" example:"3600"`
+	CreatedBy  int64   `json:"created_by" example:"12345678"`
 }
 
 type ValidateCodeRequest struct {
@@ -17,10 +17,10 @@ type ValidateCodeRequest struct {
 }
 
 type RegisterUserRequest struct {
-	Code       string  `json:"code" example:"ABC123"`
-	TelegramID int64   `json:"telegram_id" example:"12345678"`
-	Username   string  `json:"username"`
-	FullName   string  `json:"full_name"`
+	Code       string `json:"code" example:"ABC123"`
+	TelegramID int64  `json:"telegram_id" example:"12345678"`
+	Username   string `json:"username"`
+	FullName   string `json:"full_name"`
 }
 
 type ValidateCodeResponse struct {

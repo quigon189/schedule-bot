@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
-	"time"
 
 	"auth_service/internal/models"
 )
@@ -36,8 +35,8 @@ func (r *CreateRegistrationCodeRequest) Validate() error {
 		return fmt.Errorf("invalid mac uses")
 	}
 
-	if r.ExpiresAt.IsZero() {
-		r.ExpiresAt = time.Now().Add(time.Hour * 6)
+	if r.Expiration == 0 {
+		r.Expiration = 21_600
 	}
 
 	return nil

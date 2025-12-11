@@ -3,7 +3,9 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from app.config import settings
+from app.callbacks.register import register_callback_router
 from app.handlers import command_router, echo_router
+from app.middlewaries import CheckUserMiddleware
 
 
 class TelegramBot:
@@ -13,6 +15,10 @@ class TelegramBot:
             default=DefaultBotProperties(parse_mode=ParseMode.HTML)
         )
         self.dp = Dispatcher()
+
+        self.dp.message.middleware(CheckUserMiddleware())
+
+        self.dp.include_router(register_callback_router)
 
         self.dp.include_router(command_router)
         self.dp.include_router(echo_router)

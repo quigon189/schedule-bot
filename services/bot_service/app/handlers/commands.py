@@ -2,7 +2,8 @@ from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command
 
-from app.models import TelegramUser
+from app.models import TelegramUser, UserResponse
+from app.services.auth_service import auth_service
 from app.services.user_service import user_service
 
 command_router = Router()
@@ -15,11 +16,31 @@ async def cmd_help(message: Message):
 
 /start - Начать работу с ботом
 /help - Показать эту справку
+/code - Создать код регистрации
 
 Бот отвечает на ваши сообщения эхом.
     """
 
     await message.answer(help_text)
+
+
+@command_router.message(Command("code"))
+async def cmd_code(message: Message, user: UserResponse):
+    code = await auth_service.create_registration_code(
+        role="teacher",
+        created_by=user.telegram_id
+    )
+    if code:
+        result_text = f"""
+Код доступа для преподавателя создан
+Код: {code.code}
+Количество использований: {code.max_uses}
+Действителен до: {code.expires_at.strftime("%Y-%y-%d %H:%M:%S")}
+        """
+    else:
+        result_text = "При создании кода возникла ошибка"
+
+    await message.answer(result_text)
 
 
 @command_router.message(Command("start"))
