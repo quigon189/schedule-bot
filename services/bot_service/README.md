@@ -51,3 +51,9 @@ sequenceDiagram
     B->>TG: Отправляет ответ
     TG->>U: Показывает сообщение
 ```
+
+```mermaid
+seqenceDiagram
+    Alice->>Bob: Hello!
+    Bob->>Alice: KU!
+```
