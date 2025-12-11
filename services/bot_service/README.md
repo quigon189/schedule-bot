@@ -47,3 +47,16 @@ sequenceDiagram
     B->>TG: Отправляет ответ
     TG->>U: Показывает сообщение
 ```
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant TG as Telegram API
+    participant B as Bot Instance
+    participant DP as Dispatcher
+
+    Note over U,DB: Пользователь отправляет сообщение
+    U->>TG: Отправляет сообщение/команду
+    TG->>B: Передаёт Update
+    B->>DP: Передаёт Updat    
+```
