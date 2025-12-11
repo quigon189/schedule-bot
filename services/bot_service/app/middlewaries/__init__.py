@@ -1,4 +1,4 @@
-from .user_middleware import CheckUserMiddleware
+from .check_user import CheckUserMiddleware
 
 
 __all__ = ['CheckUserMiddleware']

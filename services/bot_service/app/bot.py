@@ -4,7 +4,7 @@ from aiogram.enums import ParseMode
 
 from app.config import settings
 from app.callbacks.register import register_callback_router
-from app.handlers import command_router, echo_router
+from app.handlers import command_router, echo_router, admin_router
 from app.middlewaries import CheckUserMiddleware
 
 
@@ -20,6 +20,7 @@ class TelegramBot:
 
         self.dp.include_router(register_callback_router)
 
+        self.dp.include_router(admin_router)
         self.dp.include_router(command_router)
         self.dp.include_router(echo_router)
 

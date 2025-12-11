@@ -45,6 +45,10 @@ class UserResponse(BaseModel):
     roles: Optional[List["Role"]] = None  # содержит список ролей пользователя
     group: Optional[str] = None
 
+    @property
+    def roles_list(self) -> list:
+        return [role.name for role in self.roles] if self.roles else []
+
 
 class CodeResponse(BaseModel):
     id: int

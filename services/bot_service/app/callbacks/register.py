@@ -20,7 +20,14 @@ async def register_user(callback_query: CallbackQuery):
     reg_user = await user_service.register_user(user)
     if reg_user:
         await callback_query.answer("Спасибо за регистрацию!")
-        message = "Вы успешно зарегистрированы!"
+        message = f"""
+✅ Добро пожаловать, {user.full_name}!
+
+Вы успешно зарегистрированы в системе.
+
+Теперь вы можете использовать все возможности бота!
+"""
+
     else:
         await callback_query.answer("Ошибка регистрации")
         message = "При регистрации произошла ошибка, попробуйте повторить позднее."
