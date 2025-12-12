@@ -7,9 +7,10 @@ class UserService:
     """
     Класс для удобного взаимодействия с пользователями
     """
-    async def register_user(self, telegram_user: TelegramUser) -> Optional[UserResponse]:
+    async def register_user(self, code: str, telegram_user: TelegramUser) -> Optional[UserResponse]:
         """Регистрирует пользователя в системе"""
         user = await auth_service.create_user(
+            code=code,
             telegram_id=telegram_user.id,
             username=telegram_user.username,
             full_name=telegram_user.full_name

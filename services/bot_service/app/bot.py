@@ -1,10 +1,10 @@
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.config import settings
-from app.callbacks.register import register_callback_router
-from app.handlers import command_router, echo_router, admin_router
+from app.handlers import command_router, echo_router, admin_router, register_router
 from app.middlewaries import CheckUserMiddleware
 
 
@@ -14,11 +14,13 @@ class TelegramBot:
             token=settings.TELEGRAM_BOT_TOKEN,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML)
         )
-        self.dp = Dispatcher()
+
+        storage = MemoryStorage()
+        self.dp = Dispatcher(storage=storage)
 
         self.dp.message.middleware(CheckUserMiddleware())
 
-        self.dp.include_router(register_callback_router)
+        self.dp.include_router(register_router)
 
         self.dp.include_router(admin_router)
         self.dp.include_router(command_router)

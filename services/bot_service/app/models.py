@@ -7,6 +7,7 @@ Roles = Literal["student", "teacher", "manager"]
 
 class CreateUserRequest(BaseModel):
     """Модель запроса создания пользователя в auth-service"""
+    code: str
     telegram_id: int  # обязательное поле
     username: Optional[str] = None  # может быть пустым
     full_name: str  # обязательное поле содержащее имя и фамилию

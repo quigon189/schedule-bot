@@ -56,7 +56,8 @@ class AuthService:
                 f"Error creating registration code in auth service: {e}")
             return None
 
-    async def create_user(self, telegram_id: int, username: Optional[str],
+    async def create_user(self, code: str, telegram_id: int,
+                          username: Optional[str],
                           full_name: str) -> Optional[UserResponse]:
         """
         Создание запроса к auth-service на создание пользователя
@@ -66,6 +67,7 @@ class AuthService:
             # создаем асинхронного клиента для http запроса к auth-service
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 payload = CreateUserRequest(
+                    code=code,
                     telegram_id=telegram_id,
                     username=username,
                     full_name=full_name
@@ -74,7 +76,7 @@ class AuthService:
                 # асинхронно отправляем запрос и ждем ответ
                 # (по умолчанию timeout = 30 sec)
                 response = await client.post(
-                    f"{self.base_url}/api/v1/users",
+                    f"{self.base_url}/api/v1/users/register",
                     json=payload.model_dump(),
                     headers={"ContentType": "application/json"}
                 )

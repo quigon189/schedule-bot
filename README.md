@@ -70,6 +70,7 @@ POSTGRES_PASSWORD=password
 
 # Сервисы
 DEBUG=true
+BOT_ADMINS="123123123 234234234"
 ```
 
 **🔑 Как получить Telegram Bot Token:**
