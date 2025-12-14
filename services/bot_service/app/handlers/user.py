@@ -1,0 +1,91 @@
+from aiogram import Router, types
+from aiogram.filters import Text
+from app.models import UserResponse
+from keyboards.user_keyboards import get_main_menu_keyboard, get_schedule_menu_keyboard, get_ticket_menu_keyboard
+import logging
+
+router = Router()
+logger = logging.getLogger(__name__)
+
+
+@router.message(Text("📋 Профиль"))
+async def profile_button(message: types.Message, user: UserResponse):
+    """Обработчик кнопки Профиль"""
+    role_emoji = {
+        'student': '👨‍🎓',
+        'teacher': '👨‍🏫',
+        'admin': '👑',
+        'moderator': '🛡️'
+    }
+    
+    emoji = role_emoji.get(user.role, '👤')
+    
+    profile_text = (
+        f"{emoji} *Ваш профиль*\n\n"
+        f"👤 *Имя:* {user.full_name}\n"
+        f"🆔 *ID:* {user.telegram_id}\n"
+        f"📧 *Username:* @{user.username if user.username else 'нет'}\n"
+        f"🎓 *Роль:* {user.role}\n"
+    )
+    
+    if user.group_name:
+        profile_text += f"📚 *Группа:* {user.group_name}\n"
+    
+    profile_text += f"📅 *Дата регистрации:* {user.created_at}"
+    
+    await message.answer(
+        profile_text,
+        parse_mode="Markdown",
+        reply_markup=get_main_menu_keyboard()
+    )
+
+
+@router.message(Text("📅 Расписание"))
+async def schedule_button(message: types.Message, user: UserResponse):
+    """Обработчик кнопки Расписание"""
+    if user.role == 'student' and user.group_name:
+        # Для студентов показываем расписание их группы
+        await message.answer(
+            f"📅 *Расписание группы {user.group_name}*\n\n"
+            "Выберите период:",
+            parse_mode="Markdown",
+            reply_markup=get_schedule_menu_keyboard()
+        )
+    elif user.role == 'teacher':
+        # Для преподавателей можно сделать выбор группы
+        await message.answer(
+            "📅 *Расписание*\n\n"
+            "Выберите группу или период:",
+            parse_mode="Markdown",
+            reply_markup=get_schedule_menu_keyboard()
+        )
+    else:
+        await message.answer(
+            "📅 *Расписание*\n\n"
+            "Выберите период:",
+            parse_mode="Markdown",
+            reply_markup=get_schedule_menu_keyboard()
+        )
+
+
+@router.message(Text("🎫 Тикеты"))
+async def tickets_button(message: types.Message, user: UserResponse):
+    """Обработчик кнопки Тикеты"""
+    await message.answer(
+        "🎫 *Система тикетов*\n\n"
+        "Здесь вы можете создать тикет для решения проблем "
+        "или задать вопросы администрации.",
+        parse_mode="Markdown",
+        reply_markup=get_ticket_menu_keyboard()
+    )
+
+
+@router.message(Text("⚙️ Настройки"))
+async def settings_button(message: types.Message, user: UserResponse):
+    """Обработчик кнопки Настройки"""
+    await message.answer(
+        "⚙️ *Настройки*\n\n"
+        "Функция в разработке...",
+        parse_mode="Markdown",
+        reply_markup=get_main_menu_keyboard()
+    )

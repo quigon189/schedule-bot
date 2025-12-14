@@ -7,7 +7,6 @@ from app.config import settings
 from app.handlers import command_router, echo_router, admin_router, register_router
 from app.middlewaries import CheckUserMiddleware
 
-
 class TelegramBot:
     def __init__(self):
         self.bot = Bot(
