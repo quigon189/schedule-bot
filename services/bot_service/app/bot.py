@@ -5,7 +5,6 @@ from aiogram.enums import ParseMode
 from app.config import settings
 from app.handlers import command_router, echo_router
 
-
 class TelegramBot:
     def __init__(self):
         self.bot = Bot(

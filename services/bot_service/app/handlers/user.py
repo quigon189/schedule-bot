@@ -1,70 +1,91 @@
 from aiogram import Router, types
 from aiogram.filters import Text
-from services.auth_service import AuthService
-from keyboards.user_keyboards import get_schedule_menu_keyboard
+from app.models import UserResponse
+from keyboards.user_keyboards import get_main_menu_keyboard, get_schedule_menu_keyboard, get_ticket_menu_keyboard
 import logging
 
 router = Router()
-auth_service = AuthService()
-
-async def IsRegistred(telegram_id: int) -> bool:
-    """Проверка регистрации пользователя"""
-    user = await auth_service.get_user(telegram_id)
-    return user is not None
+logger = logging.getLogger(__name__)
 
 
 @router.message(Text("📋 Профиль"))
-async def profile_button(message: types.Message):
+async def profile_button(message: types.Message, user: UserResponse):
     """Обработчик кнопки Профиль"""
-    telegram_id = message.from_user.id
+    role_emoji = {
+        'student': '👨‍🎓',
+        'teacher': '👨‍🏫',
+        'admin': '👑',
+        'moderator': '🛡️'
+    }
     
-    # Проверяем регистрацию
-    if not await IsRegistred(telegram_id):
-        await message.answer("Вы не зарегистрированы. Используйте /start для регистрации.")
-        return
+    emoji = role_emoji.get(user.role, '👤')
     
-    user = await auth_service.get_user(telegram_id)
-    if user:
-        await message.answer(
-            f"📋 *Ваш профиль*\n\n"
-            f"👤 *Имя:* {user.full_name}\n"
-            f"🆔 *Telegram ID:* {user.telegram_id}\n"
-            f"📧 *Username:* @{user.username if user.username else 'не указан'}\n"
-            f"📅 *Дата регистрации:* {user.created_at}",
-            parse_mode="Markdown"
-        )
+    profile_text = (
+        f"{emoji} *Ваш профиль*\n\n"
+        f"👤 *Имя:* {user.full_name}\n"
+        f"🆔 *ID:* {user.telegram_id}\n"
+        f"📧 *Username:* @{user.username if user.username else 'нет'}\n"
+        f"🎓 *Роль:* {user.role}\n"
+    )
+    
+    if user.group_name:
+        profile_text += f"📚 *Группа:* {user.group_name}\n"
+    
+    profile_text += f"📅 *Дата регистрации:* {user.created_at}"
+    
+    await message.answer(
+        profile_text,
+        parse_mode="Markdown",
+        reply_markup=get_main_menu_keyboard()
+    )
 
 
 @router.message(Text("📅 Расписание"))
-async def schedule_button(message: types.Message):
+async def schedule_button(message: types.Message, user: UserResponse):
     """Обработчик кнопки Расписание"""
-    telegram_id = message.from_user.id
-    
-    # Проверяем регистрацию
-    if not await IsRegistred(telegram_id):
-        await message.answer("Вы не зарегистрированы. Используйте /start для регистрации.")
-        return
-    
+    if user.role == 'student' and user.group_name:
+        # Для студентов показываем расписание их группы
+        await message.answer(
+            f"📅 *Расписание группы {user.group_name}*\n\n"
+            "Выберите период:",
+            parse_mode="Markdown",
+            reply_markup=get_schedule_menu_keyboard()
+        )
+    elif user.role == 'teacher':
+        # Для преподавателей можно сделать выбор группы
+        await message.answer(
+            "📅 *Расписание*\n\n"
+            "Выберите группу или период:",
+            parse_mode="Markdown",
+            reply_markup=get_schedule_menu_keyboard()
+        )
+    else:
+        await message.answer(
+            "📅 *Расписание*\n\n"
+            "Выберите период:",
+            parse_mode="Markdown",
+            reply_markup=get_schedule_menu_keyboard()
+        )
+
+
+@router.message(Text("🎫 Тикеты"))
+async def tickets_button(message: types.Message, user: UserResponse):
+    """Обработчик кнопки Тикеты"""
     await message.answer(
-        "📅 *Расписание*\n\n"
-        "Выберите период:",
+        "🎫 *Система тикетов*\n\n"
+        "Здесь вы можете создать тикет для решения проблем "
+        "или задать вопросы администрации.",
         parse_mode="Markdown",
-        reply_markup=get_schedule_menu_keyboard()
+        reply_markup=get_ticket_menu_keyboard()
     )
 
 
 @router.message(Text("⚙️ Настройки"))
-async def settings_button(message: types.Message):
+async def settings_button(message: types.Message, user: UserResponse):
     """Обработчик кнопки Настройки"""
-    telegram_id = message.from_user.id
-    
-    # Проверяем регистрацию
-    if not await IsRegistred(telegram_id):
-        await message.answer("Вы не зарегистрированы. Используйте /start для регистрации.")
-        return
-    
     await message.answer(
         "⚙️ *Настройки*\n\n"
         "Функция в разработке...",
-        parse_mode="Markdown"
+        parse_mode="Markdown",
+        reply_markup=get_main_menu_keyboard()
     )

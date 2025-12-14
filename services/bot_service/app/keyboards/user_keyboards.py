@@ -8,9 +8,10 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
     
     builder.add(KeyboardButton(text="📋 Профиль"))
     builder.add(KeyboardButton(text="📅 Расписание"))
+    builder.add(KeyboardButton(text="🎫 Тикеты"))
     builder.add(KeyboardButton(text="⚙️ Настройки"))
     
-    builder.adjust(2, 1)
+    builder.adjust(2)
     return builder.as_markup(resize_keyboard=True)
 
 
@@ -38,28 +39,45 @@ def get_schedule_menu_keyboard() -> InlineKeyboardMarkup:
     )
     builder.add(
         InlineKeyboardButton(
-            text="⚙️ Настройки группы",
-            callback_data="group_settings"
+            text="📅 На месяц",
+            callback_data="schedule_month"
+        )
+    )
+    builder.add(
+        InlineKeyboardButton(
+            text="🔙 Назад",
+            callback_data="back_to_menu"
         )
     )
     
-    builder.adjust(2, 1, 1)
+    builder.adjust(2, 2, 1)
     return builder.as_markup()
 
 
-def get_group_selection_keyboard(groups: list) -> InlineKeyboardMarkup:
-    """Клавиатура для выбора группы"""
+def get_ticket_menu_keyboard() -> InlineKeyboardMarkup:
+    """Инлайн клавиатура для меню тикетов"""
     builder = InlineKeyboardBuilder()
     
-    for group in groups:
-        builder.add(
-            InlineKeyboardButton(
-                text=group,
-                callback_data=f"select_group_{group}"
-            )
+    builder.add(
+        InlineKeyboardButton(
+            text="🎫 Создать тикет",
+            callback_data="create_ticket"
         )
+    )
+    builder.add(
+        InlineKeyboardButton(
+            text="📋 Мои тикеты",
+            callback_data="my_tickets"
+        )
+    )
+    builder.add(
+        InlineKeyboardButton(
+            text="🔙 Назад",
+            callback_data="back_to_menu"
+        )
+    )
     
-    builder.adjust(2)
+    builder.adjust(1, 1, 1)
     return builder.as_markup()
 
 
@@ -74,4 +92,34 @@ def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
         )
     )
     
+    return builder.as_markup()
+
+
+def get_ticket_types_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для выбора типа тикета"""
+    builder = InlineKeyboardBuilder()
+    
+    ticket_types = [
+        ("🚀 Техническая проблема", "tech_issue"),
+        ("📚 Вопрос по расписанию", "schedule_question"),
+        ("👥 Проблема с группой", "group_issue"),
+        ("❓ Другое", "other")
+    ]
+    
+    for text, callback_data in ticket_types:
+        builder.add(
+            InlineKeyboardButton(
+                text=text,
+                callback_data=f"ticket_type_{callback_data}"
+            )
+        )
+    
+    builder.add(
+        InlineKeyboardButton(
+            text="🔙 Назад",
+            callback_data="back_to_tickets"
+        )
+    )
+    
+    builder.adjust(1)
     return builder.as_markup()
