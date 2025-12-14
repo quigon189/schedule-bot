@@ -4,8 +4,9 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.config import settings
-from app.handlers import command_router, echo_router, admin_router, register_router
+from app.handlers import router
 from app.middlewaries import CheckUserMiddleware
+
 
 class TelegramBot:
     def __init__(self):
@@ -19,11 +20,7 @@ class TelegramBot:
 
         self.dp.message.middleware(CheckUserMiddleware())
 
-        self.dp.include_router(register_router)
-
-        self.dp.include_router(admin_router)
-        self.dp.include_router(command_router)
-        self.dp.include_router(echo_router)
+        self.dp.include_router(router)
 
     async def start_polling(self):
         print("Start Telegram bot in polling mode...")

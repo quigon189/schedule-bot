@@ -1,14 +1,14 @@
 from aiogram import Router, types
-from aiogram.filters import Text
+from aiogram import F
 from app.models import UserResponse
-from keyboards.user_keyboards import get_main_menu_keyboard, get_schedule_menu_keyboard, get_ticket_menu_keyboard
+from app.keyboards.user_keyboards import get_main_menu_keyboard, get_schedule_menu_keyboard, get_ticket_menu_keyboard
 import logging
 
 router = Router()
 logger = logging.getLogger(__name__)
 
 
-@router.message(Text("📋 Профиль"))
+@router.message(F.text == "📋 Профиль")
 async def profile_button(message: types.Message, user: UserResponse):
     """Обработчик кнопки Профиль"""
     role_emoji = {
@@ -17,9 +17,9 @@ async def profile_button(message: types.Message, user: UserResponse):
         'admin': '👑',
         'moderator': '🛡️'
     }
-    
+
     emoji = role_emoji.get(user.role, '👤')
-    
+
     profile_text = (
         f"{emoji} *Ваш профиль*\n\n"
         f"👤 *Имя:* {user.full_name}\n"
@@ -27,12 +27,12 @@ async def profile_button(message: types.Message, user: UserResponse):
         f"📧 *Username:* @{user.username if user.username else 'нет'}\n"
         f"🎓 *Роль:* {user.role}\n"
     )
-    
+
     if user.group_name:
         profile_text += f"📚 *Группа:* {user.group_name}\n"
-    
+
     profile_text += f"📅 *Дата регистрации:* {user.created_at}"
-    
+
     await message.answer(
         profile_text,
         parse_mode="Markdown",
@@ -40,7 +40,7 @@ async def profile_button(message: types.Message, user: UserResponse):
     )
 
 
-@router.message(Text("📅 Расписание"))
+@router.message(F.text("📅 Расписание"))
 async def schedule_button(message: types.Message, user: UserResponse):
     """Обработчик кнопки Расписание"""
     if user.role == 'student' and user.group_name:
@@ -68,7 +68,7 @@ async def schedule_button(message: types.Message, user: UserResponse):
         )
 
 
-@router.message(Text("🎫 Тикеты"))
+@router.message(F.text("🎫 Тикеты"))
 async def tickets_button(message: types.Message, user: UserResponse):
     """Обработчик кнопки Тикеты"""
     await message.answer(
@@ -80,7 +80,7 @@ async def tickets_button(message: types.Message, user: UserResponse):
     )
 
 
-@router.message(Text("⚙️ Настройки"))
+@router.message(F.text("⚙️ Настройки"))
 async def settings_button(message: types.Message, user: UserResponse):
     """Обработчик кнопки Настройки"""
     await message.answer(

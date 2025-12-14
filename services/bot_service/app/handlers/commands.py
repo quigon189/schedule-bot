@@ -2,7 +2,7 @@ from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.types import Message
 from app.models import UserResponse
-from keyboards.user_keyboards import get_main_menu_keyboard
+from app.keyboards.user_keyboards import get_main_menu_keyboard
 import logging
 
 logger = logging.getLogger(__name__)
