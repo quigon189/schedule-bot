@@ -19,7 +19,7 @@ type Config struct {
 func Load() *Config {
 	interval, _ := strconv.Atoi(getEnv("CHECK_INTERVAL_MINUTES", "5"))
 	maxPosts, _ := strconv.Atoi(getEnv("MAX_POSTS", "20"))
-	groupID, _ := strconv.Atoi(getEnv(":VK_GROUP_ID", "1"))
+	groupID, _ := strconv.Atoi(getEnv("VK_GROUP_ID", "1"))
 
 	return &Config{
 		VKToken: getEnv("VK_ACCESS_TOKEN", ""),

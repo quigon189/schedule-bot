@@ -61,7 +61,7 @@ func (p *Parser) parsePosts() {
 	}
 
 	for _, post := range posts {
-		if p.isProcessed(post.PostID) {
+		if p.isProcessed(post.ID) {
 			continue
 		}
 
@@ -71,6 +71,7 @@ func (p *Parser) parsePosts() {
 
 func (p *Parser) processPost(post object.WallWallpost) {
 	urls := []string{}
+	log.Printf("Processing post: %d", post.ID)
 	for _, attachment := range post.Attachments {
 		if attachment.Type == "photo" {
 			photo := attachment.Photo
@@ -101,7 +102,7 @@ func (p *Parser) processPost(post object.WallWallpost) {
 			if err := p.sender.Send(data); err != nil {
 				log.Printf("Failed to send parsed data: %v", err)
 			} else {
-				p.markProcessed(post.PostID)
+				p.markProcessed(post.ID)
 			}
 			return
 		}
