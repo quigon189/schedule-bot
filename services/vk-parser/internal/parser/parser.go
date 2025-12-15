@@ -75,7 +75,7 @@ func (p *Parser) processPost(post object.WallWallpost) {
 	for _, attachment := range post.Attachments {
 		if attachment.Type == "photo" {
 			photo := attachment.Photo
-			urls = append(urls, photo.Sizes[len(photo.Sizes)-1].URL)
+			urls = append(urls, photo.MaxSize().URL)
 		}
 	}
 

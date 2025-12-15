@@ -36,8 +36,6 @@ func (s *Sender) Send(data any) error {
 
 	req.Header.Set("Content-Type", "application/json")
 
-	log.Printf("sender request: %+v", req)
-
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return err
