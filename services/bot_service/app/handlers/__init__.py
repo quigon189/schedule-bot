@@ -1,9 +1,10 @@
 from aiogram import Router
-from . import commands, user, echo, admin
+from . import commands, user, echo, admin, register
 
 router = Router()
 
 router.include_router(admin.admin_router)
+router.include_router(register.register_router)
 router.include_router(commands.router)
 router.include_router(user.router)
 router.include_router(echo.echo_router)

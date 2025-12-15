@@ -2,7 +2,6 @@ from aiogram import Router
 from aiogram.types import Message
 from aiogram import F
 
-from app.models import GroupScheduleRequest
 from app.services.schedule_service import schedule_service
 from app.services.user_service import user_service
 

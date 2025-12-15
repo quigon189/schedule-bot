@@ -31,18 +31,21 @@ async def cmd_profile(message: Message, user: UserResponse):
         'moderator': '🛡️'
     }
 
-    emoji = role_emoji.get(user.role, '👤')
+    profile_text = ""
 
-    profile_text = (
-        f"{emoji} *Ваш профиль*\n\n"
-        f"👤 *Имя:* {user.full_name}\n"
-        f"🆔 *ID:* {user.telegram_id}\n"
-        f"📧 *Username:* @{user.username if user.username else 'нет'}\n"
-        f"🎓 *Роль:* {user.role}\n"
-    )
+    for role in user.roles_list:
+        emoji = role_emoji.get(role, '👤')
 
-    if user.group_name:
-        profile_text += f"📚 *Группа:* {user.group_name}\n"
+        profile_text = (
+            f"{emoji} *Ваш профиль*\n\n"
+            f"👤 *Имя:* {user.full_name}\n"
+            f"🆔 *ID:* {user.telegram_id}\n"
+            f"📧 *Username:* @{user.username if user.username else 'нет'}\n"
+            f"🎓 *Роль:* {role}\n"
+        )
+
+    if user.group:
+        profile_text += f"📚 *Группа:* {user.group}\n"
 
     profile_text += f"📅 *Дата регистрации:* {user.created_at}"
 
@@ -58,14 +61,14 @@ async def cmd_schedule(message: Message, user: UserResponse):
     """Обработчик команды /schedule"""
     from keyboards.user_keyboards import get_schedule_menu_keyboard
 
-    if user.role == 'student' and user.group_name:
+    if 'student' in user.roles_list and user.group:
         await message.answer(
-            f"📅 *Расписание группы {user.group_name}*\n\n"
+            f"📅 *Расписание группы {user.group}*\n\n"
             "Выберите период:",
             parse_mode="Markdown",
             reply_markup=get_schedule_menu_keyboard()
         )
-    elif user.role == 'teacher':
+    elif 'teacher' in user.roles_list:
         await message.answer(
             "📅 *Расписание*\n\n"
             "Выберите группу или период:",
@@ -86,9 +89,7 @@ async def cmd_ticket(message: Message, user: UserResponse):
     """Обработчик команды /ticket - система тикетов"""
     """
     TODO: Полная реализация системы тикетов с PostgreSQL
-    
     Планируемая структура таблицы tickets:
-    
     CREATE TABLE tickets (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL,
@@ -101,13 +102,10 @@ async def cmd_ticket(message: Message, user: UserResponse):
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         resolved_at TIMESTAMP NULL
     );
-    
     Пример кода для создания тикета:
-    
     # from app.database import async_session
     # from app.models.ticket import Ticket
     # from sqlalchemy import insert
-    # 
     # async with async_session() as session:
     #     stmt = insert(Ticket).values(
     #         user_id=user.id,
@@ -119,11 +117,8 @@ async def cmd_ticket(message: Message, user: UserResponse):
     #     )
     #     await session.execute(stmt)
     #     await session.commit()
-    # 
     # Пример кода для получения тикетов:
-    # 
     # from sqlalchemy import select
-    # 
     # async with async_session() as session:
     #     stmt = select(Ticket).where(Ticket.user_id == user.id).order_by(Ticket.created_at.desc())
     #     result = await session.execute(stmt)

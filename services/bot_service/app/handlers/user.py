@@ -18,18 +18,21 @@ async def profile_button(message: types.Message, user: UserResponse):
         'moderator': '🛡️'
     }
 
-    emoji = role_emoji.get(user.role, '👤')
+    profile_text = ""
 
-    profile_text = (
-        f"{emoji} *Ваш профиль*\n\n"
-        f"👤 *Имя:* {user.full_name}\n"
-        f"🆔 *ID:* {user.telegram_id}\n"
-        f"📧 *Username:* @{user.username if user.username else 'нет'}\n"
-        f"🎓 *Роль:* {user.role}\n"
-    )
+    for role in user.roles_list:
+        emoji = role_emoji.get(role, '👤')
 
-    if user.group_name:
-        profile_text += f"📚 *Группа:* {user.group_name}\n"
+        profile_text += (
+            f"{emoji} *Ваш профиль*\n\n"
+            f"👤 *Имя:* {user.full_name}\n"
+            f"🆔 *ID:* {user.telegram_id}\n"
+            f"📧 *Username:* @{user.username if user.username else 'нет'}\n"
+            f"🎓 *Роль:* {role}\n"
+        )
+
+    if user.group:
+        profile_text += f"📚 *Группа:* {user.group}\n"
 
     profile_text += f"📅 *Дата регистрации:* {user.created_at}"
 
@@ -40,18 +43,18 @@ async def profile_button(message: types.Message, user: UserResponse):
     )
 
 
-@router.message(F.text("📅 Расписание"))
+@router.message(F.text == "📅 Расписание")
 async def schedule_button(message: types.Message, user: UserResponse):
     """Обработчик кнопки Расписание"""
-    if user.role == 'student' and user.group_name:
+    if 'student' in user.roles_list and user.group:
         # Для студентов показываем расписание их группы
         await message.answer(
-            f"📅 *Расписание группы {user.group_name}*\n\n"
+            f"📅 *Расписание группы {user.group}*\n\n"
             "Выберите период:",
             parse_mode="Markdown",
             reply_markup=get_schedule_menu_keyboard()
         )
-    elif user.role == 'teacher':
+    elif 'teacher' in user.roles_list:
         # Для преподавателей можно сделать выбор группы
         await message.answer(
             "📅 *Расписание*\n\n"
@@ -68,7 +71,7 @@ async def schedule_button(message: types.Message, user: UserResponse):
         )
 
 
-@router.message(F.text("🎫 Тикеты"))
+@router.message(F.text == "🎫 Тикеты")
 async def tickets_button(message: types.Message, user: UserResponse):
     """Обработчик кнопки Тикеты"""
     await message.answer(
@@ -80,7 +83,7 @@ async def tickets_button(message: types.Message, user: UserResponse):
     )
 
 
-@router.message(F.text("⚙️ Настройки"))
+@router.message(F.text == "⚙️ Настройки")
 async def settings_button(message: types.Message, user: UserResponse):
     """Обработчик кнопки Настройки"""
     await message.answer(
