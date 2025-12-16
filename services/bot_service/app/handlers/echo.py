@@ -1,7 +1,9 @@
+from datetime import datetime
 from aiogram import Router
-from aiogram.types import Message
+from aiogram.types import InputMediaPhoto, Message
 from aiogram import F
 
+from app.models import UserResponse
 from app.services.schedule_service import schedule_service
 from app.services.user_service import user_service
 
@@ -46,6 +48,32 @@ Cеместр: {gs.semester}
         """
 
         await message.answer(response_text)
+
+
+@echo_router.message(F.text.startswith('изменения'))
+async def schedule_changes(message: Message, user: UserResponse):
+    try:
+        params = message.text.split(' ')[1]
+        if len(params) == 2:
+            date = datetime.strptime(params[1], '%Y-%m-%d')
+        else:
+            date = None
+
+        resp = await schedule_service.get_schedule_changes(date)
+
+        if resp:
+            media = [InputMediaPhoto(media=url) for url in resp.image_urls]
+            message.answer(f"""
+Изменения на  {resp.date.strftime('%d.%m.%Y')}
+Коментарий: {resp.description}
+""")
+            message.answer_media_group(media=media)
+            return
+
+        message.answer("Изменений в расписании не найдено")
+
+    except Exception:
+        message.answer("Ошибка при получении изменений расписания")
 
 
 @echo_router.message(F.text)

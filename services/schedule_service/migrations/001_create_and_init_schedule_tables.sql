@@ -70,8 +70,8 @@ CREATE TABLE schedule (
 
 CREATE TABLE changes (
 	id SERIAL PRIMARY KEY,
-	change_date DATE NOT NULL,
-	change_image_url VARCHAR(500) UNIQUE,
+	change_date DATE NOT NULL UNIQUE,
+	change_image_urls TEXT[],
 	change_description TEXT,
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

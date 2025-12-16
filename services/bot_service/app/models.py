@@ -86,6 +86,15 @@ class GroupScheduleResponse(BaseModel):
     created_at: datetime
 
 
+class ScheduleChangesResponse(BaseModel):
+    """Модель изменений расписания"""
+    id: int
+    date: datetime
+    description: str
+    image_urls: List[str]
+    created_at: datetime
+
+
 class TelegramUser(BaseModel):
     """Модель пользователя полученого из сообщения telegram"""
     id: int

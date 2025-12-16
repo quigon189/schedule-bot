@@ -1,9 +1,10 @@
+from datetime import datetime
 import logging
 from typing import List, Optional
 
 import httpx
 from app.config import settings
-from app.models import GroupScheduleResponse, GroupScheduleRequest, ServiceResponse
+from app.models import GroupScheduleResponse, GroupScheduleRequest, ScheduleChangesResponse, ServiceResponse
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -36,8 +37,6 @@ class ScheduleService:
                     headers={"ContentType": "application/json"}
                 )
 
-                logging.debug(f"response data: {response.json()}")
-
                 if response.status_code == 200:
                     schedule_response = ServiceResponse(**response.json())
                     if schedule_response.success:
@@ -51,7 +50,36 @@ class ScheduleService:
                 return None
 
         except Exception as e:
-            logging.debug(f"Error creating user in auth service: {e}")
+            logging.debug(f"Error getting group schedule: {e}")
+            return None
+
+    async def get_schedule_changes(self, date: Optional[datetime] = None) -> Optional[ScheduleChangesResponse]:
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                params = {}
+                if date:
+                    params['date'] = date.strftime('%Y-%m-%d')
+
+                response = await client.get(
+                    f"{self.base_url}/changes",
+                    params=params,
+                    headers={"ContentType": "application/json"}
+                )
+
+                logging.debug("response: %+v")
+
+                if response.status_code == 200:
+                    changes_response = ServiceResponse(**response.json())
+                    if changes_response.success:
+                        return ScheduleChangesResponse(**changes_response.data)
+
+                logging.debug(
+                    f"Error: {response.status_code} {response.json()}")
+
+                return None
+
+        except Exception as e:
+            logging.debug(f"Error getting schedule changes: {e}")
             return None
 
 
