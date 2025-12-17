@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 from aiogram import Router
 from aiogram.types import InputMediaPhoto, Message
 from aiogram import F
@@ -53,7 +54,7 @@ Cеместр: {gs.semester}
 @echo_router.message(F.text.startswith('изменения'))
 async def schedule_changes(message: Message, user: UserResponse):
     try:
-        params = message.text.split(' ')[1]
+        params = message.text.split(' ')
         if len(params) == 2:
             date = datetime.strptime(params[1], '%Y-%m-%d')
         else:
@@ -63,17 +64,18 @@ async def schedule_changes(message: Message, user: UserResponse):
 
         if resp:
             media = [InputMediaPhoto(media=url) for url in resp.image_urls]
-            message.answer(f"""
+            await message.answer(f"""
 Изменения на  {resp.date.strftime('%d.%m.%Y')}
 Коментарий: {resp.description}
 """)
-            message.answer_media_group(media=media)
+            await message.answer_media_group(media=media)
             return
 
-        message.answer("Изменений в расписании не найдено")
+        await message.answer("Изменений в расписании не найдено")
 
-    except Exception:
-        message.answer("Ошибка при получении изменений расписания")
+    except Exception as e:
+        logging.debug(f"Failed handle changes: {e}")
+        await message.answer("Ошибка при получении изменений расписания")
 
 
 @echo_router.message(F.text)
