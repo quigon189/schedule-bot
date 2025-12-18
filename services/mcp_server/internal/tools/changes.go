@@ -31,11 +31,8 @@ func (h *ChangeHandler) HandleChangeRequest(ctx context.Context, req mcp.CallToo
 		return mcp.NewToolResultError("ошибка при получении изменеий из сервиса"), nil
 	}
 
-	if len(changesResponse) == 0 {
-		return mcp.NewToolResultText("нет изменений на выбранную дату"), nil
-	}
 
-	jsonData, err := json.Marshal(changesResponse)
+	jsonData, err := json.Marshal(changesResponse.Data)
 	if err != nil {
 		log.Printf("Failed to marshal changes response: %v", err)
 		return mcp.NewToolResultError("ошибка при обработке данных"), nil

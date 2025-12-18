@@ -13,11 +13,10 @@ import (
 func main() {
 	cfg := config.Load()
 
-	changeHandler := tools.NewChangeHandler(
-		service.NewChangeService(cfg),
-	)
+	ser := service.NewChangeService(cfg)
 
-	scheduleHandler := tools.NewSchedulesHandler()
+	changeHandler := tools.NewChangeHandler(ser)
+	scheduleHandler := tools.NewSchedulesHandler(ser)
 
 	mcpServer := server.NewMCPServer(
 		"Доступ к расписанию и изменениям расписания",
@@ -31,6 +30,7 @@ func main() {
 	mcpServer.AddTool(scheduleTools.GetChanges(), changeHandler.HandleChangeRequest)
 	mcpServer.AddTool(scheduleTools.GetCurrentDate(), scheduleHandler.CurrentDateHandler)
 	mcpServer.AddTool(scheduleTools.GetCurrentStudyPeriod(), scheduleHandler.CurrentStudyPeriodHandler)
+	mcpServer.AddTool(scheduleTools.GetGroupSchedule(), scheduleHandler.GetGroupSchedule)
 
 	http.Handle("/mcp", server.NewStreamableHTTPServer(mcpServer))
 	log.Printf("MCP chedule server starting on :%s", cfg.ServerPort)
