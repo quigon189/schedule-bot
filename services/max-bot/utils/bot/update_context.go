@@ -8,7 +8,7 @@ import (
 )
 
 type UpdateContext struct {
-	Context *context.Context
+	Context context.Context
 	Update schemes.UpdateInterface
 	Bot *maxbot.Api
 }
@@ -18,3 +18,9 @@ type HandlerFunc func(*UpdateContext) error
 type FilterFunc func(*UpdateContext) bool
 
 type MiddlewareFunc func(HandlerFunc) HandlerFunc
+
+func (ctx *UpdateContext) Answer(text string) error {
+	chatID := ctx.Update.GetChatID()
+	msg := maxbot.NewMessage().SetChat(chatID).SetText(text)
+	return ctx.Bot.Messages.Send(ctx.Context, msg)
+}
