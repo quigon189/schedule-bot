@@ -18,8 +18,9 @@ class ScheduleService:
         self.base_url = f"{settings.SCHEDULE_SERVICE_URL}/api/v1"
         self.timeout = settings.SCHEDULE_SERVICE_TIMEOUT
 
-    async def get_group_schedule(self, group_name: str, academic_year: str,
-                                 half_year: int) -> Optional[List[GroupScheduleResponse]]:
+    async def get_group_schedule(self, group_name: Optional[str] = None,
+                                 academic_year: Optional[str] = None,
+                                 half_year: Optional[int] = None) -> Optional[List[GroupScheduleResponse]]:
         """
         Возвращает основное расписание группы на указаный учебный период
         """

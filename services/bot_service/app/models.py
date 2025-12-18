@@ -71,9 +71,10 @@ class Role(BaseModel):
 
 class GroupScheduleRequest(BaseModel):
     """Модель запроса расписания"""
-    academic_year: str = Field(pattern=r"^(\d{4})/(\d{4})$")
-    half_year: int = Field(ge=1, le=2)
-    group_name: str
+    academic_year: Optional[str] = Field(
+        pattern=r"^(\d{4})/(\d{4})$", default=None)
+    half_year: Optional[int] = Field(ge=1, le=2, default=None)
+    group_name: Optional[str] = Field(pattern=r"[А-Я]+-[0-9]+", default=None)
 
 
 class GroupScheduleResponse(BaseModel):

@@ -12,40 +12,34 @@ echo_router = Router()
 
 
 @echo_router.message(F.text.startswith('расписание'))
-async def group_schedule(message: Message):
+async def group_schedule(message: Message, user: UserResponse):
     try:
         req = message.text.split(" ")
 
+        if len(req) < 2:
+            group_name = user.group
+        else:
+            group_name = req[1]
+
         group_schedules = await schedule_service.get_group_schedule(
-            group_name=req[1],
-            academic_year=req[2],
-            half_year=int(req[3])
+            group_name=group_name,
         )
 
         if group_schedules:
-            response_text = ""
-            for gs in group_schedules:
-                response_text += f"""
-Расписание группы {gs.group_name}:
-Cеместр: {gs.semester}
-
-{gs.schedule_img_url}
-
-Дата добавлния {gs.created_at}
-                """
+            media = [InputMediaPhoto(media=gs.schedule_img_url)
+                     for gs in group_schedules]
+            await message.answer_media_group(media=media)
         else:
             response_text = "ошибка"
-
-        await message.answer(response_text)
+            await message.answer(response_text)
 
     except Exception:
         response_text = """
 Неверный формат запроса
-
 Необходимо отправлять запрос в следующем виде:
 
-    расписание группа учебный-год полугодие
-    расписание СА-501 2025/2026 1
+    расписание группа
+    расписание СА-501
         """
 
         await message.answer(response_text)
