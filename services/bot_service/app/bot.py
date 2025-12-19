@@ -8,6 +8,7 @@ from app.handlers import router
 from app.middlewaries import CheckUserMiddleware
 
 
+
 class TelegramBot:
     def __init__(self):
         self.bot = Bot(
@@ -19,7 +20,9 @@ class TelegramBot:
         self.dp = Dispatcher(storage=storage)
 
         self.dp.message.middleware(CheckUserMiddleware())
-
+        # Убедитесь что в bot.py есть:
+        self.dp.message.middleware(CheckUserMiddleware())
+        self.dp.callback_query.middleware(CheckUserMiddleware())  # Добавляем для коллбэков
         self.dp.include_router(router)
 
     async def start_polling(self):
