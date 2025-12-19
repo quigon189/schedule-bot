@@ -82,4 +82,4 @@ async def echo_handler(message: Message):
             response_text = "ошибка обработки"
     else:
         response_text = "ошибка"
-    await msg.edit_text(response_text, parse_mode=ParseMode.MARKDOWN_V2)
+    await msg.edit_text(response_text)
