@@ -8,5 +8,3 @@ router.include_router(register.register_router)
 router.include_router(commands.router)
 router.include_router(user.router)
 router.include_router(echo.echo_router)
-
-# admin роутер должен подключаться отдельно с middleware
