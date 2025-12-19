@@ -5,6 +5,7 @@ from aiogram.types import InputMediaPhoto, Message, CallbackQuery
 from aiogram import F
 
 from app.models import UserResponse
+from app.services.n8n_service import n8n_service
 from app.services.schedule_service import schedule_service
 from app.services.user_service import user_service
 from app.keyboards.user_keyboards import get_main_menu_keyboard

@@ -5,7 +5,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.config import settings
 from app.handlers import router
-from app.middlewaries import CheckUserMiddleware
+from app.middlewares import CheckUserMiddleware
 
 
 class TelegramBot:
