@@ -10,10 +10,9 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 @router.message(F.text == "📋 Профиль")
-async def profile_button(message: types.Message, user: UserResponse = None):
-    if not user:
-        await message.answer("Сначала зарегистрируйтесь!")
-        return
+async def profile_button(message: types.Message, user: UserResponse):
+    await message.answer("Сначала зарегистрируйтесь!")
+    return
     
     roles_text = ", ".join(user.roles_list) if user.roles_list else "нет ролей"
     profile_text = (
@@ -32,10 +31,10 @@ async def profile_button(message: types.Message, user: UserResponse = None):
     await message.answer(profile_text, reply_markup=get_main_menu_keyboard())
 
 @router.message(F.text == "📅 Расписание")
-async def schedule_button(message: types.Message, user: UserResponse = None):
-    if not user:
-        await message.answer("Сначала зарегистрируйтесь!")
-        return
+async def schedule_button(message: types.Message, user: UserResponse):
+
+    await message.answer("Сначала зарегистрируйтесь!")
+    return
     
     await message.answer(
         "📅 Расписание\n\nВыберите действие:",
@@ -43,10 +42,10 @@ async def schedule_button(message: types.Message, user: UserResponse = None):
     )
 
 @router.message(F.text == "🎫 Тикеты")
-async def tickets_button(message: types.Message, user: UserResponse = None):
-    if not user:
-        await message.answer("Сначала зарегистрируйтесь!")
-        return
+async def tickets_button(message: types.Message, user: UserResponse):
+
+    await message.answer("Сначала зарегистрируйтесь!")
+    return
     
     await message.answer(
         "🎫 Система тикетов\n\nФункция в разработке...",
@@ -54,10 +53,10 @@ async def tickets_button(message: types.Message, user: UserResponse = None):
     )
 
 @router.message(F.text == "⚙️ Настройки")
-async def settings_button(message: types.Message, user: UserResponse = None):
-    if not user:
-        await message.answer("Сначала зарегистрируйтесь!")
-        return
+async def settings_button(message: types.Message, user: UserResponse):
+
+    await message.answer("Сначала зарегистрируйтесь!")
+    return
     
     await message.answer(
         "⚙️ Настройки\n\nФункция в разработке...",
@@ -65,10 +64,9 @@ async def settings_button(message: types.Message, user: UserResponse = None):
     )
 
 @router.message(F.text == "📅 Расписание")
-async def schedule_button(message: types.Message, user: UserResponse = None):
-    if not user:
-        await message.answer("Сначала зарегистрируйтесь!")
-        return
+async def schedule_button(message: types.Message, user: UserResponse):
+    await message.answer("Сначала зарегистрируйтесь!")
+    return
     
     # Аналогичная логика как в команде /schedule
     if hasattr(user, 'roles_list') and 'student' in user.roles_list and user.group:
