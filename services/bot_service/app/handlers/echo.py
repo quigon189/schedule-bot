@@ -1,12 +1,13 @@
 from datetime import datetime
 import logging
 from aiogram import Router
+from aiogram.enums import ParseMode
 from aiogram.types import InputMediaPhoto, Message
 from aiogram import F
 
 from app.models import UserResponse
+from app.services.n8n_service import n8n_service
 from app.services.schedule_service import schedule_service
-from app.services.user_service import user_service
 
 echo_router = Router()
 
@@ -74,24 +75,11 @@ async def schedule_changes(message: Message, user: UserResponse):
 
 @echo_router.message(F.text)
 async def echo_handler(message: Message):
-    user = await user_service.get_user(
-        user_id=message.from_user.id
-    )
-
-    if user:
-        response_text = f"""
-📨 Вы написали: {message.text}
-
-Вы зарегистрированны в системе
-👤 Ваши данные:
-Username: {user.username}
-FullName: {user.full_name}
-        """
+    msg = await message.answer("Подождите, идет обработка запроса")
+    if message.text:
+        response_text = await n8n_service.proccess(message.text)
+        if not response_text:
+            response_text = "ошибка обработки"
     else:
-        response_text = f"""
-📨 Вы написали: {message.text}
-
-Вы НЕ зарегистрированны в системе
-        """
-
-    await message.answer(response_text)
+        response_text = "ошибка"
+    await msg.edit_text(response_text, parse_mode=ParseMode.MARKDOWN_V2)
