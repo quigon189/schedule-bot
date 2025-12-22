@@ -1,6 +1,8 @@
 from datetime import datetime
 import logging
+import json
 from typing import Optional
+
 
 from app.models import AiResponse
 import httpx
@@ -16,12 +18,10 @@ class AiService:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 # пока что вышиты статические параметры для примера
                 payload = {
-                    "user_message": {
-                        "message": message,
-                        "current_date": datetime.now().strftime("%Y-%m-%d"),
-                        "current_academic_year": "2025/2026",
-                        "current_half_year": 1,
-                    }
+                    "user_message": message,
+                    "current_date": datetime.now().strftime("%Y-%m-%d"),
+                    "current_academic_year": "2025/2026",
+                    "current_half_year": 1,
                 }
 
                 response = await client.post(
@@ -34,7 +34,10 @@ class AiService:
                 logging.debug(f"ai response headers: {response.headers}")
 
                 if response.status_code == 200:
-                    return AiResponse(**response.json())
+                    data = response.json()
+                    output: str = data.get('output', '')
+                    if output:
+                        return AiResponse(**json.loads(output))
 
             return None
         except Exception as e:

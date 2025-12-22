@@ -1,0 +1,121 @@
+{
+  "name": "My workflow 2",
+  "nodes": [
+    {
+      "parameters": {
+        "model": "GigaChat-2",
+        "options": {}
+      },
+      "type": "n8n-nodes-gigachat.lmGigaChat",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        0
+      ],
+      "id": "2baff48f-0cb4-422c-9f2a-a2bb425d12b9",
+      "name": "GigaChat Model",
+      "credentials": {
+        "gigaChatApi": {
+          "id": "Uc9vngvNe6TNRy9f",
+          "name": "GigaChat account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://mcp-server:8080/mcp",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.2,
+      "position": [
+        208,
+        48
+      ],
+      "id": "9cb4c976-e1bb-4fb2-b0d0-a8910992233d",
+      "name": "MCP Client"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -384,
+        -176
+      ],
+      "id": "2630680e-f2c3-4e2d-a244-7210c58d5d32",
+      "name": "Webhook",
+      "webhookId": "4548b651-a3cf-4463-9ef4-2547cb415146"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Пользователь отправил запрос: {{ $json.body.user_message }}\n\nТекущая дата: {{ $json.body.current_date }}\nТекущее полугодие: {{ $json.body.current_half_year }}\nТекущий учебный год: {{ $json.body.current_academic_year }}",
+        "options": {
+          "systemMessage": "Ты помогаешь искать студентам информацию по расписаниям в базе данных.\n\nответ оформляй строго в формате JSON\n{ \"text\": \"Очень короткое сообщение пользователю\", \"photo_urls\": [\"url1\", \"url2\"]}\nПоля \"text\" и \"photo_urls\" обязательные!!!"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -32,
+        -176
+      ],
+      "id": "75e43eed-52f6-465b-8df5-0ffd7c9c7517",
+      "name": "AI Agent",
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "GigaChat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Client": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "48eee2d8-5e59-4fd9-ac2c-c21bc5291fd4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3c0422e6b5b06682de399aa719797b68e76b13b48055a65615dee1a47dc8a9da"
+  },
+  "id": "FZNBreXLux0tqmoN",
+  "tags": []
+}
