@@ -112,6 +112,12 @@ class TelegramUser(BaseModel):
         return name
 
 
+class AiResponse(BaseModel):
+    """Ответ от n8n"""
+    text: str
+    photo_urls: List[str]
+
+
 class HealthCheck(BaseModel):
     status: str
     service: str

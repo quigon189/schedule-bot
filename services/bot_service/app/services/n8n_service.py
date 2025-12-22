@@ -1,7 +1,8 @@
-from datetime import date, datetime
+from datetime import datetime
 import logging
 from typing import Optional
 
+from app.models import AiResponse
 import httpx
 
 
@@ -10,7 +11,7 @@ class AiService:
         self.base_url = "http://n8n:5678/webhook"
         self.timeout = 600
 
-    async def proccess(self, message: str) -> Optional[str]:
+    async def proccess(self, message: str) -> Optional[AiResponse]:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 # пока что вышиты статические параметры для примера
@@ -33,8 +34,7 @@ class AiService:
                 logging.debug(f"ai response headers: {response.headers}")
 
                 if response.status_code == 200:
-                    data: dict = response.json()
-                    return data.get("output", None)
+                    return AiResponse(**response.json())
 
             return None
         except Exception as e:

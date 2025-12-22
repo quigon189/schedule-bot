@@ -105,6 +105,8 @@ func (p *Parser) processPost(post object.WallWallpost) {
 				p.markProcessed(post.ID)
 			}
 			return
+		} else {
+			p.markProcessed(post.ID)
 		}
 	}
 }

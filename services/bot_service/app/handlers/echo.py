@@ -1,7 +1,6 @@
 from datetime import datetime
 import logging
 from aiogram import Router
-from aiogram.enums import ParseMode
 from aiogram.types import InputMediaPhoto, Message
 from aiogram import F
 
@@ -77,9 +76,16 @@ async def schedule_changes(message: Message, user: UserResponse):
 async def echo_handler(message: Message):
     msg = await message.answer("Подождите, идет обработка запроса")
     if message.text:
-        response_text = await n8n_service.proccess(message.text)
-        if not response_text:
+        ai_response = await n8n_service.proccess(message.text)
+        if not ai_response:
             response_text = "ошибка обработки"
+        else:
+            response_text = ai_response.text
+            media = [InputMediaPhoto(media=url)
+                     for url in ai_response.photo_urls]
+            await msg.edit_text(response_text)
+            await message.answer_media_group(media=media)
+            return
     else:
         response_text = "ошибка"
     await msg.edit_text(response_text)
