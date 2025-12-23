@@ -13,7 +13,7 @@ class AiService:
         self.base_url = "http://n8n:5678/webhook"
         self.timeout = 600
 
-    async def proccess(self, message: str) -> Optional[AiResponse]:
+    async def proccess(self, message: str, chat_id: int) -> Optional[AiResponse]:
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 # пока что вышиты статические параметры для примера
@@ -22,7 +22,10 @@ class AiService:
                     "current_date": datetime.now().strftime("%Y-%m-%d"),
                     "current_academic_year": "2025/2026",
                     "current_half_year": 1,
+                    "chat_id": chat_id
                 }
+
+                logging.debug(f"n8n request: {payload}")
 
                 response = await client.post(
                     f"{self.base_url}/ai",

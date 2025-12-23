@@ -84,6 +84,7 @@ services:
     build: ./services/mcp_server
     environment:
       SCHEUDLE_SERVICE_URL: "http://schedule-service:8080"
+      TG_SERVICE_URL: "http://telegram-bot:8000"
       TIMEOUT: 30
     restart: always
 

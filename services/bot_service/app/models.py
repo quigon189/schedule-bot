@@ -118,6 +118,12 @@ class AiResponse(BaseModel):
     photo_urls: List[str]
 
 
+class TgSendRequest(BaseModel):
+    message: str
+    chat_id: int
+    photo_urls: Optional[List] = None
+
+
 class HealthCheck(BaseModel):
     status: str
     service: str

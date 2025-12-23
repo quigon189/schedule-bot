@@ -33,6 +33,12 @@ type GroupScheduleResponse struct {
 	} `json:"data"`
 }
 
+type SendMessage struct {
+	ChatID    int64    `json:"chat_id"`
+	Message   string   `json:"message"`
+	PhotoURLs []string `json:"photo_urls"`
+}
+
 type Response struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`

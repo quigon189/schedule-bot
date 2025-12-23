@@ -43,3 +43,12 @@ func (t *ScheduleTools) GetGroupSchedule() mcp.Tool {
 		mcp.WithString("half_year", mcp.Description("Полугодие: одно из двух значений 1 или 2")),
 	)
 }
+
+func (t *ScheduleTools) SendChanges() mcp.Tool {
+	return mcp.NewTool(
+		"send_changes_to_user",
+		mcp.WithDescription("Отправляет пользователю изменения в расписании"),
+		mcp.WithString("date", mcp.Description("Дата в формате ISO 8601 YYYY-MM-DD. Если не задана, то возвращает изменения на текущую дату")),
+		mcp.WithString("chat_id", mcp.Description("chat_id пользователя отправившего запрос")),
+	)
+}

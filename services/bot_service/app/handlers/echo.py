@@ -76,7 +76,7 @@ async def schedule_changes(message: Message, user: UserResponse):
 async def echo_handler(message: Message):
     msg = await message.answer("Подождите, идет обработка запроса")
     if message.text:
-        ai_response = await n8n_service.proccess(message.text)
+        ai_response = await n8n_service.proccess(message.text, message.chat.id)
         if not ai_response:
             response_text = "ошибка обработки"
         else:

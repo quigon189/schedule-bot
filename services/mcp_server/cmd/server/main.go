@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"mcp_server/internal/config"
-	"mcp_server/internal/service"
 	"mcp_server/internal/tools"
 	"net/http"
 
@@ -13,10 +12,12 @@ import (
 func main() {
 	cfg := config.Load()
 
-	ser := service.NewChangeService(cfg)
+	// ser := service.NewChangeService(cfg)
 
-	changeHandler := tools.NewChangeHandler(ser)
-	scheduleHandler := tools.NewSchedulesHandler(ser)
+	// changeHandler := tools.NewChangeHandler(ser)
+	// scheduleHandler := tools.NewSchedulesHandler(ser)
+
+	tgHandler := tools.NewTGHandler(cfg)
 
 	mcpServer := server.NewMCPServer(
 		"Доступ к расписанию и изменениям расписания",
@@ -27,10 +28,11 @@ func main() {
 	)
 
 	scheduleTools := tools.NewScheduleTools()
-	mcpServer.AddTool(scheduleTools.GetChanges(), changeHandler.HandleChangeRequest)
-	mcpServer.AddTool(scheduleTools.GetCurrentDate(), scheduleHandler.CurrentDateHandler)
-	mcpServer.AddTool(scheduleTools.GetCurrentStudyPeriod(), scheduleHandler.CurrentStudyPeriodHandler)
-	mcpServer.AddTool(scheduleTools.GetGroupSchedule(), scheduleHandler.GetGroupSchedule)
+	// mcpServer.AddTool(scheduleTools.GetChanges(), changeHandler.HandleChangeRequest)
+	// mcpServer.AddTool(scheduleTools.GetCurrentDate(), scheduleHandler.CurrentDateHandler)
+	// mcpServer.AddTool(scheduleTools.GetCurrentStudyPeriod(), scheduleHandler.CurrentStudyPeriodHandler)
+	// mcpServer.AddTool(scheduleTools.GetGroupSchedule(), scheduleHandler.GetGroupSchedule)
+	mcpServer.AddTool(scheduleTools.SendChanges(), tgHandler.SendChanges)
 
 	http.Handle("/mcp", server.NewStreamableHTTPServer(mcpServer))
 	log.Printf("MCP chedule server starting on :%s", cfg.ServerPort)
