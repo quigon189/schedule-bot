@@ -13,7 +13,7 @@ def get_schedule_menu_keyboard() -> InlineKeyboardMarkup:
     builder.add(InlineKeyboardButton(text="📅 Текущее", callback_data="schedule_current"))
     builder.add(InlineKeyboardButton(text="📊 Изменения на завтра", callback_data="schedule_changes"))
     builder.add(InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_menu"))
-    builder.adjust(2, 2, 1, 1)
+    builder.adjust(2, 1)
     return builder.as_markup()
 
 def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:

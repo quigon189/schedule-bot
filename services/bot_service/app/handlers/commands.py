@@ -9,9 +9,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = Router()
+com_router = Router()
 
-@router.message(Command("start"))
+@com_router.message(Command("start"))
 async def cmd_start(message: Message, user: UserResponse = None):
     if user:
         # Пользователь уже зарегистрирован
@@ -36,7 +36,7 @@ async def cmd_start(message: Message, user: UserResponse = None):
             "обратитесь к администратору."
         )
 
-@router.message(Command("menu"))
+@com_router.message(Command("menu"))
 async def cmd_menu(message: Message, user: UserResponse):
     # Middleware гарантирует что user есть
     await message.answer(
@@ -44,7 +44,7 @@ async def cmd_menu(message: Message, user: UserResponse):
         reply_markup=get_main_menu_keyboard()
     )
 
-@router.message(Command("profile"))
+@com_router.message(Command("profile"))
 async def cmd_profile(message: Message, user: UserResponse):
     # Формируем текст профиля
     roles_text = ", ".join(user.roles_list) if user.roles_list else "нет ролей"
@@ -66,7 +66,7 @@ async def cmd_profile(message: Message, user: UserResponse):
     
     await message.answer(profile_text, reply_markup=get_main_menu_keyboard())
 
-@router.message(Command("schedule"))
+@com_router.message(Command("schedule"))
 async def cmd_schedule(message: Message, user: UserResponse):
     # Проверяем, есть ли у пользователя группа
     if user.group:
@@ -119,7 +119,7 @@ async def cmd_schedule(message: Message, user: UserResponse):
             "Обратитесь к администратору для добавления группы."
         )
 
-@router.message(Command("help"))
+@com_router.message(Command("help"))
 async def cmd_help(message: Message, user: UserResponse = None):
     help_text = (
         "📚 Справка по командам:\n\n"
@@ -145,7 +145,7 @@ async def cmd_help(message: Message, user: UserResponse = None):
     
     await message.answer(help_text)
 
-@router.message(Command("logout"))
+@com_router.message(Command("logout"))
 async def cmd_logout(message: Message, user: UserResponse):
     # Очищаем кэш для этого пользователя
     from app.services.auth_service import auth_service

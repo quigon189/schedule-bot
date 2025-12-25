@@ -5,9 +5,11 @@ from aiogram import Router, CallbackQuery
 from aiogram.types import InputMediaPhoto
 from aiogram.fsm.state import State, StatesGroup, FSMContext
 
-from app.handlers import echo_router, admin_router, com_router, user_router, register_router
+from app.handlers import admin_router, register_router
 from app.servces.schedule_service import schedule_service
 
+# RECREATION OF NON-EXISTENT, BUT USED PARTS
+echo_router = Router()
 
 # REGISTER CALLBACKS
 
@@ -83,7 +85,7 @@ async def schedule_changes_callback(callback: CallbackQuery, user: UserResponse)
     )    
     if service_response:    
         media = [InputMediaPhoto(media=url) for url in service_response.image_urls]
-        await callback.message.anwser_media_group(media=media)
+        await callback.message.answer_media_group(media=media)
         await callback.message.answer("Изменения на завтра")
     else:
         await callback.message.answer("Не удалось найти изменения.")
