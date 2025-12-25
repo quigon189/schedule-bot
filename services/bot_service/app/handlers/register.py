@@ -11,16 +11,6 @@ register_router = Router()
 class RegisterState(StatesGroup):
     waiting_for_code = State()
 
-@register_router.callback_query(F.data == "register_user")
-async def register_user(callback_query: CallbackQuery, state: FSMContext):
-    await state.set_state(RegisterState.waiting_for_code)
-    await callback_query.message.answer(
-        "🔐 Введите код регистрации:\n\n"
-        "Код должен быть получен у администратора или преподавателя.\n"
-        "Введите код без пробелов и дополнительных символов."
-    )
-    await callback_query.answer()
-
 @register_router.message(RegisterState.waiting_for_code)
 async def process_register_code(message: Message, state: FSMContext):
     code = message.text.strip()
