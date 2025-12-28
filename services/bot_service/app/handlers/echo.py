@@ -80,12 +80,8 @@ async def echo_handler(message: Message):
         if not ai_response:
             response_text = "ошибка обработки"
         else:
-            response_text = ai_response.text
-            media = [InputMediaPhoto(media=url)
-                     for url in ai_response.photo_urls]
-            await msg.edit_text(response_text)
-            await message.answer_media_group(media=media)
-            return
+            response_text = ai_response
     else:
         response_text = "ошибка"
-    await msg.edit_text(response_text)
+    await msg.delete()
+    await message.answer(response_text)

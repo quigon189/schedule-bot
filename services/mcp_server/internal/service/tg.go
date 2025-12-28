@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"mcp_server/internal/config"
 	"mcp_server/internal/models"
 	"net/http"
@@ -39,9 +40,13 @@ func (s *TGService) SendMessage(sm *models.SendMessage) error {
 		return err
 	}
 
-	_, err = s.Client.Do(req)
+	resp, err := s.Client.Do(req)
 	if err != nil {
 		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("TG service send status code %d", resp.StatusCode)
 	}
 
 	return nil
