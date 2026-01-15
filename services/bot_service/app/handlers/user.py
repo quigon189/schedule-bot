@@ -9,11 +9,12 @@ import logging
 user_router = Router()
 logger = logging.getLogger(__name__)
 
+
 @user_router.message(F.text == "📋 Профиль")
 async def profile_button(message: types.Message, user: UserResponse):
     # Формируем текст профиля
     roles_text = ", ".join(user.roles_list) if user.roles_list else "нет ролей"
-    
+
     profile_text = (
         f"👤 Ваш профиль\n\n"
         f"📝 Имя: {user.full_name}\n"
@@ -22,12 +23,12 @@ async def profile_button(message: types.Message, user: UserResponse):
         f"🎭 Роли: {roles_text}\n"
         f"📊 Статус: {'✅ Активен' if user.is_active else '❌ Неактивен'}\n"
     )
-    
+
     if user.group:
         profile_text += f"📚 Группа: {user.group}\n"
-    
+
     profile_text += f"📅 Регистрация: {user.created_at.strftime('%d.%m.%Y %H:%M')}"
-    
+
     await message.answer(profile_text, reply_markup=get_main_menu_keyboard())
 
 # TODO: Сделать обработку расписания (его вызова)
