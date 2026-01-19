@@ -1,52 +1,140 @@
-from aiogram import Router
-from aiogram.types import Message
+from aiogram import Router, types
 from aiogram.filters import Command
+from aiogram.types import Message
+from app.models import UserResponse
+from app.keyboards.user_keyboards import get_main_menu_keyboard
+import logging
 
-from app.models import TelegramUser
-from app.services.user_service import user_service
+logger = logging.getLogger(__name__)
 
-command_router = Router()
-
-
-@command_router.message(Command("help"))
-async def cmd_help(message: Message):
-    help_text = """
-🤖 Доступные команды:
-
-/start - Начать работу с ботом
-/help - Показать эту справку
-
-Бот отвечает на ваши сообщения эхом.
-    """
-
-    await message.answer(help_text)
+router = Router()
 
 
-@command_router.message(Command("start"))
-async def cmd_start(message: Message):
-    user = TelegramUser(
-        id=message.from_user.id,
-        username=message.from_user.username,
-        first_name=message.from_user.first_name,
-        last_name=message.from_user.last_name
+@router.message(Command("menu"))
+async def cmd_menu(message: Message, user: UserResponse):
+    """Обработчик команды /menu"""
+    await message.answer(
+        "🏠 *Главное меню*\n\n"
+        "Выберите действие:",
+        parse_mode="Markdown",
+        reply_markup=get_main_menu_keyboard()
     )
 
-    registered_user = await user_service.register_user(user)
 
-    if registered_user:
-        welcome_text = f"""
-✅ Добро пожаловать, {user.full_name}!
+@router.message(Command("profile"))
+async def cmd_profile(message: Message, user: UserResponse):
+    """Обработчик команды /profile"""
+    role_emoji = {
+        'student': '👨‍🎓',
+        'teacher': '👨‍🏫',
+        'admin': '👑',
+        'moderator': '🛡️'
+    }
 
-Вы успешно зарегистрированы в системе.
+    profile_text = ""
 
-Теперь вы можете использовать все возможности бота!
-        """
+    for role in user.roles_list:
+        emoji = role_emoji.get(role, '👤')
+
+        profile_text = (
+            f"{emoji} *Ваш профиль*\n\n"
+            f"👤 *Имя:* {user.full_name}\n"
+            f"🆔 *ID:* {user.telegram_id}\n"
+            f"📧 *Username:* @{user.username if user.username else 'нет'}\n"
+            f"🎓 *Роль:* {role}\n"
+        )
+
+    if user.group:
+        profile_text += f"📚 *Группа:* {user.group}\n"
+
+    profile_text += f"📅 *Дата регистрации:* {user.created_at}"
+
+    await message.answer(
+        profile_text,
+        parse_mode="Markdown",
+        reply_markup=get_main_menu_keyboard()
+    )
+
+
+@router.message(Command("schedule"))
+async def cmd_schedule(message: Message, user: UserResponse):
+    """Обработчик команды /schedule"""
+    from keyboards.user_keyboards import get_schedule_menu_keyboard
+
+    if 'student' in user.roles_list and user.group:
+        await message.answer(
+            f"📅 *Расписание группы {user.group}*\n\n"
+            "Выберите период:",
+            parse_mode="Markdown",
+            reply_markup=get_schedule_menu_keyboard()
+        )
+    elif 'teacher' in user.roles_list:
+        await message.answer(
+            "📅 *Расписание*\n\n"
+            "Выберите группу или период:",
+            parse_mode="Markdown",
+            reply_markup=get_schedule_menu_keyboard()
+        )
     else:
-        welcome_text = f"""
-👋 Привет, {user.full_name}!
+        await message.answer(
+            "📅 *Расписание*\n\n"
+            "Выберите период:",
+            parse_mode="Markdown",
+            reply_markup=get_schedule_menu_keyboard()
+        )
 
-К сожалению, не удалось завершить регистрацию.
-Попробуйте позже или обратитесь к администратору.
-        """
 
-    await message.answer(welcome_text)
+@router.message(Command("ticket"))
+async def cmd_ticket(message: Message, user: UserResponse):
+    """Обработчик команды /ticket - система тикетов"""
+    """
+    TODO: Полная реализация системы тикетов с PostgreSQL
+    Планируемая структура таблицы tickets:
+    CREATE TABLE tickets (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL,
+        ticket_type VARCHAR(50) NOT NULL,
+        status VARCHAR(20) DEFAULT 'open',
+        priority VARCHAR(20) DEFAULT 'medium',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        resolved_at TIMESTAMP NULL
+    );
+    Пример кода для создания тикета:
+    # from app.database import async_session
+    # from app.models.ticket import Ticket
+    # from sqlalchemy import insert
+    # async with async_session() as session:
+    #     stmt = insert(Ticket).values(
+    #         user_id=user.id,
+    #         title=title,
+    #         description=description,
+    #         ticket_type=ticket_type,
+    #         status='open',
+    #         priority=priority
+    #     )
+    #     await session.execute(stmt)
+    #     await session.commit()
+    # Пример кода для получения тикетов:
+    # from sqlalchemy import select
+    # async with async_session() as session:
+    #     stmt = select(Ticket).where(Ticket.user_id == user.id).order_by(Ticket.created_at.desc())
+    #     result = await session.execute(stmt)
+    #     tickets = result.scalars().all()
+    """
+
+    from keyboards.user_keyboards import get_ticket_menu_keyboard
+
+    await message.answer(
+        "🎫 *Система тикетов*\n\n"
+        "*В разработке:*\n"
+        "• Создание тикетов с приоритетами\n"
+        "• Прикрепление файлов\n"
+        "• Общение с поддержкой\n"
+        "• История тикетов\n\n"
+        "Скоро здесь будет полноценная система поддержки!",
+        parse_mode="Markdown",
+        reply_markup=get_ticket_menu_keyboard()
+    )

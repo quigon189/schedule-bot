@@ -1,13 +1,24 @@
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field
+
+Roles = Literal["student", "teacher", "manager"]
 
 
 class CreateUserRequest(BaseModel):
     """Модель запроса создания пользователя в auth-service"""
+    code: str
     telegram_id: int  # обязательное поле
     username: Optional[str] = None  # может быть пустым
     full_name: str  # обязательное поле содержащее имя и фамилию
+
+
+class CreateCodeRequest(BaseModel):
+    role_name: Roles
+    group_name: Optional[str]
+    created_by: int
+    max_uses: Optional[int]
+    expiration: Optional[int]
 
 
 class ServiceResponse(BaseModel):
@@ -35,6 +46,21 @@ class UserResponse(BaseModel):
     roles: Optional[List["Role"]] = None  # содержит список ролей пользователя
     group: Optional[str] = None
 
+    @property
+    def roles_list(self) -> list:
+        return [role.name for role in self.roles] if self.roles else []
+
+
+class CodeResponse(BaseModel):
+    id: int
+    code: str
+    role: "Role"
+    group_name: Optional[str] = None
+    max_uses: int
+    created_by: Optional[UserResponse]
+    expires_at: datetime
+    created_at: datetime
+
 
 class Role(BaseModel):
     """Модель роли в ответе от auth-service"""
@@ -45,9 +71,10 @@ class Role(BaseModel):
 
 class GroupScheduleRequest(BaseModel):
     """Модель запроса расписания"""
-    academic_year: str = Field(pattern=r"^(\d{4})/(\d{4})$")
-    half_year: int = Field(ge=1, le=2)
-    group_name: str
+    academic_year: Optional[str] = Field(
+        pattern=r"^(\d{4})/(\d{4})$", default=None)
+    half_year: Optional[int] = Field(ge=1, le=2, default=None)
+    group_name: Optional[str] = Field(pattern=r"[А-Я]+-[0-9]+", default=None)
 
 
 class GroupScheduleResponse(BaseModel):
@@ -57,6 +84,15 @@ class GroupScheduleResponse(BaseModel):
     group_name: str
     semester: int = Field(ge=1, le=10)
     schedule_img_url: str
+    created_at: datetime
+
+
+class ScheduleChangesResponse(BaseModel):
+    """Модель изменений расписания"""
+    id: int
+    date: datetime
+    description: str
+    image_urls: List[str]
     created_at: datetime
 
 
@@ -74,6 +110,18 @@ class TelegramUser(BaseModel):
         if self.last_name:
             name += f" {self.last_name}"
         return name
+
+
+class AiResponse(BaseModel):
+    """Ответ от n8n"""
+    text: str
+    photo_urls: List[str]
+
+
+class TgSendRequest(BaseModel):
+    message: str
+    chat_id: int
+    photo_urls: Optional[List] = None
 
 
 class HealthCheck(BaseModel):

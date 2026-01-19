@@ -1,42 +1,46 @@
 package main
 
 import (
+	"context"
 	"log"
 	"mcp_server/internal/config"
-	"mcp_server/internal/service"
+	"mcp_server/internal/server"
 	"mcp_server/internal/tools"
-	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 )
 
 func main() {
 	cfg := config.Load()
 
-	handler := tools.NewChangeHandler(
-		service.NewChangeService(cfg),
-	)
+	srv := server.NewMCPServer(cfg)
 
-	mcpServer := server.NewMCPServer(
-		"Доступ к расписанию и изменениям расписания",
-		"1.0.0",
-		server.WithToolCapabilities(true),
-		server.WithLogging(),
-		server.WithRecovery(),
-	)
+	tgTools := tools.NewScheduleTools()
+	tgHandlers := tools.NewTGHandler(cfg)
 
-	getChangesTool := mcp.NewTool(
-		"get_schedule_changes",
-		mcp.WithDescription("Позволяет получить ссылку на изображение(я), в которой указаны изменения в расписании для всех груп на заданную в формате ISO 8601 дату"),
-		mcp.WithString("date",
-			mcp.Description("Дата в формате ISO 8601 YYYY-MM-DD. Если не задана, то возвращает изменения на текущую дату"),
-		),
-	)
+	srv.McpSrv.AddTool(tgTools.SendChanges(), mcp.NewStructuredToolHandler(tgHandlers.SendChanges))
 
-	mcpServer.AddTool(getChangesTool, handler.HandleChangeRequest)
+	go func() {
+		log.Printf("Server started on port %s", cfg.ServerPort)
+		log.Println(srv.Start())
+	}()
 
-	http.Handle("/mcp", server.NewStreamableHTTPServer(mcpServer))
-	log.Printf("MCP chedule server starting on :%s", cfg.ServerPort)
-	http.ListenAndServe(":"+cfg.ServerPort, nil)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	<-sigChan
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Stop(ctx); err != nil {
+		log.Fatalf("Failed to stop server: %v", err)
+		return
+	}
+
+	log.Printf("Server stoped")
 }

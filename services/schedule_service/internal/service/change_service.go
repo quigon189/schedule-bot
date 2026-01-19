@@ -23,7 +23,7 @@ func (s *ChangeService) AddChange(req dto.AddChangeRequest) (*models.ScheduleCha
 	}
 	sc := models.ScheduleChange{
 		Date:        date,
-		ImgURL:      req.ImgURL,
+		ImgURLs:     req.ImgURLs,
 		Description: req.Description,
 	}
 
@@ -34,7 +34,7 @@ func (s *ChangeService) AddChange(req dto.AddChangeRequest) (*models.ScheduleCha
 	return &sc, nil
 }
 
-func (s *ChangeService) GetChanges(dateStr string) ([]models.ScheduleChange, error) {
+func (s *ChangeService) GetChanges(dateStr string) (*models.ScheduleChange, error) {
 	var date time.Time
 	var err error
 	if dateStr == "" {

@@ -51,12 +51,15 @@ services:
   auth-service:
     build: ./services/auth_service
     restart: always
+    ports:
+      - "8182:8080"
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${DB_ADMIN}
       DB_PASSWORD: ${DB_PASS}
       DB_NAME: auth_db
+      ADMINS: ${BOT_ADMINS}
     volumes:
       - ./swagger-spec:/app/docs
     depends_on:
@@ -81,6 +84,7 @@ services:
     build: ./services/mcp_server
     environment:
       SCHEUDLE_SERVICE_URL: "http://schedule-service:8080"
+      TG_SERVICE_URL: "http://telegram-bot:8000"
       TIMEOUT: 30
     restart: always
 
@@ -103,6 +107,18 @@ services:
       retries: 3
       start_period: 40s
     restart: unless-stopped
+
+  vk-parser:
+    build: ./services/vk-parser
+    environment:
+      - VK_ACCESS_TOKEN=${VK_ACCESS_TOKEN}
+      - VK_GROUP_ID=${VK_GROUP_ID}
+      - CHECK_INTERVAL_MINUTES=5
+      - SCHEDULE_SERVICE_URL=http://schedule-service:8080
+      - MAX_POSTS=20
+    depends_on:
+      - schedule-service
+    restart: always
 
 volumes:
   db_data:

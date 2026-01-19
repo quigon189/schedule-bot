@@ -1,0 +1,115 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -416,
+        -64
+      ],
+      "id": "0104f284-5291-4e2b-a252-7ab86fcc0c3c",
+      "name": "When chat message received",
+      "webhookId": "7a6fdd1d-3d14-48c8-972e-725d258f51d8"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "Ты умный помошник. Ты должен помогать студентам. \n1. Ты можешь искать в базе данных (используя mcp-server) расписания учебных групп по их названию. Название групп содержит заглавные буквы русского алфавита и 3х значное число.\n2. Ты можешь искать в базе данных изменения (для некотрого количества групп) по определенной дате.\n3. Отвечать на вопросы о том что ты умеешь, не надо упоминать названия функций mcp server.\n\nВ базе данных хранятся только ссылки на изображения, содержащие расписание и изменения.\n\nСтудентам необходимо отправлять изображения, если они будут в базе данных. Ссылки оформляй в формате markdown.\n\nЕсли ссылок на изображение нет, то ничего не придумывай. Укажи группу или дату по которой ты искал и скажи я что не удалось ничего найти.\n\nСейчас 2025/2026 учебный год, 1 полугодие.\n\nОтвечай коротко и на русском языке!"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -112,
+        -16
+      ],
+      "id": "96b16057-79ac-484b-b4be-578bd08d3c00",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "qwen3:1.7b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        224
+      ],
+      "id": "72d751dc-672b-4bdf-94e5-ba972624db09",
+      "name": "Ollama Chat Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "khL14MkVipTRKeyU",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://mcp-server:8080/mcp",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.2,
+      "position": [
+        144,
+        208
+      ],
+      "id": "480e0bea-cb49-42cd-a90a-ebf0b2d31f58",
+      "name": "MCP Client"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MCP Client": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "94a24b76-10f5-40bc-a1ef-5754afb2df87",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3f958f5bed5cdbe19d7747f8b624700e427982e35676597042b9e83fa6630818"
+  },
+  "id": "J4lAJzpTacPvYcIs",
+  "tags": []
+}

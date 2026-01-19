@@ -89,19 +89,14 @@ func (h *ChangeHandler) GetChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chs, err := h.service.GetChanges(dateStr)
+	ch, err := h.service.GetChanges(dateStr)
 	if err != nil {
 		log.Printf("Invalid date format: %v", err)
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid date format")
 		return
 	}
 
-	resp := []dto.ChangeResponse{}
-	for _, sc := range chs {
-		resp = append(resp, *dto.ToChangeResponse(&sc))
-	}
-
-	utils.SuccessResponse(w, "Changes sent", resp)
+	utils.SuccessResponse(w, "Changes sent", dto.ToChangeResponse(ch))
 }
 
 // RemoveChange  удаляет изменение в расписании по id

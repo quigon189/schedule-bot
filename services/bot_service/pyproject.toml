@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "aiogram>=3.22.0",
+    "cachetools>=6.2.2",
     "fastapi>=0.121.3",
     "httpx>=0.28.1",
     "pydantic>=2.11.10",

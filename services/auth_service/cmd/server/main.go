@@ -47,8 +47,15 @@ func main() {
 	}
 
 	userRepo := repository.NewUserRepository(db)
+	codeRepo := repository.NewCodeRepository(db.DB, cfg)
+
 	userService := service.NewUserService(userRepo)
+	codeService := service.NewRegistrationCodeService(codeRepo, userRepo)
+
 	userHandler := handlers.NewUserHandler(userService)
+	codeHahdler := handlers.NewRegistrationCodeHandler(codeService)
+
+	initAdmins(cfg, userRepo)	
 
 	r := chi.NewRouter()
 
@@ -57,18 +64,22 @@ func main() {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/users", func(r chi.Router) {
+			r.Post("/register", codeHahdler.RegisterWithCode)
 			r.Post("/", userHandler.CreateUser)
 			r.Get("/{id}", userHandler.GetUser)
 			r.Put("/{id}", userHandler.UpdateUser)
 			r.Delete("/{id}", userHandler.DeleteUser)
+		})
+		r.Route("/code", func(r chi.Router) {
+			r.Post("/create", codeHahdler.CreateCode)
 		})
 	})
 
 	r.Mount("/swagger", httpSwagger.WrapHandler)
 
 	server := http.Server{
-		Addr: ":"+cfg.SevrverPort,
-		Handler: r,	
+		Addr:    ":" + cfg.SevrverPort,
+		Handler: r,
 	}
 
 	log.Printf("Auth server starting on port %s", cfg.SevrverPort)

@@ -8,6 +8,8 @@ class Settings(BaseSettings):
 
     AUTH_SERVICE_URL: str = "http://auth-service:8080"
     AUTH_SERVICE_TIMEOUT: int = 30
+    AUTH_SERVICE_CACHE_TTL: int = 300
+    AUTH_SERVICE_CACHE_MAX: int = 1000
 
     SCHEDULE_SERVICE_URL: str = "http://schedule-service:8080"
     SCHEDULE_SERVICE_TIMEOUT: int = 30

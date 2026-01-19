@@ -5,7 +5,7 @@ import "time"
 type ScheduleChange struct {
 	ID          int
 	Date        time.Time
-	ImgURL      string
+	ImgURLs      []string
 	Description string
 	CreatedAt   time.Time
 }

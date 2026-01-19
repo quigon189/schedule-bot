@@ -1,4 +1,12 @@
-from .commands import command_router
-from .echo import echo_router
+from aiogram import Router
+from . import commands, user, echo, admin, register
 
-__all__ = ['command_router', 'echo_router']
+router = Router()
+
+router.include_router(admin.admin_router)
+router.include_router(register.register_router)
+router.include_router(commands.router)
+router.include_router(user.router)
+router.include_router(echo.echo_router)
+
+# admin роутер должен подключаться отдельно с middleware
