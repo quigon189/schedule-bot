@@ -1,0 +1,664 @@
+Текущий каталог: /home/quigon/schedule-bot/services/mcp_server
+├── Dockerfile
+├── cmd
+|   └── server
+|       └── main.go
+├── go.mod
+├── go.sum
+└── internal
+    ├── config
+    |   └── config.go
+    ├── models
+    |   └── models.go
+    ├── server
+    |   └── server.go
+    ├── service
+    |   ├── service.go
+    |   └── tg.go
+    └── tools
+        ├── changes.go
+        ├── schadules.go
+        ├── send_tg.go
+        └── tools.go
+--------------------------
+Файл: /home/quigon/schedule-bot/services/mcp_server/cmd/server/main.go
+package main
+
+import (
+	"context"
+	"log"
+	"mcp_server/internal/config"
+	"mcp_server/internal/server"
+	"mcp_server/internal/tools"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/mark3labs/mcp-go/mcp"
+)
+
+func main() {
+	cfg := config.Load()
+
+	srv := server.NewMCPServer(cfg)
+
+	tgTools := tools.NewScheduleTools()
+	tgHandlers := tools.NewTGHandler(cfg)
+
+	srv.McpSrv.AddTool(tgTools.SendChanges(), mcp.NewStructuredToolHandler(tgHandlers.SendChanges))
+
+	go func() {
+		log.Printf("Server started on port %s", cfg.ServerPort)
+		log.Println(srv.Start())
+	}()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	<-sigChan
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Stop(ctx); err != nil {
+		log.Fatalf("Failed to stop server: %v", err)
+		return
+	}
+
+	log.Printf("Server stoped")
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/mcp_server/go.mod
+module mcp_server
+
+go 1.25.1
+
+require github.com/mark3labs/mcp-go v0.43.1
+
+require (
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/invopop/jsonschema v0.13.0 // indirect
+	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/spf13/cast v1.7.1 // indirect
+	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+)
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/mcp_server/internal/config/config.go
+package config
+
+import "os"
+
+type Config struct {
+	ScheduleServiceURL string
+	TGServiceURL       string
+	Timeout            string
+	ServerPort         string
+}
+
+func Load() *Config {
+	return &Config{
+		ScheduleServiceURL: getEnv("SCHEDULE_SERVICE_URL", "http://schedule-service:8080"),
+		TGServiceURL:       getEnv("TG_SERVICE_URL", "http://telegram-bot:8000"),
+		Timeout:            getEnv("TIMEOUT", "30"),
+		ServerPort:         "8080",
+	}
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/mcp_server/internal/models/models.go
+package models
+
+import "time"
+
+type ChangesRequest struct {
+	Date time.Time `json:"date" jsonschema:"description=Дата изменений в формате ISO 8601, если значение пустое, то возвращает изменения на текущую дату"`
+}
+
+type GroupScheduleRequest struct {
+	GroupName    string `json:"group_name" jsonschema:"description=Название учебной группы в формате АБ-123, где АБ короткое наименование специальности а 123 номер группы. Например СА-501 Системное и сетевое администрирование группа 501"`
+	AcademicYear string `json:"academic_year" jsonschema:"description=Академический год в формате YYYY/YYYY. Например 2025/2026"`
+	HalfYear     int    `json:"half_year" jsonschema:"description=Полугодие. Одно из двух значение 1 или 2"`
+}
+
+type ChangesResponse struct {
+	Data struct {
+		ID          int       `json:"id"`
+		Date        string    `json:"date"`
+		ImgURLs     []string  `json:"image_urls"`
+		Description string    `json:"description"`
+		CreatedAt   time.Time `json:"created_at"`
+	} `json:"data"`
+}
+
+type GroupScheduleResponse struct {
+	Data []struct {
+		AcademicYear   string    `json:"academic_year"`
+		HalfYear       int       `json:"half_year"`
+		GroupName      string    `json:"group_name"`
+		Semester       int       `json:"semester"`
+		ScheduleImgURL string    `json:"schedule_img_url"`
+		CreatedAt      time.Time `json:"created_at"`
+	} `json:"data"`
+}
+
+type SendMessage struct {
+	ChatID    int64    `json:"chat_id"`
+	Message   string   `json:"message"`
+	PhotoURLs []string `json:"photo_urls"`
+}
+
+type Response struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Data    []byte `json:"data"`
+	Error   string `json:"error,omitempty"`
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/mcp_server/internal/server/server.go
+package server
+
+import (
+	"context"
+	"mcp_server/internal/config"
+	"net/http"
+
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+)
+
+type MCPServer struct {
+	httpSrv *http.Server
+	McpSrv *server.MCPServer
+	cfg *config.Config
+}
+
+func NewMCPServer(cfg *config.Config) *MCPServer {
+	mcpServer := server.NewMCPServer(
+		"Доступ к расписанию и изменениям расписания",
+		"1.0.0",
+		server.WithToolCapabilities(true),
+		server.WithLogging(),
+		server.WithRecovery(),
+	)
+
+	httpSrv := &http.Server{
+		Addr: ":" + cfg.ServerPort,
+	}
+
+
+	return &MCPServer{
+		httpSrv: httpSrv,
+		McpSrv: mcpServer,
+		cfg: cfg,
+	}
+}
+
+func (s *MCPServer) RegisterTool(tool mcp.Tool, handler mcp.StructuredToolHandlerFunc[any, any]) {
+	s.McpSrv.AddTool(tool, mcp.NewStructuredToolHandler(handler))
+}
+
+func (s *MCPServer) Start() error {
+	r := http.NewServeMux()
+	r.Handle("/mcp", server.NewStreamableHTTPServer(s.McpSrv))
+
+	s.httpSrv.Handler = r
+
+	return s.httpSrv.ListenAndServe()
+}
+
+func (s *MCPServer) Stop(ctx context.Context) error {
+	return s.httpSrv.Shutdown(ctx)
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/mcp_server/internal/service/service.go
+package service
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"strconv"
+	"time"
+
+	"mcp_server/internal/config"
+	"mcp_server/internal/models"
+)
+
+type ChangeService struct {
+	BaseURL string
+	Client  *http.Client
+}
+
+func NewChangeService(cfg *config.Config) *ChangeService {
+	timeout, err := strconv.Atoi(cfg.Timeout)
+	if err != nil {
+		timeout = 30
+	}
+	return &ChangeService{
+		BaseURL: cfg.ScheduleServiceURL + "/api/v1",
+		Client:  &http.Client{Timeout: time.Duration(timeout) * time.Second},
+	}
+}
+
+func (s *ChangeService) GetSchedules(group string, ay string, hy string) (*models.GroupScheduleResponse, error) {
+	u, err := url.Parse(s.BaseURL + "/group_schedules")
+	if err != nil {
+		return nil, err
+	}
+
+	q := u.Query()
+	q.Add("group_name", group)
+	q.Add("academic_year", ay)
+	q.Add("half_year", hy)
+	u.RawQuery = q.Encode()
+
+	
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("http error status: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+
+	gsResp := models.GroupScheduleResponse{}
+	if err := json.Unmarshal(body, &gsResp); err != nil {
+		return nil, err
+	}
+
+	return &gsResp, nil
+}
+
+func (s *ChangeService) GetChanges(date string) (*models.ChangesResponse, error) {
+	u, err := url.Parse(s.BaseURL + "/changes")
+	if err != nil {
+		return nil, err
+	}
+
+	q := u.Query()
+	q.Add("date", date)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	changesResponse := models.ChangesResponse{}
+	if err := json.Unmarshal(body, &changesResponse); err != nil {
+		return nil, err
+	}
+
+	log.Printf("Decoded body: %v", changesResponse)
+
+	return &changesResponse, nil
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/mcp_server/internal/service/tg.go
+package service
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"mcp_server/internal/config"
+	"mcp_server/internal/models"
+	"net/http"
+	"strconv"
+	"time"
+)
+
+type TGService struct {
+	BaseURL string
+	Client  *http.Client
+}
+
+func NewTGService(cfg *config.Config) *TGService {
+	timeout, err := strconv.Atoi(cfg.Timeout)
+	if err != nil {
+		timeout = 30
+	}
+	return &TGService{
+		BaseURL: cfg.TGServiceURL,
+		Client:  &http.Client{Timeout: time.Duration(timeout) * time.Second},
+	}
+}
+
+func (s *TGService) SendMessage(sm *models.SendMessage) error {
+	url := s.BaseURL + "/send_message"
+
+	jsonData, err := json.Marshal(sm)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("TG service send status code %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/mcp_server/internal/tools/changes.go
+package tools
+
+import (
+	"context"
+	"encoding/json"
+	"log"
+
+	"mcp_server/internal/service"
+
+	"github.com/mark3labs/mcp-go/mcp"
+)
+
+type ChangeHandler struct {
+	service *service.ChangeService
+}
+
+func NewChangeHandler(s *service.ChangeService) *ChangeHandler {
+	return &ChangeHandler{service: s}
+}
+
+func (h *ChangeHandler) HandleChangeRequest(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	date, err := req.RequireString("date")
+	if err != nil {
+		log.Printf("Failed to get date: %v", err)
+		return mcp.NewToolResultError("невалидная дата"), nil
+	}
+
+	changesResponse, err := h.service.GetChanges(date)
+	if err != nil {
+		log.Printf("Failed to get changes: %v", err)
+		return mcp.NewToolResultError("ошибка при получении изменеий из сервиса"), nil
+	}
+
+
+	jsonData, err := json.Marshal(changesResponse.Data)
+	if err != nil {
+		log.Printf("Failed to marshal changes response: %v", err)
+		return mcp.NewToolResultError("ошибка при обработке данных"), nil
+	}
+
+	return mcp.NewToolResultText("Ответ от сервиса баз данных в формате json: "+string(jsonData)), err
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/mcp_server/internal/tools/schadules.go
+package tools
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"time"
+
+	"mcp_server/internal/service"
+
+	"github.com/mark3labs/mcp-go/mcp"
+)
+
+type SchedulesHandler struct {
+	service *service.ChangeService
+}
+
+func NewSchedulesHandler(s *service.ChangeService) *SchedulesHandler {
+	return &SchedulesHandler{
+		service: s,
+	}
+}
+
+func (h *SchedulesHandler) CurrentDateHandler(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	resultText := fmt.Sprintf("Текущая дата в формате ISO 8601: %s", time.Now().Format("2006-01-02"))
+	return mcp.NewToolResultText(resultText), nil
+}
+
+func (h *SchedulesHandler) CurrentStudyPeriodHandler(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	var studyPeriod string
+	var half_yaer int
+	currentYear, currentMonth, _ := time.Now().Date()
+	if currentMonth >= 7 {
+		half_yaer = 1
+		studyPeriod = fmt.Sprintf("%d/%d", currentYear, currentYear+1)
+	} else {
+		half_yaer = 2
+		studyPeriod = fmt.Sprintf("%d/%d", currentYear-1, currentYear)
+	}
+
+	resultText := fmt.Sprintf("Текущий учебный период: %s\nТекущее полугодие: %d", studyPeriod, half_yaer)
+	return mcp.NewToolResultText(resultText), nil
+}
+
+func (h *SchedulesHandler) GetGroupSchedule(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	groupName, err := req.RequireString("group_name")
+	if err != nil {
+		log.Printf("invalid group_name: %v", err)
+		return mcp.NewToolResultError("невалидное название группы"), nil
+	}
+
+	academicYear, err := req.RequireString("academic_year")
+	if err != nil {
+		log.Printf("invalid academic_year: %v", err)
+		return mcp.NewToolResultError("невалидный учебный год"), nil
+	}
+
+	halfYear, err := req.RequireString("half_year")
+	if err != nil {
+		log.Printf("invalid half_year: %v", err)
+		return mcp.NewToolResultError("невалидное полугодие"), nil
+	}
+
+	log.Printf("%s %s %s", groupName, academicYear, halfYear)
+
+	gsResp, err := h.service.GetSchedules(groupName, academicYear, halfYear)
+	if err != nil {
+		log.Printf("failed getting group schedules from service: %v", err)
+		return mcp.NewToolResultError("ошибка при получении расписания группы из сервиса"), nil
+	}
+
+	log.Printf("resp: %+v", gsResp)
+
+	jsonData, err := json.Marshal(gsResp.Data)
+	if err != nil {
+		log.Printf("Failed to marshal changes response: %v", err)
+		return mcp.NewToolResultError("ошибка при обработке данных"), nil
+	}
+
+	return mcp.NewToolResultText("Ответ от сервиса расписаний в формате json: "+string(jsonData)), err
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/mcp_server/internal/tools/send_tg.go
+package tools
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"mcp_server/internal/config"
+	"mcp_server/internal/models"
+	"mcp_server/internal/service"
+	"strconv"
+
+	"github.com/mark3labs/mcp-go/mcp"
+)
+
+type TGHandler struct {
+	tgService       *service.TGService
+	scheduleService *service.ChangeService
+}
+
+type SendChangesRequest struct {
+	ChatID string `json:"chat_id" jsonschema_description:"Идентификатор чата пользователя, необходимый для отправки сообщения. Положительное целое число в формате int64" jsonschema:"required,format=int64"`
+	Date   string `json:"date" jsonschema_description:"Дата, на которую необходмо найти и отправить изменения в расписании ГГГГ-ММ-ДД" jsonschema:"required,format=date"`
+}
+
+type SendChangesResponse struct {
+	Success  bool   `json:"success" jsonschema_description:"Сообщение доставленно пользователю"`
+	IsChange bool   `json:"is_change" jsonschema_description:"Есть изменения на указанную дату"`
+	Message  string `json:"message" jsonschema_description:"Сообщение MCP клиенту"`
+}
+
+func NewTGHandler(cfg *config.Config) *TGHandler {
+	return &TGHandler{
+		tgService:       service.NewTGService(cfg),
+		scheduleService: service.NewChangeService(cfg),
+	}
+}
+
+func (h *TGHandler) SendChanges(ctx context.Context, req mcp.CallToolRequest, args SendChangesRequest) (SendChangesResponse, error) {
+	log.Printf("Send changes request: %+v", args)
+	changesResponse, err := h.scheduleService.GetChanges(args.Date)
+	if err != nil {
+		log.Printf("Failed to get changes: %v", err)
+		return SendChangesResponse{
+			Success:  false,
+			IsChange: false,
+			Message:  "Ошибка при получении данных от сервиса расписаний",
+		}, nil
+	}
+
+	if changesResponse.Data.Date == "" {
+		log.Print("Changes not found")
+		return SendChangesResponse{
+			Success:  false,
+			IsChange: false,
+			Message:  "Нет изменений на выбранную дату",
+		}, nil
+	}
+	chatID, _ := strconv.ParseInt(args.ChatID, 10, 64)
+
+	if err := h.tgService.SendMessage(&models.SendMessage{
+		ChatID:    chatID,
+		Message:   changesResponse.Data.Description,
+		PhotoURLs: changesResponse.Data.ImgURLs,
+	}); err != nil {
+		log.Printf("Failed to send tg message: %v", err)
+		return SendChangesResponse{
+			Success:  false,
+			IsChange: true,
+			Message:  fmt.Sprintf("Изменения обнаружены, но произошла ошибка при отправке сообщения в телеграмм бот: %v", err),
+		}, nil
+	}
+
+	return SendChangesResponse{
+		Success:  true,
+		IsChange: true,
+		Message:  "Информация об изменениях отправленна пользователю по указанному chat_id",
+	}, nil
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/mcp_server/internal/tools/tools.go
+package tools
+
+import "github.com/mark3labs/mcp-go/mcp"
+
+type ScheduleTools struct{}
+
+func NewScheduleTools() *ScheduleTools {
+	return &ScheduleTools{}
+}
+
+func (t *ScheduleTools) GetChanges() mcp.Tool {
+	return mcp.NewTool(
+		"get_schedule_changes",
+		mcp.WithDescription("Позволяет получить ссылку на изображение(я), в которой указаны изменения в расписании для всех груп на заданную в формате ISO 8601 дату"),
+		mcp.WithString("date",
+			mcp.Description("Дата в формате ISO 8601 YYYY-MM-DD. Если не задана, то возвращает изменения на текущую дату"),
+		),
+	)
+}
+
+func (t *ScheduleTools) GetCurrentDate() mcp.Tool {
+	return mcp.NewTool(
+		"get_current_date",
+		mcp.WithDescription("Возвращает текущую дату в формате ISO 8601"),
+		mcp.WithString("none", mcp.Description("")),
+	)
+}
+
+func (t *ScheduleTools) GetCurrentStudyPeriod() mcp.Tool {
+	return mcp.NewTool(
+		"get_current_study_period",
+		mcp.WithDescription("Возварщает текущий учебный переод. Текущий учебный год в формате YYYY/YYYY, а также текущее полугодие в формате целого числа 1 или 2"),
+		mcp.WithString("none", mcp.Description("")),
+	)
+}
+
+func (t *ScheduleTools) GetGroupSchedule() mcp.Tool {
+	return mcp.NewTool(
+		"get_group_schedule",
+		mcp.WithDescription("Возвращает расписание указанной группы, на указанный учебный период"),
+		mcp.WithString("group_name", mcp.Description("Наименование учебной группы в формате АБ-123")),
+		mcp.WithString("academic_year", mcp.Description("Учебнгый год в формате YYYY/YYYY")),
+		mcp.WithString("half_year", mcp.Description("Полугодие: одно из двух значений 1 или 2")),
+	)
+}
+
+func (t *ScheduleTools) SendChanges() mcp.Tool {
+	return mcp.NewTool(
+		"send_changes_to_user",
+		mcp.WithDescription("Отправляет пользователю изменения в расписании"),
+		mcp.WithString("date", mcp.Description("Дата в формате ISO 8601 YYYY-MM-DD. Если не задана, то возвращает изменения на текущую дату")),
+		mcp.WithString("chat_id", mcp.Description("chat_id пользователя отправившего запрос")),
+	)
+}
+
