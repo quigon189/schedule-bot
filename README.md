@@ -75,14 +75,8 @@ docker-compose ps
 
 ```env
 # База данных
-<<<<<<< HEAD
 DB_ADMIN=postgres
 DB_PASS=password
-=======
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=secure_password
-POSTGRES_DB=schedule_bot
->>>>>>> dev-mcp-server
 
 # VK Parser
 VK_ACCESS_TOKEN=ваш_токен_vk_api
