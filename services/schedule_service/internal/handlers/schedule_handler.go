@@ -137,7 +137,7 @@ func (h *ScheduleHandler) RemoveGroupSchedule(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	err := h.service.RemoveScheduleService(&gsQueryParams)
+	err := h.service.RemoveGroupSchedule(&gsQueryParams)
 	if err != nil {
 		log.Printf("RemoveGroupSchedule handler error: %v", err)
 		utils.ErrorResponse(w, http.StatusInternalServerError, err.Error())

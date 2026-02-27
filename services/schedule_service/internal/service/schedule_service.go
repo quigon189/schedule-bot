@@ -51,7 +51,7 @@ func (s *ScheduleService) GetGroupSchedule(req *dto.GroupScheduleQueryParams) ([
 	return gs, err
 }
 
-func (s *ScheduleService) RemoveScheduleService(req *dto.GroupScheduleQueryParams) error {
+func (s *ScheduleService) RemoveGroupSchedule(req *dto.GroupScheduleQueryParams) error {
 	filter := &models.GroupScheduleFilter{
 		AcademicYear: req.AcademicYear,
 		HalfYear:     req.HalfYear,
