@@ -3,11 +3,12 @@ package config
 import "os"
 
 type DBConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	Name     string
+	Host           string
+	Port           string
+	User           string
+	Password       string
+	Name           string
+	MigrationsPath string
 }
 
 type ServerConfig struct {
@@ -22,11 +23,12 @@ type Config struct {
 
 func Load() *Config {
 	db := DBConfig{
-		Host:     getEnv("DB_HOST", "localhost"),
-		Port:     getEnv("DB_PORT", "5432"),
-		User:     getEnv("DB_USER", ""),
-		Password: getEnv("DB_PASSWORD", ""),
-		Name:     getEnv("DB_NAME", ""),
+		Host:           getEnv("DB_HOST", "localhost"),
+		Port:           getEnv("DB_PORT", "5432"),
+		User:           getEnv("DB_USER", ""),
+		Password:       getEnv("DB_PASSWORD", ""),
+		Name:           getEnv("DB_NAME", ""),
+		MigrationsPath: getEnv("DB_MIGRATIONS", "migrations"),
 	}
 
 	server := ServerConfig{

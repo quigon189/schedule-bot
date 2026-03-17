@@ -4,8 +4,7 @@ import (
 	"auth_service/internal/config"
 	"auth_service/internal/models"
 	"auth_service/internal/repository"
-	"fmt"
-	"log"
+	"fmt" "log"
 	"slices"
 )
 

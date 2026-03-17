@@ -25,7 +25,7 @@ func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
 	query := `
 	INSERT INTO auth.users (username, full_name, email, password_hash) 
 	VALUES ($1, $2, $3, $4)
-	RETURNING id, is_active, created_at, updated_at
+	RETURNING id, created_at, updated_at
 	`
 	err = tx.QueryRow(ctx, query,
 		user.Name,
@@ -34,7 +34,6 @@ func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
 		user.PasswordHash,
 	).Scan(
 		&user.ID,
-		&user.IsActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)

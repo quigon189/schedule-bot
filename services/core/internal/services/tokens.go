@@ -1,6 +1,7 @@
 package services
 
 import (
+	"core/internal/models"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -15,8 +16,8 @@ type JWTService struct {
 }
 
 type CustomClaims struct {
-	UserID int      `json:"user_id"`
-	Roles  []string `json:"roles"`
+	User      models.User `json:"user"`
+	SessionID string      `json:"session_id"`
 	jwt.RegisteredClaims
 }
 
@@ -27,10 +28,10 @@ func NewJWTService(secretKey []byte, expires time.Duration) *JWTService {
 	}
 }
 
-func (s *JWTService) GenerateToken(userID int, roles []string) (string, error) {
+func (s *JWTService) GenerateToken(user *models.User, sessionID string) (string, error) {
 	claims := CustomClaims{
-		UserID: userID,
-		Roles:  roles,
+		User:  *user,
+		SessionID: sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.expires)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

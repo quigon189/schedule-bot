@@ -1,12 +1,12 @@
 version: '3.8'
 services:
-  n8n:
-    image: docker.io/n8nio/n8n
-    restart: always
-    ports:
-      - "5678:5678"
-    volumes:
-      - n8n_data:/home/node/.n8n
+  # n8n:
+  #   image: docker.io/n8nio/n8n
+  #   restart: always
+  #   ports:
+  #     - "5678:5678"
+  #   volumes:
+  #     - n8n_data:/home/node/.n8n
 
   postgres:
     image: docker.io/postgres:16-alpine
@@ -14,110 +14,127 @@ services:
     environment:
       POSTGRES_USER: ${DB_ADMIN} # должен совпадать с пользователем в скрипте init_db.sql
       POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: core
     ports:
       - "5431:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin"]
     volumes:
-      - ./scripts/postgres/init-dbs.sql:/docker-entrypoint-initdb.d/init-dbs.sql # создает 2 бд auth_db и schedule_db
       - db_data:/var/lib/postgresql/data
 
-  swagger-ui:
-    image: docker.io/swaggerapi/swagger-ui
-    environment:
-      SWAGGER_JSON: /swagger/auth-service.json
-      BASE_URL: /swagger
-      URL: ""
-      URLS: |
-        [ 
-          { url: "/swagger/auth-service.json", name: "AtuhService" },
-          { url: "/swagger/schedule-service.json", name: "ScheduleService" }
-        ]
-    ports:
-      - "8081:8080"
-    volumes:
-      - ./swagger-spec:/swagger
+  # swagger-ui:
+  #   image: docker.io/swaggerapi/swagger-ui
+  #   environment:
+  #     SWAGGER_JSON: /swagger/auth-service.json
+  #     BASE_URL: /swagger
+  #     URL: ""
+  #     URLS: |
+  #       [ 
+  #         { url: "/swagger/auth-service.json", name: "AtuhService" },
+  #         { url: "/swagger/schedule-service.json", name: "ScheduleService" }
+  #       ]
+  #   ports:
+  #     - "8081:8080"
+  #   volumes:
+  #     - ./swagger-spec:/swagger
+  #
+  # ollama:
+  #   image: docker.io/ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   environment:
+  #     - OLLAMA_HOST=0.0.0.0
+  #   restart: always
 
-  ollama:
-    image: docker.io/ollama/ollama:latest
+  core:
+    build: ./services/core
     ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    restart: always
-
-  auth-service:
-    build: ./services/auth_service
-    restart: always
-    ports:
-      - "8182:8080"
+      - "8088:8080"
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${DB_ADMIN}
       DB_PASSWORD: ${DB_PASS}
-      DB_NAME: auth_db
-      ADMINS: ${BOT_ADMINS}
+      DB_NAME: core
+      PORT: 8080
     volumes:
-      - ./swagger-spec:/app/docs
+      - ./services/core/migrations:/app/migrations
     depends_on:
       postgres:
         condition: service_healthy
 
-  schedule-service:
-    build: ./services/schedule_service
-    ports:
-      - "8181:8080"
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: ${DB_ADMIN}
-      DB_PASSWORD: ${DB_PASS}
-      DB_NAME: schedule_db
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  mcp-server:
-    build: ./services/mcp_server
-    environment:
-      SCHEUDLE_SERVICE_URL: "http://schedule-service:8080"
-      TIMEOUT: 30
-    restart: always
-
-  telegram-bot:
-    build:
-      context: ./services/bot_service
-    ports:
-      - "8000:8000"
-    environment:
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - AUTH_SERVICE_URL=http://auth-service:8080
-      - SCHEUDLE_SERVICE_URL=http://schedule-service:8080
-      - DEBUG=${DEBUG:-false}
-    depends_on:
-      - auth-service
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    restart: unless-stopped
-
-  vk-parser:
-    build: ./services/vk-parser
-    environment:
-      - VK_ACCESS_TOKEN=${VK_ACCESS_TOKEN}
-      - VK_GROUP_ID=${VK_GROUP_ID}
-      - CHECK_INTERVAL_MINUTES=5
-      - SCHEDULE_SERVICE_URL=http://schedule-service:8080
-      - MAX_POSTS=20
-    depends_on:
-      - schedule-service
-    restart: always
+  # auth-service:
+  #   build: ./services/auth_service
+  #   restart: always
+  #   ports:
+  #     - "8182:8080"
+  #   environment:
+  #     DB_HOST: postgres
+  #     DB_PORT: 5432
+  #     DB_USER: ${DB_ADMIN}
+  #     DB_PASSWORD: ${DB_PASS}
+  #     DB_NAME: auth_db
+  #     ADMINS: ${BOT_ADMINS}
+  #   volumes:
+  #     - ./swagger-spec:/app/docs
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #
+  # schedule-service:
+  #   build: ./services/schedule_service
+  #   ports:
+  #     - "8181:8080"
+  #   environment:
+  #     DB_HOST: postgres
+  #     DB_PORT: 5432
+  #     DB_USER: ${DB_ADMIN}
+  #     DB_PASSWORD: ${DB_PASS}
+  #     DB_NAME: schedule_db
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #
+  # mcp-server:
+  #   build: ./services/mcp_server
+  #   environment:
+  #     SCHEUDLE_SERVICE_URL: "http://schedule-service:8080"
+  #     TIMEOUT: 30
+  #   restart: always
+  #
+  # telegram-bot:
+  #   build:
+  #     context: ./services/bot_service
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+  #     - AUTH_SERVICE_URL=http://auth-service:8080
+  #     - SCHEUDLE_SERVICE_URL=http://schedule-service:8080
+  #     - DEBUG=${DEBUG:-false}
+  #   depends_on:
+  #     - auth-service
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   restart: unless-stopped
+  #
+  # vk-parser:
+  #   build: ./services/vk-parser
+  #   environment:
+  #     - VK_ACCESS_TOKEN=${VK_ACCESS_TOKEN}
+  #     - VK_GROUP_ID=${VK_GROUP_ID}
+  #     - CHECK_INTERVAL_MINUTES=5
+  #     - SCHEDULE_SERVICE_URL=http://schedule-service:8080
+  #     - MAX_POSTS=20
+  #   depends_on:
+  #     - schedule-service
+  #   restart: always
 
 volumes:
   db_data:
