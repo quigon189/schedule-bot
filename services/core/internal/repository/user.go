@@ -55,7 +55,7 @@ func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
 	}
 
 	query = `
-	SELECT (r.id, r.name, r.description)
+	SELECT r.id, r.name, r.description
 	FROM auth.user_roles ur
 	JOIN auth.roles r ON ur.role_id = r.id
 	WHERE ur.user_id = $1
@@ -77,7 +77,7 @@ func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
 func (r *UserRepo) GetByID(ctx context.Context, id int) (*models.User, error) {
 	var user models.User
 	query := `
-	SELECT (id, username, full_name, email, password_hash, created_at, updated_at)
+	SELECT id, username, full_name, email, password_hash, created_at, updated_at
 	FROM auth.users
 	WHERE id = $1
 	`
@@ -95,7 +95,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id int) (*models.User, error) {
 	}
 
 	query = `
-	SELECT (r.id, r.name, r.description)
+	SELECT r.id, r.name, r.description
 	FROM auth.roles r
 	JOIN auth.user_roles ur ON ur.role_id = r.id
 	WHERE ur.user_id = $1
@@ -119,7 +119,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id int) (*models.User, error) {
 func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.User, error) {
 	var user models.User
 	query := `
-	SELECT (id, username, full_name, email, password_hash, created_at, updated_at)
+	SELECT id, username, full_name, email, password_hash, created_at, updated_at
 	FROM auth.users
 	WHERE username = $1
 	`
@@ -137,7 +137,7 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.
 	}
 
 	query = `
-	SELECT (r.id, r.name, r.description)
+	SELECT r.id, r.name, r.description
 	FROM auth.roles r
 	JOIN auth.user_roles ur ON ur.role_id = r.id
 	WHERE ur.user_id = $1

@@ -55,6 +55,7 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 	return &dto.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
+		SessionID: session.ID.String(),
 	}, nil
 }
 
@@ -86,7 +87,7 @@ func (s *UserService) RefreshToken(ctx context.Context, req *dto.RefreshTokenReq
 
 	if session.RefreshToken != req.RefreshToken {
 		invalidErr := errors.New("invalid refresh token")
-		if err := s.sessionRepo.Delete(ctx, req.SessionID); err != nil {
+		if err := s.sessionRepo.Delete(ctx, session.ID); err != nil {
 			return nil, errors.Join(invalidErr, err)
 		} else {
 			return nil, invalidErr
@@ -122,10 +123,10 @@ func (s *UserService) RefreshToken(ctx context.Context, req *dto.RefreshTokenReq
 func (s *UserService) Logout(ctx context.Context, accessToken string) error {
 	session, err := s.ValidateSession(ctx, accessToken)
 	if err != nil {
-		return nil
+		return err
 	}
 
-	return s.sessionRepo.Delete(ctx, session.ID.String())
+	return s.sessionRepo.Delete(ctx, session.ID)
 }
 
 func (s *UserService) LogoutSession(ctx context.Context, accessToken string, session *models.Session) error {
@@ -138,5 +139,5 @@ func (s *UserService) LogoutSession(ctx context.Context, accessToken string, ses
 		return errors.New("access denied")
 	}
 
-	return s.sessionRepo.Delete(ctx, session.ID.String())
+	return s.sessionRepo.Delete(ctx, session.ID)
 }

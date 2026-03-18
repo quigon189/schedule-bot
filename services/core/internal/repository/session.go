@@ -4,6 +4,7 @@ import (
 	"context"
 	"core/internal/models"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -33,12 +34,14 @@ func (r *SessionRepo) Create(ctx context.Context, session *models.Session) error
 }
 
 func (r *SessionRepo) GetByID(ctx context.Context, id string) (*models.Session, error) {
-	var session *models.Session
+	session := models.Session{
+		User: &models.User{},
+	}
 
 	query := `
-	SELECT (s.id, s.refresh_token, s.user_agent, s.client_ip,
+	SELECT s.id, s.refresh_token, s.user_agent, s.client_ip,
 		u.id, u.username, u.full_name, u.email, u.password_hash,
-		u.created_at, u.updated_at)
+		u.created_at, u.updated_at
 	FROM auth.sessions s
 	JOIN auth.users u ON u.id = s.user_id
 	WHERE s.id = $1
@@ -60,13 +63,13 @@ func (r *SessionRepo) GetByID(ctx context.Context, id string) (*models.Session, 
 		return nil, err
 	}
 
-	return session, nil
+	return &session, nil
 }
 
-func (r *SessionRepo) GetByUserID (ctx context.Context, id int) ([]models.Session, error) {
-	var sessions []models.Session
+func (r *SessionRepo) GetByUserID(ctx context.Context, id int) ([]models.Session, error) {
+	sessions := []models.Session{}
 	query := `
-	SELECT (id, refresh_token, user_agent, client_ip)
+	SELECT id, refresh_token, user_agent, client_ip
 	FROM auth.sessions
 	WHERE user_id = $1
 	`
@@ -75,7 +78,7 @@ func (r *SessionRepo) GetByUserID (ctx context.Context, id int) ([]models.Sessio
 		return nil, err
 	}
 	for row.Next() {
-		var session models.Session
+		session := models.Session{}
 		err := row.Scan(
 			&session.ID,
 			&session.RefreshToken,
@@ -101,7 +104,7 @@ func (r *SessionRepo) UpdateRefreshToken(ctx context.Context, id string, refresh
 	return err
 }
 
-func (r *SessionRepo) Delete(ctx context.Context, id string) error {
+func (r *SessionRepo) Delete(ctx context.Context, id pgtype.UUID) error {
 	query := `
 	DELETE FROM auth.sessions WHERE id = $1
 	`

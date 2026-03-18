@@ -48,3 +48,19 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	utils.SuccessResponse(w, "success logout", nil)
 }
+
+func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	var req dto.RefreshTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to decode body: %v", err))
+		return
+	}
+
+	resp, err := h.userService.RefreshToken(r.Context(), &req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to refresh token: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "success refresh token", resp)
+}

@@ -59,6 +59,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 
 	r.Post("/login", authHandler.Login)
+	r.Post("/refresh", authHandler.RefreshToken)
 	r.Group(func(r chi.Router) {
 		r.Use(authMiddleware.ValidateToken)
 
