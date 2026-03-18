@@ -64,6 +64,10 @@ INSERT INTO auth.roles (name, description) VALUES
 	('student', 'Regular student user'),
 	('user', 'New user');
 
+-- username admin password admin123
+INSERT INTO auth.users (username, full_name, email, password_hash) VALUES
+	('admin', 'Admin', 'admin@local', '$2a$10$UeSM2lg6ALPQnjc/d2R3/Ou4xSZanVeBsIaxjkgYwMwDOvoGqD1bq');
+
 -- +goose Down
 DROP TABLE IF EXISTS auth.sessions;
 DROP TABLE IF EXISTS auth.subjects;
