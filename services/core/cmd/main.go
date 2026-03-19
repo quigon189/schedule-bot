@@ -67,6 +67,7 @@ func main() {
 
 		r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 			r.Post("/create_user", userHandler.CreateUser)
+			r.Get("/get_users", userHandler.GetAllUsers)
 		})
 	})
 

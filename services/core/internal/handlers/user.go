@@ -32,3 +32,13 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	utils.SuccessResponse(w, "user created", user)
 }
+
+func (h *UserHandler) GetAllUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := h.userService.GetAllUsers(r.Context())
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get users: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "users getted", users)
+}

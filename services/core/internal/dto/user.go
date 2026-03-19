@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"core/internal/models"
 	"errors"
 	"net/mail"
 	"regexp"
@@ -8,7 +9,7 @@ import (
 )
 
 const (
-	PASSWORD_LENGHT=8
+	PASSWORD_LENGHT = 8
 )
 
 type CreateUserRequest struct {
@@ -26,8 +27,7 @@ func (r *CreateUserRequest) Validate() error {
 		errs = append(errs, "username error")
 	}
 
-	names := strings.Fields(r.FullName)
-	if len(names) <2 {
+	if len(r.FullName) < 3 {
 		errs = append(errs, "full_name error")
 	}
 
@@ -45,4 +45,12 @@ func (r *CreateUserRequest) Validate() error {
 	}
 
 	return nil
+}
+
+type PaginatedUsers struct {
+	Users      []models.User `json:"users"`
+	Total      int           `json:"total"`
+	Page       int           `json:"page"`
+	PerPage    int           `json:"per_page"`
+	TotalPages int           `json:"total_pages"`
 }

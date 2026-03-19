@@ -2,17 +2,36 @@ package repository
 
 import (
 	"context"
+	"core/internal/dto"
 	"core/internal/models"
+	"fmt"
+	"math"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type UserRepo struct {
-	db *pgxpool.Pool
+	db                *pgxpool.Pool
+	allowedSortFields map[string]bool
+	allowedSortOrders map[string]bool
 }
 
 func NewUserRepo(db *pgxpool.Pool) *UserRepo {
-	return &UserRepo{db: db}
+	return &UserRepo{
+		db: db,
+		allowedSortFields: map[string]bool{
+			"id":         true,
+			"username":   true,
+			"full_name":  true,
+			"email":      true,
+			"created_at": true,
+		},
+		allowedSortOrders: map[string]bool{
+			"ASC":  true,
+			"DESC": true,
+		},
+	}
 }
 
 func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
@@ -156,6 +175,108 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.
 	}
 
 	return &user, nil
+}
+
+func (r *UserRepo) GetUsersPaginated(ctx context.Context, page, perPage int, sortBy, sortOrder string) (*dto.PaginatedUsers, error) {
+	if page < 1 {
+		page = 1
+	}
+
+	if perPage < 10 {
+		page = 10
+	}
+
+	if sortBy == "" || !r.allowedSortFields[sortBy] {
+		sortBy = "id"
+	}
+
+	sortOrder = strings.ToUpper(sortOrder)
+	if sortOrder == "" || !r.allowedSortOrders[sortOrder] {
+		sortOrder = "ASC"
+	}
+
+	offset := (page - 1) * perPage
+	orderClause := fmt.Sprintf("%s %s", sortBy, sortOrder)
+
+	query := fmt.Sprintf(`
+	SELECT id, username, full_name, email, created_at, updated_at
+	FROM auth.users
+	ORDER BY %s
+	LIMIT $1 OFFSET $2
+	`, orderClause)
+
+	rows, err := r.db.Query(ctx, query, perPage, page)
+	if err != nil {
+		return nil, fmt.Errorf("query users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var user models.User
+		err := rows.Scan(
+			&user.ID,
+			&user.Name,
+			&user.FullName,
+			&user.Email,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan user: %w", err)
+		}
+
+		users = append(users, user)
+	}
+
+	var total int
+	err = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM auth.users`).Scan(&total)
+	if err != nil {
+		return nil, fmt.Errorf("count users: %w", err)
+	}
+
+	totalPages := int(math.Ceil(float64(total) / float64(perPage)))
+
+	return &dto.PaginatedUsers{
+		Users: users,
+		Total: total,
+		Page: page,
+		PerPage: perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+func (r *UserRepo) GetAll(ctx context.Context) ([]models.User, error) {
+	var users []models.User
+
+	query := `
+	SELECT id, username, full_name, email, created_at, updated_at
+	FROM auth.users 
+	`
+
+	row, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	for row.Next() {
+		var user models.User
+		err := row.Scan(
+			&user.ID,
+			&user.Name,
+			&user.FullName,
+			&user.Email,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		users = append(users, user)
+	}
+
+	return users, nil
 }
 
 func (r *UserRepo) UpdatePasswordHash(ctx context.Context, id int, passwordHash string) error {

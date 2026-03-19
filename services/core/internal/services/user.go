@@ -162,3 +162,9 @@ func (s *UserService) CreateUser(ctx context.Context, req *dto.CreateUserRequest
 
 	return &user, nil
 }
+
+func (s *UserService) GetPaginatedUsers(ctx context.Context) {}
+
+func (s *UserService) GetAllUsers(ctx context.Context) ([]models.User, error) {
+	return s.userRepo.GetAll(ctx)	
+}
