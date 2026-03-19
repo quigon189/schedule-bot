@@ -141,3 +141,24 @@ func (s *UserService) LogoutSession(ctx context.Context, accessToken string, ses
 
 	return s.sessionRepo.Delete(ctx, session.ID)
 }
+
+func (s *UserService) CreateUser(ctx context.Context, req *dto.CreateUserRequest) (*models.User, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	password_hash, err := hashPassword(req.Password)
+	if err != nil {
+		return nil, err
+	}
+	user := models.User{
+		Name: req.Username,
+		FullName: req.FullName,
+		Email: req.Email,
+		PasswordHash: password_hash,
+	}
+	if err := s.userRepo.Create(ctx, &user); err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}

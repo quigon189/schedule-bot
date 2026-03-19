@@ -68,6 +68,12 @@ INSERT INTO auth.roles (name, description) VALUES
 INSERT INTO auth.users (username, full_name, email, password_hash) VALUES
 	('admin', 'Admin', 'admin@local', '$2a$10$UeSM2lg6ALPQnjc/d2R3/Ou4xSZanVeBsIaxjkgYwMwDOvoGqD1bq');
 
+INSERT INTO auth.user_roles (user_id, role_id) VALUES
+	(
+		(SELECT id FROM auth.users WHERE username='admin'),
+		(SELECT id FROM auth.roles WHERE name='admin')
+	);
+
 -- +goose Down
 DROP TABLE IF EXISTS auth.sessions;
 DROP TABLE IF EXISTS auth.subjects;

@@ -51,7 +51,9 @@ func main() {
 	userService := services.NewUserService(userRepo, sessionRepo, tokenService)
 
 	authMiddleware := middlewares.NewAuthMiddleware(userService)
+
 	authHandler := handlers.NewAuthHandler(userService)
+	userHandler := handlers.NewUserHandler(userService)
 
 	r := chi.NewRouter()
 
@@ -60,10 +62,12 @@ func main() {
 
 	r.Post("/login", authHandler.Login)
 	r.Post("/refresh", authHandler.RefreshToken)
-	r.Group(func(r chi.Router) {
-		r.Use(authMiddleware.ValidateToken)
-
+	r.With(authMiddleware.ValidateToken).Group(func(r chi.Router) {
 		r.Get("/logout", authHandler.Logout)
+
+		r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+			r.Post("/create_user", userHandler.CreateUser)
+		})
 	})
 
 	server := http.Server{
