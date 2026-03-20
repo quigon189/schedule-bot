@@ -2,11 +2,14 @@ package handlers
 
 import (
 	"core/internal/dto"
+	"core/internal/models"
 	"core/internal/services"
 	"core/pkg/utils"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
+	"strconv"
 )
 
 type UserHandler struct {
@@ -33,12 +36,54 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, "user created", user)
 }
 
-func (h *UserHandler) GetAllUsers(w http.ResponseWriter, r *http.Request) {
-	users, err := h.userService.GetAllUsers(r.Context())
+func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
+	var req dto.PagiantedUserRequest
+	req.Page, _ = strconv.Atoi(r.URL.Query().Get("page"))
+	req.PerPage, _ = strconv.Atoi(r.URL.Query().Get("per_page"))
+	req.SortBy = r.URL.Query().Get("sort_by")
+	req.SortOrder = r.URL.Query().Get("sort_order")
+
+	users, err := h.userService.GetPaginatedUsers(r.Context(), &req)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get users: %v", err))
 		return
 	}
 
-	utils.SuccessResponse(w, "users getted", users)
+	utils.SuccessResponse(w, "paginated users", users)
+}
+
+func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request) {
+	var req dto.UpdateUserPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+
+	currentUser, ok := r.Context().Value("user").(models.User)
+	if !ok {
+		utils.ErrorResponse(w, http.StatusBadRequest, "failed to get current user")
+		return
+	}
+
+	isAdmin := slices.ContainsFunc(currentUser.Roles, func(r models.Role) bool {
+		return r.Name == "admin"
+	})
+
+	if !isAdmin || currentUser.ID != req.UserID {
+		utils.ErrorResponse(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	user, err := h.userService.GetUser(r.Context(), req.UserID)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to get user: %v", err))
+		return
+	}
+
+	if err := h.userService.UpdatePassword(r.Context(), user, req.NewPassword, req.OldPassword); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update password: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "password changed", nil)
 }

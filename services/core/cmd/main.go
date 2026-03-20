@@ -62,12 +62,29 @@ func main() {
 
 	r.Post("/login", authHandler.Login)
 	r.Post("/refresh", authHandler.RefreshToken)
+
 	r.With(authMiddleware.ValidateToken).Group(func(r chi.Router) {
 		r.Get("/logout", authHandler.Logout)
 
+		r.Route("/admin", func(r chi.Router) {
+			r.Use(authMiddleware.AdminRequire)
+			r.Route("/users", func(r chi.Router) {
+				r.Get("/get", userHandler.GetUsers)
+				r.Post("/create", userHandler.CreateUser)
+
+				r.Route("/update", func(r chi.Router) {
+					r.Patch("/password", userHandler.UpdateUserPassword)
+				})
+			})
+		})
+
+		r.Route("/user", func(r chi.Router) {
+			r.Route("/update", func(r chi.Router) {
+				r.Patch("/password", userHandler.UpdateUserPassword)
+			})
+		})
+
 		r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
-			r.Post("/create_user", userHandler.CreateUser)
-			r.Get("/get_users", userHandler.GetAllUsers)
 		})
 	})
 

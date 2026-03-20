@@ -6,12 +6,14 @@ import (
 	"core/internal/models"
 	"core/internal/repository"
 	"errors"
+	"fmt"
 )
 
 type UserService struct {
 	userRepo    *repository.UserRepo
 	sessionRepo *repository.SessionRepo
 	jwtService  *JWTService
+	perPage     int
 }
 
 func NewUserService(userRepo *repository.UserRepo, sessionRepo *repository.SessionRepo, jwtService *JWTService) *UserService {
@@ -19,6 +21,7 @@ func NewUserService(userRepo *repository.UserRepo, sessionRepo *repository.Sessi
 		userRepo:    userRepo,
 		sessionRepo: sessionRepo,
 		jwtService:  jwtService,
+		perPage:     20,
 	}
 }
 
@@ -55,7 +58,7 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 	return &dto.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
-		SessionID: session.ID.String(),
+		SessionID:    session.ID.String(),
 	}, nil
 }
 
@@ -151,9 +154,9 @@ func (s *UserService) CreateUser(ctx context.Context, req *dto.CreateUserRequest
 		return nil, err
 	}
 	user := models.User{
-		Name: req.Username,
-		FullName: req.FullName,
-		Email: req.Email,
+		Name:         req.Username,
+		FullName:     req.FullName,
+		Email:        req.Email,
 		PasswordHash: password_hash,
 	}
 	if err := s.userRepo.Create(ctx, &user); err != nil {
@@ -163,8 +166,44 @@ func (s *UserService) CreateUser(ctx context.Context, req *dto.CreateUserRequest
 	return &user, nil
 }
 
-func (s *UserService) GetPaginatedUsers(ctx context.Context) {}
+func (s *UserService) GetPaginatedUsers(ctx context.Context, req *dto.PagiantedUserRequest) (*dto.PaginatedUsers, error) {
+	page := req.Page
+	perPage := req.PerPage
+	sortBy := req.SortBy
+	sortOrder := req.SortOrder
 
-func (s *UserService) GetAllUsers(ctx context.Context) ([]models.User, error) {
-	return s.userRepo.GetAll(ctx)	
+	if page < 1 {
+		page = 1
+	}
+
+	if perPage < s.perPage {
+		perPage = s.perPage
+	}
+
+	if sortOrder == "" {
+		sortOrder = "ASC"
+	}
+
+	if sortBy == "" {
+		sortBy = "id"
+	}
+
+	return s.userRepo.GetUsersPaginated(ctx, page, perPage, sortBy, sortOrder)
+}
+
+func (s *UserService) GetUser(ctx context.Context, userID int) (*models.User, error) {
+	return s.userRepo.GetByID(ctx, userID)
+}
+
+func (s *UserService) UpdatePassword(ctx context.Context, user *models.User, newPassword, oldPassword string) error {
+	if !checkPasswordHash(oldPassword, user.PasswordHash) {
+		return errors.New("failed to match old password")
+	}
+
+	newPasswordHash, err := hashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	return s.userRepo.UpdatePasswordHash(ctx, user.ID, newPasswordHash)
 }

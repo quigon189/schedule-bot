@@ -54,3 +54,16 @@ type PaginatedUsers struct {
 	PerPage    int           `json:"per_page"`
 	TotalPages int           `json:"total_pages"`
 }
+
+type PagiantedUserRequest struct {
+	Page      int    `json:"page"`
+	PerPage   int    `json:"per_page"`
+	SortBy    string `json:"sort_by"`
+	SortOrder string `json:"sort_order"`
+}
+
+type UpdateUserPasswordRequest struct {
+	UserID int `json:"user_id"`
+	NewPassword string `json:"new_password"`
+	OldPassword string `json:"old_password"`
+}

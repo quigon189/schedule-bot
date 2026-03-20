@@ -182,8 +182,8 @@ func (r *UserRepo) GetUsersPaginated(ctx context.Context, page, perPage int, sor
 		page = 1
 	}
 
-	if perPage < 10 {
-		page = 10
+	if perPage < 1 {
+		page = 1
 	}
 
 	if sortBy == "" || !r.allowedSortFields[sortBy] {
@@ -205,7 +205,7 @@ func (r *UserRepo) GetUsersPaginated(ctx context.Context, page, perPage int, sor
 	LIMIT $1 OFFSET $2
 	`, orderClause)
 
-	rows, err := r.db.Query(ctx, query, perPage, page)
+	rows, err := r.db.Query(ctx, query, perPage, offset)
 	if err != nil {
 		return nil, fmt.Errorf("query users: %w", err)
 	}
