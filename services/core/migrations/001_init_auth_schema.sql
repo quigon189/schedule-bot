@@ -39,15 +39,6 @@ CREATE TABLE auth.teacher_profiles (
 	user_id INTEGER PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
-CREATE TABLE auth.subjects (
-	id SERIAL PRIMARY KEY,
-	name VARCHAR(255) NOT NULL,
-	group_id INTEGER NOT NULL REFERENCES auth.groups(id) ON DELETE CASCADE,
-	teacher_id INTEGER REFERENCES auth.teacher_profiles(user_id) ON DELETE SET NULL,
-	hours_load INTEGER NOT NULL DEFAULT 0,
-	semester INTEGER NOT NULL DEFAULT 1
-);
-
 CREATE TABLE auth.sessions (
 	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 	user_id INTEGER NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,

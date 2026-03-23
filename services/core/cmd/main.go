@@ -70,13 +70,15 @@ func main() {
 			r.Use(authMiddleware.AdminRequire)
 			r.Route("/users", func(r chi.Router) {
 				r.Get("/", userHandler.GetUsers)
+				r.Get("/{id}", userHandler.GetUser)
 				r.Post("/", userHandler.CreateUser)
-
 				r.Patch("/password", userHandler.UpdateUserPassword)
 			})
 		})
 
 		r.Route("/user", func(r chi.Router) {
+			r.Get("/", userHandler.GetCurrentUser)
+			r.Get("/{id}", userHandler.GetUser)
 			r.Patch("/password", userHandler.UpdateUserPassword)
 		})
 

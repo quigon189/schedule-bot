@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type UserHandler struct {
@@ -49,6 +51,38 @@ func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.SuccessResponse(w, "paginated users", users)
+}
+
+func (h *UserHandler) GetUser(w http.ResponseWriter, r* http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid path value: %v", err))
+		return
+	}
+
+	user, err := h.userService.GetUser(r.Context(), id)	
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get user wtih id %d: %v", id, err))
+		return 
+	}
+
+	utils.SuccessResponse(w, "get user success", user)
+}
+
+func (h *UserHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := r.Context().Value("user").(models.User)
+	if !ok {
+		utils.ErrorResponse(w, http.StatusBadRequest, "failed to get current user")
+		return
+	}
+
+	user, err := h.userService.GetUser(r.Context(), currentUser.ID)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get user: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "get user success", user)
 }
 
 func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request) {
