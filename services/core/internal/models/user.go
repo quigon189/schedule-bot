@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 type Role struct {
 	ID          int    `json:"id"`
@@ -43,4 +46,10 @@ type Subject struct {
 	Semester  int
 	Group     Group
 	Teacher   *Teacher
+}
+
+func (u *User) RequireRole(role string) bool {
+	return slices.ContainsFunc(u.Roles, func(r Role) bool {
+		return r.Name == role
+	})
 }

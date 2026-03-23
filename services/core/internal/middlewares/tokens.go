@@ -6,7 +6,6 @@ import (
 	"core/internal/services"
 	"core/pkg/utils"
 	"net/http"
-	"slices"
 )
 
 type AuthMiddleware struct {
@@ -42,10 +41,8 @@ func (m *AuthMiddleware) ValidateToken(next http.Handler) http.Handler {
 func (m *AuthMiddleware) AdminRequire(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, ok := r.Context().Value("user").(models.User)
-		
-		if !ok || !slices.ContainsFunc(user.Roles, func(r models.Role) bool {
-			return r.Name == "admin"
-		}) {
+
+		if !ok || !user.RequireRole("admin") {
 			utils.ErrorResponse(w, http.StatusForbidden, "access denied")
 			return
 		}
@@ -53,4 +50,3 @@ func (m *AuthMiddleware) AdminRequire(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-

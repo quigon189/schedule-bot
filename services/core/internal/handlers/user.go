@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"slices"
 	"strconv"
 )
 
@@ -65,24 +64,30 @@ func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	isAdmin := slices.ContainsFunc(currentUser.Roles, func(r models.Role) bool {
-		return r.Name == "admin"
-	})
+	isAdmin := currentUser.RequireRole("admin")
 
-	if !isAdmin || currentUser.ID != req.UserID {
+	if !(isAdmin || currentUser.ID != req.UserID) {
 		utils.ErrorResponse(w, http.StatusForbidden, "access denied")
 		return
 	}
 
-	user, err := h.userService.GetUser(r.Context(), req.UserID)
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to get user: %v", err))
-		return
-	}
+	userID := currentUser.ID
+	if isAdmin {
+		if err := h.userService.UpdatePasswordAdmin(r.Context(), req.UserID, req.NewPassword); err != nil {
+			utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to get user: %v", err))
+			return
+		}
+	} else {
+		user, err := h.userService.GetUser(r.Context(), userID)
+		if err != nil {
+			utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to get user: %v", err))
+			return
+		}
 
-	if err := h.userService.UpdatePassword(r.Context(), user, req.NewPassword, req.OldPassword); err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update password: %v", err))
-		return
+		if err := h.userService.UpdatePassword(r.Context(), user, req.NewPassword, req.OldPassword); err != nil {
+			utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update password: %v", err))
+			return
+		}
 	}
 
 	utils.SuccessResponse(w, "password changed", nil)

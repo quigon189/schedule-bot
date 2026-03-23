@@ -207,3 +207,13 @@ func (s *UserService) UpdatePassword(ctx context.Context, user *models.User, new
 
 	return s.userRepo.UpdatePasswordHash(ctx, user.ID, newPasswordHash)
 }
+
+func (s *UserService) UpdatePasswordAdmin(ctx context.Context, userID int, newPassword string) error {
+	newPasswordHash, err := hashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	return s.userRepo.UpdatePasswordHash(ctx, userID, newPasswordHash)
+
+}
