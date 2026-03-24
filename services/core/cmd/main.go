@@ -3,10 +3,7 @@ package main
 import (
 	"context"
 	"core/internal/config"
-	"core/internal/handlers"
-	"core/internal/middlewares"
-	"core/internal/repository"
-	"core/internal/services"
+	"core/internal/router"
 	"core/pkg/postgres"
 	"fmt"
 	"log"
@@ -16,8 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -44,51 +39,11 @@ func main() {
 		log.Fatalf("Failed to apply migrations: %v", err)
 	}
 
-	userRepo := repository.NewUserRepo(pgPool)
-	sessionRepo := repository.NewSessionRepo(pgPool)
-
-	tokenService := services.NewJWTService([]byte("123"), 24*time.Hour)
-	userService := services.NewUserService(userRepo, sessionRepo, tokenService)
-
-	authMiddleware := middlewares.NewAuthMiddleware(userService)
-
-	authHandler := handlers.NewAuthHandler(userService)
-	userHandler := handlers.NewUserHandler(userService)
-
-	r := chi.NewRouter()
-
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-
-	r.Post("/login", authHandler.Login)
-	r.Post("/refresh", authHandler.RefreshToken)
-
-	r.With(authMiddleware.ValidateToken).Group(func(r chi.Router) {
-		r.Get("/logout", authHandler.Logout)
-
-		r.Route("/admin", func(r chi.Router) {
-			r.Use(authMiddleware.AdminRequire)
-			r.Route("/users", func(r chi.Router) {
-				r.Get("/", userHandler.GetUsers)
-				r.Get("/{id}", userHandler.GetUser)
-				r.Post("/", userHandler.CreateUser)
-				r.Patch("/password", userHandler.UpdateUserPassword)
-			})
-		})
-
-		r.Route("/user", func(r chi.Router) {
-			r.Get("/", userHandler.GetCurrentUser)
-			r.Get("/{id}", userHandler.GetUser)
-			r.Patch("/password", userHandler.UpdateUserPassword)
-		})
-
-		r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
-		})
-	})
+	r := router.New(cfg, pgPool)
 
 	server := http.Server{
 		Addr:    ":" + cfg.Server.Port,
-		Handler: r,
+		Handler: r.Router(),
 	}
 
 	log.Printf("Auth server starting on port %s", cfg.Server.Port)

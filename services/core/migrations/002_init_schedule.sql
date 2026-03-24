@@ -1,6 +1,8 @@
 -- +goose UP
 CREATE SCHEMA schedule;
 
+CREATE TYPE lesson_status AS ENUM ('planned', 'completed', 'canceled', 'rescheduled');
+
 CREATE TABLE schedule.subjects (
 	id SERIAL PRIMARY KEY,
 	title VARCHAR(255) NOT NULL,
@@ -15,7 +17,8 @@ CREATE TABLE schedule.subjects (
 
 CREATE TABLE schedule.audiences (
 	id SERIAL PRIMARY KEY,
-	name VARCHAR(255) NOT NULL
+	name VARCHAR(255) NOT NULL,
+	number VARCHAR(255) NOT NULL
 );
 
 CREATE TABLE schedule.templates (
@@ -27,12 +30,10 @@ CREATE TABLE schedule.templates (
 	teacher_id INTEGER REFERENCES auth.teacher_profiles(user_id) ON DELETE SET NULL,
 	audience_id INTEGER REFERENCES schedule.audiences(id) ON DELETE SET NULL,
 
-	CHECK(week_type BETWEEN 1 AND 2),
+	CHECK(week_type BETWEEN 0 AND 2),
     CHECK(number BETWEEN 1 AND 7),
     CHECK(day_of_week BETWEEN 1 AND 7)
 );
-
-CREATE TYPE lesson_status AS ENUM ('planned', 'completed', 'canceled', 'rescheduled');
 
 CREATE TABLE schedule.lesson_logs (
 	id SERIAL PRIMARY KEY,

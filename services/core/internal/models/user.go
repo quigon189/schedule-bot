@@ -39,15 +39,6 @@ type Teacher struct {
 	User User
 }
 
-type Subject struct {
-	ID        int
-	Name      string
-	HoursLoad int
-	Semester  int
-	Group     Group
-	Teacher   *Teacher
-}
-
 func (u *User) RequireRole(role string) bool {
 	return slices.ContainsFunc(u.Roles, func(r Role) bool {
 		return r.Name == role
