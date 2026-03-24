@@ -59,6 +59,7 @@ func (r *AudienceRepo) GetAll(ctx context.Context) ([]models.Audience, error) {
 			return nil, err
 		}
 	}
+	defer rows.Close()
 
 	for rows.Next() {
 		var audience models.Audience

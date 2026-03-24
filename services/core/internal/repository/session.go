@@ -77,6 +77,8 @@ func (r *SessionRepo) GetByUserID(ctx context.Context, id int) ([]models.Session
 	if err != nil {
 		return nil, err
 	}
+	defer row.Close()
+
 	for row.Next() {
 		session := models.Session{}
 		err := row.Scan(

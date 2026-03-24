@@ -90,6 +90,8 @@ func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
 			}
 		}
 	}
+	row.Close()
+
 	return tx.Commit(ctx)
 }
 
@@ -123,6 +125,8 @@ func (r *UserRepo) GetByID(ctx context.Context, id int) (*models.User, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer row.Close()
+
 	for row.Next() {
 		var role models.Role
 		err = row.Scan(&role.ID, &role.Name, &role.Description)
@@ -165,6 +169,8 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.
 	if err != nil {
 		return nil, err
 	}
+	defer row.Close()
+
 	for row.Next() {
 		var role models.Role
 		err = row.Scan(&role.ID, &role.Name, &role.Description)
@@ -258,6 +264,7 @@ func (r *UserRepo) GetAll(ctx context.Context) ([]models.User, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer row.Close()
 
 	for row.Next() {
 		var user models.User

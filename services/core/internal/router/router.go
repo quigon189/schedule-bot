@@ -24,10 +24,13 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *Router {
 	userRepo := repository.NewUserRepo(pool)
 	sessionRepo := repository.NewSessionRepo(pool)
 	audienceRepo := repository.NewAudienceRepo(pool)
+	groupRepo := repository.NewGroupRepo(pool)
+	teacherRepo := repository.NewTeacherRepo(pool)
+	studentRepo := repository.NewStudentRepo(pool)
 
 	tokenService := services.NewJWTService([]byte("123"), 24*time.Hour)
 	userService := services.NewUserService(userRepo, sessionRepo, tokenService)
-	scheduleService := services.NewScheduleService(audienceRepo)
+	scheduleService := services.NewScheduleService(audienceRepo, groupRepo, teacherRepo, studentRepo)
 
 	router := Router{
 		tokenService:    tokenService,
@@ -46,7 +49,10 @@ func (r *Router) SetupRoutes() {
 
 	authHandler := handlers.NewAuthHandler(r.authService)
 	userHandler := handlers.NewUserHandler(r.authService)
-	scheduleHandler := handlers.NewScheduleHandler(r.scheduleService)
+	audienceHandler := handlers.NewAudienceHandler(r.scheduleService)
+	groupHandler := handlers.NewGroupHandler(r.scheduleService)
+	teacherHandler := handlers.NewTeacherHandler(r.scheduleService)
+	studentHandler := handlers.NewStudentHandler(r.scheduleService)
 
 	r.router.Use(middleware.Logger)
 	r.router.Use(middleware.Recoverer)
@@ -73,14 +79,43 @@ func (r *Router) SetupRoutes() {
 			r.Patch("/password", userHandler.UpdateUserPassword)
 		})
 
+		r.Route("/teachers", func(r chi.Router) {
+			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+				r.Post("/", teacherHandler.CreateTeacher)
+				r.Delete("/{id}", teacherHandler.DeleteTeacher)
+			})
+			r.Get("/", teacherHandler.GetAllTeachers)
+			r.Get("/{id}", teacherHandler.GetTeacher)
+		})
+
+		r.Route("/students", func(r chi.Router) {
+			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+				r.Post("/", studentHandler.CreateStudent)
+				r.Patch("/{id}/group", studentHandler.UpdateStudentGroup)
+				r.Delete("/{id}", studentHandler.DeleteStudent)
+			})
+			r.Get("/", studentHandler.GetAllStudents)
+			r.Get("/{id}", studentHandler.GetStudent)
+		})
+
+		r.Route("/groups", func(r chi.Router) {
+			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+				r.Post("/", groupHandler.CreateGroup)
+				r.Patch("/", groupHandler.UpdateGroup)
+				r.Delete("/{id}", groupHandler.DeleteGroup)
+			})
+			r.Get("/", groupHandler.GetAllGroups)
+			r.Get("/{id}", groupHandler.GetGroup)
+		})
+
 		r.Route("/audiences", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
-				r.Post("/", scheduleHandler.CreateAudience)
-				r.Patch("/", scheduleHandler.UpdateAudience)
-				r.Delete("/{id}", scheduleHandler.DeleteAudience)
+				r.Post("/", audienceHandler.CreateAudience)
+				r.Patch("/", audienceHandler.UpdateAudience)
+				r.Delete("/{id}", audienceHandler.DeleteAudience)
 			})
-			r.Get("/{id}", scheduleHandler.GetAudience)
-			r.Get("/", scheduleHandler.GetAllAudience)
+			r.Get("/{id}", audienceHandler.GetAudience)
+			r.Get("/", audienceHandler.GetAllAudience)
 		})
 
 		r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {

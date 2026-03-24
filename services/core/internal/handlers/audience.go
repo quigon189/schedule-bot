@@ -12,15 +12,15 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type ScheduleHandler struct {
+type AudienceHandler struct {
 	scheduleService *services.ScheduleService
 }
 
-func NewScheduleHandler(scheduleService *services.ScheduleService) *ScheduleHandler {
-	return &ScheduleHandler{scheduleService: scheduleService}
+func NewAudienceHandler(scheduleService *services.ScheduleService) *AudienceHandler {
+	return &AudienceHandler{scheduleService: scheduleService}
 }
 
-func (h *ScheduleHandler) CreateAudience(w http.ResponseWriter, r *http.Request) {
+func (h *AudienceHandler) CreateAudience(w http.ResponseWriter, r *http.Request) {
 	var audience models.Audience
 	if err := json.NewDecoder(r.Body).Decode(&audience); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad requset: %v", err))
@@ -35,7 +35,7 @@ func (h *ScheduleHandler) CreateAudience(w http.ResponseWriter, r *http.Request)
 	utils.SuccessResponse(w, "audience created", audience)
 }
 
-func (h *ScheduleHandler) GetAudience(w http.ResponseWriter, r *http.Request) {
+func (h *AudienceHandler) GetAudience(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
@@ -51,7 +51,7 @@ func (h *ScheduleHandler) GetAudience(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, "audience getted", audience)
 }
 
-func (h *ScheduleHandler) GetAllAudience(w http.ResponseWriter, r *http.Request) {
+func (h *AudienceHandler) GetAllAudience(w http.ResponseWriter, r *http.Request) {
 	audiences, err := h.scheduleService.GetAllAudience(r.Context())
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get audiences: %v", err))
@@ -61,7 +61,7 @@ func (h *ScheduleHandler) GetAllAudience(w http.ResponseWriter, r *http.Request)
 	utils.SuccessResponse(w, "audiences getted", audiences)
 }
 
-func (h *ScheduleHandler) UpdateAudience(w http.ResponseWriter, r *http.Request) {
+func (h *AudienceHandler) UpdateAudience(w http.ResponseWriter, r *http.Request) {
 	var audience models.Audience
 	if err := json.NewDecoder(r.Body).Decode(&audience); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad requset: %v", err))
@@ -76,7 +76,7 @@ func (h *ScheduleHandler) UpdateAudience(w http.ResponseWriter, r *http.Request)
 	utils.SuccessResponse(w, "audience updated", audience)
 }
 
-func (h *ScheduleHandler) DeleteAudience(w http.ResponseWriter, r *http.Request) {
+func (h *AudienceHandler) DeleteAudience(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad requset: %v", err))

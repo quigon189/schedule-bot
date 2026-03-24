@@ -24,19 +24,19 @@ type User struct {
 }
 
 type Group struct {
-	ID            int
-	Name          string
-	Specialty     string
-	AdmissionYear int
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	Specialty     string `json:"specialty"`
+	AdmissionYear int    `json:"admission_year"`
 }
 
 type Student struct {
-	User  User
-	Group *Group
+	User  User   `json:"user"`
+	Group *Group `json:"group"`
 }
 
 type Teacher struct {
-	User User
+	User User `json:"user"`
 }
 
 func (u *User) RequireRole(role string) bool {
