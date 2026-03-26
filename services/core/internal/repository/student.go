@@ -25,18 +25,6 @@ func (r *StudentRepo) CreateStudent(ctx context.Context, user *models.User, grou
 	defer tx.Rollback(ctx)
 
 	query := `
-	INSERT INTO auth.users (username, full_name, email, password_hash)
-	VALUES ($1, $2, $3, $4)
-	RETURNING id, created_at, updated_at
-	`
-	err = tx.QueryRow(ctx, query, user.Name, user.FullName, user.Email, user.PasswordHash).Scan(
-		&user.ID, &user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
-		return err
-	}
-
-	query = `
 	INSERT INTO auth.user_roles (user_id, role_id)
 	VALUES ($1, (SELECT id FROM auth.roles WHERE name = 'student'))
 	ON CONFLICT DO NOTHING
@@ -175,6 +163,13 @@ func (r *StudentRepo) UpdateStudentGroup(ctx context.Context, userID int, groupI
 }
 
 func (r *StudentRepo) DeleteStudent(ctx context.Context, userID int) error {
-	_, err := r.db.Exec(ctx, `DELETE FROM auth.users WHERE id = $1`, userID)
+	_, err := r.db.Exec(ctx, `DELETE FROM auth.student_profiles WHERE user_id = $1`, userID)
 	return err
+}
+
+func ( r *StudentRepo) IsStudent(ctx context.Context, userID int) (bool, error) {
+	var exists bool
+	query := `SELECT EXISTS(SELECT 1 FROM auth.student_profiles WHERE user_id = $1)`
+	err := r.db.QueryRow(ctx, query, userID).Scan(&exists)
+	return exists, err
 }

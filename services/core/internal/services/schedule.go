@@ -5,7 +5,9 @@ import (
 	"core/internal/dto"
 	"core/internal/models"
 	"core/internal/repository"
+	"errors"
 	"fmt"
+	"slices"
 )
 
 type ScheduleService struct {
@@ -13,6 +15,8 @@ type ScheduleService struct {
 	groupRepo    *repository.GroupRepo
 	teacherRepo  *repository.TeacherRepo
 	studentRepo  *repository.StudentRepo
+	userRepo     *repository.UserRepo
+	roleRepo     *repository.RoleRepo
 }
 
 func NewScheduleService(
@@ -20,12 +24,16 @@ func NewScheduleService(
 	groupRepo *repository.GroupRepo,
 	teacherRepo *repository.TeacherRepo,
 	studentRepo *repository.StudentRepo,
+	userRepo *repository.UserRepo,
+	roleRepo *repository.RoleRepo,
 ) *ScheduleService {
 	return &ScheduleService{
 		audienceRepo: audienceRepo,
 		groupRepo:    groupRepo,
 		teacherRepo:  teacherRepo,
 		studentRepo:  studentRepo,
+		userRepo:     userRepo,
+		roleRepo:     roleRepo,
 	}
 }
 
@@ -71,7 +79,6 @@ func (s *ScheduleService) DeleteGroup(ctx context.Context, id int) error {
 	return s.groupRepo.Delete(ctx, id)
 }
 
-// ---------- Teacher methods ----------
 func (s *ScheduleService) CreateTeacher(ctx context.Context, req *dto.CreateUserRequest) (*models.Teacher, error) {
 	if err := req.Validate(); err != nil {
 		return nil, err
@@ -85,6 +92,9 @@ func (s *ScheduleService) CreateTeacher(ctx context.Context, req *dto.CreateUser
 		FullName:     req.FullName,
 		Email:        req.Email,
 		PasswordHash: passwordHash,
+	}
+	if err := s.userRepo.Create(ctx, &user); err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
 	}
 	if err := s.teacherRepo.CreateTeacher(ctx, &user); err != nil {
 		return nil, err
@@ -104,12 +114,10 @@ func (s *ScheduleService) DeleteTeacher(ctx context.Context, userID int) error {
 	return s.teacherRepo.DeleteTeacher(ctx, userID)
 }
 
-// ---------- Student methods ----------
 func (s *ScheduleService) CreateStudent(ctx context.Context, req *dto.CreateStudentRequest) (*models.Student, error) {
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
-	// Ensure group exists
 	group, err := s.groupRepo.GetByID(ctx, req.GroupID)
 	if err != nil {
 		return nil, fmt.Errorf("get group: %w", err)
@@ -127,6 +135,9 @@ func (s *ScheduleService) CreateStudent(ctx context.Context, req *dto.CreateStud
 		FullName:     req.FullName,
 		Email:        req.Email,
 		PasswordHash: passwordHash,
+	}
+	if err := s.userRepo.Create(ctx, &user); err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
 	}
 	if err := s.studentRepo.CreateStudent(ctx, &user, req.GroupID); err != nil {
 		return nil, err
@@ -155,4 +166,135 @@ func (s *ScheduleService) UpdateStudentGroup(ctx context.Context, userID int, gr
 
 func (s *ScheduleService) DeleteStudent(ctx context.Context, userID int) error {
 	return s.studentRepo.DeleteStudent(ctx, userID)
+}
+
+func (s *ScheduleService) AssignStudent(ctx context.Context, userID int, groupID int) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get user: %w", err)
+	}
+	if user == nil {
+		return errors.New("user not found")
+	}
+
+	isTeacher, err := s.teacherRepo.IsTeacher(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check teacher: %w", err)
+	}
+	if isTeacher {
+		return errors.New("user is already a teacher, cannot assign student")
+	}
+
+	group, err := s.groupRepo.GetByID(ctx, groupID)
+	if err != nil {
+		return fmt.Errorf("get group: %w", err)
+	}
+	if group == nil {
+		return errors.New("group not found")
+	}
+
+	if err := s.studentRepo.CreateStudent(ctx, user, groupID); err != nil {
+		return fmt.Errorf("create student profile: %w", err)
+	}
+
+	return nil
+}
+
+func (s *ScheduleService) AssignTeacher(ctx context.Context, userID int) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get user: %w", err)
+	}
+	if user == nil {
+		return errors.New("user not found")
+	}
+
+	isStudent, err := s.studentRepo.IsStudent(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check student: %w", err)
+	}
+	if isStudent {
+		return errors.New("user is already student, cannot assign teacher")
+	}
+
+	if err := s.teacherRepo.CreateTeacher(ctx, user); err != nil {
+		return fmt.Errorf("create teacher: %w", err)
+	}
+
+	return nil
+}
+
+func (s *ScheduleService) AssignRole(ctx context.Context, userID int, roleName string) error {
+	if roleName != "admin" && roleName != "manager" {
+		return errors.New("role must be 'admin' or 'manager'")
+	}
+
+	role, err := s.roleRepo.GetRoleByName(ctx, roleName)
+	if err != nil {
+		return fmt.Errorf("get role: %w", err)
+	}
+	if role == nil {
+		return errors.New("role not found")
+	}
+
+	return s.roleRepo.AssignRoleToUser(ctx, userID, roleName)
+}
+
+func (s *ScheduleService) RemoveRole(ctx context.Context, userID int, roleName string) error {
+	roles, err := s.roleRepo.GetRoles(ctx)
+	if err != nil {
+		return err
+	}
+
+	if !slices.ContainsFunc(roles, func(r models.Role) bool {
+		return r.Name == roleName
+	}) {
+		return errors.New("invalid role name")
+	}
+
+	return s.roleRepo.RemoveRoleFromUser(ctx, userID, roleName)
+}
+
+func (s *ScheduleService) RemoveStudent(ctx context.Context, userID int) error {
+	isStudent, err := s.studentRepo.IsStudent(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check student: %w", err)
+	}
+	if !isStudent {
+		return errors.New("user is not a student")
+	}
+
+	if err := s.studentRepo.DeleteStudent(ctx, userID); err != nil {
+		return fmt.Errorf("delete student profile: %w", err)
+	}
+
+	if err := s.roleRepo.RemoveRoleFromUser(ctx, userID, "student"); err != nil {
+		return fmt.Errorf("remove student role: %w", err)
+	}
+
+	return nil
+}
+
+func (s *ScheduleService) RemoveTeacher(ctx context.Context, userID int) error {
+	isTeacher, err := s.teacherRepo.IsTeacher(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check teacher: %w", err)
+	}
+	if !isTeacher {
+		return errors.New("user is not a teacher")
+	}
+
+	if err := s.teacherRepo.DeleteTeacher(ctx, userID); err != nil {
+		return fmt.Errorf("delete teacher profile: %w", err)
+	}
+
+	if err := s.roleRepo.RemoveRoleFromUser(ctx, userID, "teacher"); err != nil {
+		return fmt.Errorf("remove student role: %w", err)
+	}
+
+	return nil
+}
+
+func (s *ScheduleService) GetUserRoles(ctx context.Context, userID int) ([]models.Role, error) {
+	return s.roleRepo.GetUserRoles(ctx, userID)
 }

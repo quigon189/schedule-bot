@@ -25,18 +25,6 @@ func (r *TeacherRepo) CreateTeacher(ctx context.Context, user *models.User) erro
 	defer tx.Rollback(ctx)
 
 	query := `
-	INSERT INTO auth.users (username, full_name, email, password_hash)
-	VALUES ($1, $2, $3, $4)
-	RETURNING id, created_at, updated_at
-	`
-	err = tx.QueryRow(ctx, query, user.Name, user.FullName, user.Email, user.PasswordHash).Scan(
-		&user.ID, &user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
-		return err
-	}
-
-	query = `
 	INSERT INTO auth.user_roles (user_id, role_id)
 	VALUES ($1, (SELECT id FROM auth.roles WHERE name = 'teacher'))
 	ON CONFLICT DO NOTHING
@@ -154,6 +142,13 @@ func (r *TeacherRepo) GetAllTeachers(ctx context.Context) ([]models.Teacher, err
 }
 
 func (r *TeacherRepo) DeleteTeacher(ctx context.Context, userID int) error {
-	_, err := r.db.Exec(ctx, `DELETE FROM auth.users WHERE id = $1`, userID)
+	_, err := r.db.Exec(ctx, `DELETE FROM auth.teacher_profiles WHERE user_id = $1`, userID)
 	return err
+}
+
+func ( r *TeacherRepo) IsTeacher(ctx context.Context, userID int) (bool, error) {
+	var exists bool
+	query := `SELECT EXISTS(SELECT 1 FROM auth.teacher_profiles WHERE user_id = $1)`
+	err := r.db.QueryRow(ctx, query, userID).Scan(&exists)
+	return exists, err
 }
