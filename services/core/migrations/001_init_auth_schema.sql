@@ -30,7 +30,7 @@ CREATE TABLE auth.groups (
 	admission_year INTEGER NOT NULL
 );
 
-CREATE TABLE auth.student_profiels (
+CREATE TABLE auth.student_profiles (
 	user_id INTEGER PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
 	group_id INTEGER REFERENCES auth.groups(id) ON DELETE SET NULL
 );

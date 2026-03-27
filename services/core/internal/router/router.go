@@ -27,10 +27,11 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *Router {
 	groupRepo := repository.NewGroupRepo(pool)
 	teacherRepo := repository.NewTeacherRepo(pool)
 	studentRepo := repository.NewStudentRepo(pool)
+	roleRepo := repository.NewRoleRepo(pool)
 
 	tokenService := services.NewJWTService([]byte("123"), 24*time.Hour)
 	userService := services.NewUserService(userRepo, sessionRepo, tokenService)
-	scheduleService := services.NewScheduleService(audienceRepo, groupRepo, teacherRepo, studentRepo)
+	scheduleService := services.NewScheduleService(audienceRepo, groupRepo, teacherRepo, studentRepo, userRepo, roleRepo)
 
 	router := Router{
 		tokenService:    tokenService,
@@ -53,6 +54,7 @@ func (r *Router) SetupRoutes() {
 	groupHandler := handlers.NewGroupHandler(r.scheduleService)
 	teacherHandler := handlers.NewTeacherHandler(r.scheduleService)
 	studentHandler := handlers.NewStudentHandler(r.scheduleService)
+	roleHandler := handlers.NewRoleHandler(r.scheduleService)
 
 	r.router.Use(middleware.Logger)
 	r.router.Use(middleware.Recoverer)
@@ -69,8 +71,15 @@ func (r *Router) SetupRoutes() {
 				r.Get("/", userHandler.GetUsers)
 				r.Get("/{id}", userHandler.GetUser)
 				r.Post("/", userHandler.CreateUser)
+
 				r.Patch("/password", userHandler.UpdateUserPassword)
+
 			})
+			r.Route("/roles", func(r chi.Router) {
+				r.Post("/assign", roleHandler.AssignRole)
+				r.Delete("/remove", roleHandler.RemoveRole)
+			})
+
 		})
 
 		r.Route("/user", func(r chi.Router) {
@@ -82,6 +91,7 @@ func (r *Router) SetupRoutes() {
 		r.Route("/teachers", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", teacherHandler.CreateTeacher)
+				r.Post("/assign", roleHandler.AssignTeacher)
 				r.Delete("/{id}", teacherHandler.DeleteTeacher)
 			})
 			r.Get("/", teacherHandler.GetAllTeachers)
@@ -91,6 +101,7 @@ func (r *Router) SetupRoutes() {
 		r.Route("/students", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", studentHandler.CreateStudent)
+				r.Post("/assign", roleHandler.AssignStudent)
 				r.Patch("/{id}/group", studentHandler.UpdateStudentGroup)
 				r.Delete("/{id}", studentHandler.DeleteStudent)
 			})

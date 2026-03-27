@@ -34,7 +34,7 @@ func (r *StudentRepo) CreateStudent(ctx context.Context, user *models.User, grou
 	}
 
 	query = `
-	INSERT INTO auth.student_profiels (user_id, group_id)
+	INSERT INTO auth.student_profiles (user_id, group_id)
 	VALUES ($1, $2)
 	`
 	if _, err = tx.Exec(ctx, query, user.ID, groupID); err != nil {
@@ -64,12 +64,15 @@ func (r *StudentRepo) CreateStudent(ctx context.Context, user *models.User, grou
 }
 
 func (r *StudentRepo) GetStudentByUserID(ctx context.Context, userID int) (*models.Student, error) {
-	var student models.Student
+	student := models.Student{
+		User: models.User{},
+		Group: &models.Group{},
+	}
 	query := `
 	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at,
 	       g.id, g.name, g.specialty, g.admission_year
 	FROM auth.users u
-	JOIN auth.student_profiels sp ON u.id = sp.user_id
+	JOIN auth.student_profiles sp ON u.id = sp.user_id
 	LEFT JOIN auth.groups g ON sp.group_id = g.id
 	WHERE u.id = $1
 	`
@@ -120,7 +123,7 @@ func (r *StudentRepo) GetAllStudents(ctx context.Context) ([]models.Student, err
 	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at,
 	       g.id, g.name, g.specialty, g.admission_year
 	FROM auth.users u
-	JOIN auth.student_profiels sp ON u.id = sp.user_id
+	JOIN auth.student_profiles sp ON u.id = sp.user_id
 	LEFT JOIN auth.groups g ON sp.group_id = g.id
 	ORDER BY u.id
 	`
@@ -132,7 +135,10 @@ func (r *StudentRepo) GetAllStudents(ctx context.Context) ([]models.Student, err
 
 	var students []models.Student
 	for rows.Next() {
-		var s models.Student
+		s := models.Student{
+			User: models.User{},
+			Group: &models.Group{},
+		}
 		if err := rows.Scan(
 			&s.User.ID,
 			&s.User.Name,
@@ -155,7 +161,7 @@ func (r *StudentRepo) GetAllStudents(ctx context.Context) ([]models.Student, err
 
 func (r *StudentRepo) UpdateStudentGroup(ctx context.Context, userID int, groupID int) error {
 	_, err := r.db.Exec(ctx, `
-		UPDATE auth.student_profiels
+		UPDATE auth.student_profiles
 		SET group_id = $1
 		WHERE user_id = $2
 	`, groupID, userID)
