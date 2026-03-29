@@ -1,0 +1,3615 @@
+Текущий каталог: /home/quigon/schedule-bot/services/core
+├── Dockerfile
+├── cmd
+|   └── main.go
+├── go.mod
+├── go.sum
+├── internal
+|   ├── config
+|   |   └── config.go
+|   ├── dto
+|   |   ├── auth.go
+|   |   ├── role.go
+|   |   ├── schedule.go
+|   |   ├── subject.go
+|   |   └── user.go
+|   ├── handlers
+|   |   ├── audience.go
+|   |   ├── auth.go
+|   |   ├── group.go
+|   |   ├── role.go
+|   |   ├── student.go
+|   |   ├── subject.go
+|   |   ├── teacher.go
+|   |   └── user.go
+|   ├── middlewares
+|   |   └── tokens.go
+|   ├── models
+|   |   ├── schedule.go
+|   |   ├── session.go
+|   |   └── user.go
+|   ├── repository
+|   |   ├── audience.go
+|   |   ├── group.go
+|   |   ├── role.go
+|   |   ├── session.go
+|   |   ├── student.go
+|   |   ├── subject.go
+|   |   ├── teacher.go
+|   |   └── user.go
+|   ├── router
+|   |   └── router.go
+|   └── services
+|       ├── schedule.go
+|       ├── tokens.go
+|       ├── user.go
+|       └── utils.go
+├── migrations
+|   ├── 001_init_auth_schema.sql
+|   └── 002_init_schedule.sql
+└── pkg
+    ├── postgres
+    |   └── postgres.go
+    └── utils
+        └── response.go
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/cmd/main.go
+package main
+
+import (
+	"context"
+	"core/internal/config"
+	"core/internal/router"
+	"core/pkg/postgres"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+)
+
+func main() {
+	cfg := config.Load()
+
+	dsn := fmt.Sprintf(
+		"postgresql://%s:%s@%s:%s/%s?sslmode=disable",
+		cfg.DB.User,
+		cfg.DB.Password,
+		cfg.DB.Host,
+		cfg.DB.Port,
+		cfg.DB.Name,
+	)
+
+	pgPool, err := postgres.NewPostgresPool(dsn)
+	if err != nil {
+		log.Fatalf("Failed to get pgPool: %v", err)
+	}
+
+	if err := Migrations(pgPool, cfg.DB.MigrationsPath); err != nil {
+		log.Fatalf("Failed to apply migrations: %v", err)
+	}
+
+	r := router.New(cfg, pgPool)
+
+	server := http.Server{
+		Addr:    ":" + cfg.Server.Port,
+		Handler: r.Router(),
+	}
+
+	log.Printf("Auth server starting on port %s", cfg.Server.Port)
+	go func() {
+		if err := server.ListenAndServe(); err != nil || err != http.ErrServerClosed {
+			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	<-quit
+
+	log.Println("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("Server shutdown failed: %v", err)
+	}
+
+	log.Println("Server stoped")
+}
+
+func Migrations(pool *pgxpool.Pool, path string) error {
+	err := goose.SetDialect(string(goose.DialectPostgres))
+	if err != nil {
+		return fmt.Errorf("set dialect: %w", err)
+	}
+
+	db := stdlib.OpenDBFromPool(pool)
+
+	if err := goose.Up(db, path); err != nil {
+		return fmt.Errorf("goose Up migrations: %w", err)
+	}
+
+	return db.Close()
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/go.mod
+module core
+
+go 1.25.0
+
+require (
+	github.com/go-chi/chi/v5 v5.2.5
+	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/jackc/pgx/v5 v5.8.0
+	github.com/pressly/goose/v3 v3.27.0
+	golang.org/x/crypto v0.49.0
+)
+
+require (
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/mfridman/interpolate v0.0.2 // indirect
+	github.com/sethvargo/go-retry v0.3.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/text v0.35.0 // indirect
+)
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/config/config.go
+package config
+
+import (
+	"log"
+	"os"
+	"strconv"
+)
+
+type DBConfig struct {
+	Host           string
+	Port           string
+	User           string
+	Password       string
+	Name           string
+	MigrationsPath string
+}
+
+type ServerConfig struct {
+	Host string
+	Port string
+}
+
+type JWTConfig struct {
+	Secret  string
+	Expires int //seconds
+}
+
+type Config struct {
+	DB     DBConfig
+	Server ServerConfig
+	JWT    JWTConfig
+}
+
+func Load() *Config {
+	db := DBConfig{
+		Host:           getEnv("DB_HOST", "localhost"),
+		Port:           getEnv("DB_PORT", "5432"),
+		User:           getEnv("DB_USER", ""),
+		Password:       getEnv("DB_PASSWORD", ""),
+		Name:           getEnv("DB_NAME", ""),
+		MigrationsPath: getEnv("DB_MIGRATIONS", "migrations"),
+	}
+
+	server := ServerConfig{
+		Host: getEnv("SERVER_HOST", "localhost"),
+		Port: getEnv("SERVER_PORT", "8080"),
+	}
+
+	jwt := JWTConfig{
+		Secret:  getEnv("JWT_SECRET", ""),
+		Expires: getIntEnv("JWT_EXPIRES_SECONDS", 15*60),
+	}
+
+	if db.User == "" || db.Password == "" || db.Name == "" || jwt.Secret == "" {
+		log.Fatal("DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET must be set")
+	}
+
+	return &Config{
+		DB:     db,
+		Server: server,
+		JWT:    jwt,
+	}
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func getIntEnv(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/auth.go
+package dto
+
+type LoginRequest struct {
+	Username  string `json:"username"`
+	Password  string `json:"password"`
+	UserAgent string `json:"user_agent"`
+	ClientIP  string `json:"client_ip"`
+}
+
+type LoginResponse struct {
+	AccessToken  string `json:"access_token"`
+	SessionID    string `json:"session_id"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+type RefreshTokenRequest struct {
+	SessionID    string `json:"session_id"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/role.go
+package dto
+
+type AssignStudentRequest struct {
+	UserID  int `json:"user_id" validate:"required"`
+	GroupID int `json:"group_id" validate:"required"`
+}
+
+type AssignTeacherRequest struct {
+	UserID int `json:"user_id" validate:"required"`
+}
+
+type AssignRoleRequest struct {
+	UserID   int    `json:"user_id" validate:"required"`
+	RoleName string `json:"role_name" validate:"required,oneof=admin manager"`
+}
+
+type RemoveRoleRequest struct {
+	UserID   int    `json:"user_id" validate:"required"`
+	RoleName string `json:"role_name" validate:"required,oneof=admin manager student teacher"`
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/schedule.go
+package dto
+
+type CreateStudentRequest struct {
+	CreateUserRequest
+	GroupID  int    `json:"group_id" validate:"required"`
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/subject.go
+package dto
+
+import "core/internal/models"
+
+type CreateSubjectRequest struct {
+	Title string `json:"title" validate:"required"`
+	Semester int `json:"semester" validate:"required"`
+	HoursLoad int `json:"hours_load" validate:"required"`
+	StartDate string `json:"start_date" validate:"required"`
+	EndDate string `json:"end_date" validate:"required"`
+	GroupID int `json:"group_id" validate:"required"`
+}
+
+type PaginatedSubjectsRequest struct {
+	Page      int    `json:"page"`
+	PerPage   int    `json:"per_page"`
+	SortBy    string `json:"sort_by"`
+	SortOrder string `json:"sort_order"`
+}
+
+type PaginatedSubjectsResponse struct {
+	Subjects   []models.Subject `json:"subjects"`
+	Total      int              `json:"total"`
+	Page       int              `json:"page"`
+	PerPage    int              `json:"per_page"`
+	TotalPages int              `json:"total_pages"`
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/user.go
+package dto
+
+import (
+	"core/internal/models"
+	"errors"
+	"net/mail"
+	"regexp"
+	"strings"
+)
+
+const (
+	PASSWORD_LENGHT = 8
+)
+
+type CreateUserRequest struct {
+	Username string `json:"username"`
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (r *CreateUserRequest) Validate() error {
+	var errs []string
+
+	reUsername := regexp.MustCompile(`^[a-zA-Z0-9_]{3,20}$`)
+	if !reUsername.MatchString(r.Username) {
+		errs = append(errs, "username error")
+	}
+
+	if len(r.FullName) < 3 {
+		errs = append(errs, "full_name error")
+	}
+
+	if _, err := mail.ParseAddress(r.Email); err != nil {
+		errs = append(errs, "email error")
+	}
+
+	if len(r.Password) < PASSWORD_LENGHT {
+		errs = append(errs, "password error")
+	}
+
+	if len(errs) > 0 {
+		errStr := strings.Join(errs, "; ")
+		return errors.New(errStr)
+	}
+
+	return nil
+}
+
+type PaginatedUsers struct {
+	Users      []models.User `json:"users"`
+	Total      int           `json:"total"`
+	Page       int           `json:"page"`
+	PerPage    int           `json:"per_page"`
+	TotalPages int           `json:"total_pages"`
+}
+
+type PagiantedUserRequest struct {
+	Page      int    `json:"page"`
+	PerPage   int    `json:"per_page"`
+	SortBy    string `json:"sort_by"`
+	SortOrder string `json:"sort_order"`
+}
+
+type UpdateUserPasswordRequest struct {
+	UserID int `json:"user_id"`
+	NewPassword string `json:"new_password"`
+	OldPassword string `json:"old_password"`
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/audience.go
+package handlers
+
+import (
+	"core/internal/models"
+	"core/internal/services"
+	"core/pkg/utils"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type AudienceHandler struct {
+	scheduleService *services.ScheduleService
+}
+
+func NewAudienceHandler(scheduleService *services.ScheduleService) *AudienceHandler {
+	return &AudienceHandler{scheduleService: scheduleService}
+}
+
+func (h *AudienceHandler) CreateAudience(w http.ResponseWriter, r *http.Request) {
+	var audience models.Audience
+	if err := json.NewDecoder(r.Body).Decode(&audience); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad requset: %v", err))
+		return
+	}
+
+	if err := h.scheduleService.CreateAudience(r.Context(), &audience); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create audience: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "audience created", audience)
+}
+
+func (h *AudienceHandler) GetAudience(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+
+	audience, err := h.scheduleService.GetAudience(r.Context(), id)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get audience: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "audience getted", audience)
+}
+
+func (h *AudienceHandler) GetAllAudience(w http.ResponseWriter, r *http.Request) {
+	audiences, err := h.scheduleService.GetAllAudience(r.Context())
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get audiences: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "audiences getted", audiences)
+}
+
+func (h *AudienceHandler) UpdateAudience(w http.ResponseWriter, r *http.Request) {
+	var audience models.Audience
+	if err := json.NewDecoder(r.Body).Decode(&audience); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad requset: %v", err))
+		return
+	}
+
+	if err := h.scheduleService.UpdateAudience(r.Context(), &audience); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update audience: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "audience updated", audience)
+}
+
+func (h *AudienceHandler) DeleteAudience(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad requset: %v", err))
+		return
+	}
+
+	if err := h.scheduleService.DeleteAudience(r.Context(), id); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to delete audience: %v", err))
+		return
+	}	
+
+	utils.SuccessResponse(w, "audience deleted", nil)
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/auth.go
+package handlers
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"core/internal/dto"
+	"core/internal/services"
+	"core/pkg/utils"
+)
+
+type AuthHandler struct {
+	userService *services.UserService
+}
+
+func NewAuthHandler(userService *services.UserService) *AuthHandler {
+	return &AuthHandler{userService: userService}
+}
+
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	var req dto.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to decode body: %v", err))
+		return
+	}
+
+	resp, err := h.userService.Login(r.Context(), req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to login: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "success login", resp)
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	accessToken, ok := r.Context().Value("access_token").(string)
+	if !ok {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get access token"))
+		return
+	}
+	err := h.userService.Logout(r.Context(), accessToken)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to logout: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "success logout", nil)
+}
+
+func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	var req dto.RefreshTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to decode body: %v", err))
+		return
+	}
+
+	resp, err := h.userService.RefreshToken(r.Context(), &req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to refresh token: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "success refresh token", resp)
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/group.go
+package handlers
+
+import (
+	"core/internal/models"
+	"core/internal/services"
+	"core/pkg/utils"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type GroupHandler struct {
+	scheduleService *services.ScheduleService
+}
+
+func NewGroupHandler(scheduleService *services.ScheduleService) *GroupHandler {
+	return &GroupHandler{scheduleService: scheduleService}
+}
+
+func (h *GroupHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
+	var group models.Group
+	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+
+	if err := h.scheduleService.CreateGroup(r.Context(), &group); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create group: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "group created", group)
+}
+
+func (h *GroupHandler) GetGroup(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid id: %v", err))
+		return
+	}
+	group, err := h.scheduleService.GetGroup(r.Context(), id)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get group: %v", err))
+		return
+	}
+	if group == nil {
+		utils.ErrorResponse(w, http.StatusNotFound, "group not found")
+		return
+	}
+	utils.SuccessResponse(w, "group retrieved", group)
+}
+
+func (h *GroupHandler) GetAllGroups(w http.ResponseWriter, r *http.Request) {
+	groups, err := h.scheduleService.GetAllGroups(r.Context())
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get groups: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "groups retrieved", groups)
+}
+
+func (h *GroupHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
+	var group models.Group
+	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+
+	if err := h.scheduleService.UpdateGroup(r.Context(), &group); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update group: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "group updated", group)
+}
+
+func (h *GroupHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid id: %v", err))
+		return
+	}
+	if err := h.scheduleService.DeleteGroup(r.Context(), id); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to delete group: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "group deleted", nil)
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/role.go
+package handlers
+
+import (
+	"core/internal/dto"
+	"core/internal/services"
+	"core/pkg/utils"
+	"encoding/json"
+	"net/http"
+)
+
+type RoleHandler struct {
+	scheduleService *services.ScheduleService
+}
+
+func NewRoleHandler(scheduleService *services.ScheduleService) *RoleHandler {
+	return &RoleHandler{scheduleService: scheduleService}
+}
+
+func (h *RoleHandler) AssignStudent(w http.ResponseWriter, r *http.Request) {
+	var req dto.AssignStudentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	if err := h.scheduleService.AssignStudent(r.Context(), req.UserID, req.GroupID); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	utils.SuccessResponse(w, "student assigned", nil)
+}
+
+func (h *RoleHandler) AssignTeacher(w http.ResponseWriter, r *http.Request) {
+	var req dto.AssignTeacherRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	if err := h.scheduleService.AssignTeacher(r.Context(), req.UserID); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	utils.SuccessResponse(w, "teacher assigned", nil)
+}
+
+func (h *RoleHandler) AssignRole(w http.ResponseWriter, r *http.Request) {
+	var req dto.AssignRoleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	if err := h.scheduleService.AssignRole(r.Context(), req.UserID, req.RoleName); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	utils.SuccessResponse(w, "role assigned", nil)
+}
+
+func (h *RoleHandler) RemoveRole(w http.ResponseWriter, r *http.Request) {
+	var req dto.RemoveRoleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	switch req.RoleName {
+	case "student":
+		if err := h.scheduleService.RemoveStudent(r.Context(), req.UserID); err != nil {
+			utils.ErrorResponse(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	case "teacher":
+		if err := h.scheduleService.RemoveTeacher(r.Context(), req.UserID); err != nil {
+			utils.ErrorResponse(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	default:
+		if err := h.scheduleService.RemoveRole(r.Context(), req.UserID, req.RoleName); err != nil {
+			utils.ErrorResponse(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
+	utils.SuccessResponse(w, "role removed", nil)
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/student.go
+package handlers
+
+import (
+	"core/internal/dto"
+	"core/internal/services"
+	"core/pkg/utils"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type StudentHandler struct {
+	scheduleService *services.ScheduleService
+}
+
+func NewStudentHandler(scheduleService *services.ScheduleService) *StudentHandler {
+	return &StudentHandler{scheduleService: scheduleService}
+}
+
+func (h *StudentHandler) CreateStudent(w http.ResponseWriter, r *http.Request) {
+	var req dto.CreateStudentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+	student, err := h.scheduleService.CreateStudent(r.Context(), &req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create student: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "student created", student)
+}
+
+func (h *StudentHandler) GetStudent(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid id: %v", err))
+		return
+	}
+	student, err := h.scheduleService.GetStudent(r.Context(), id)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get student: %v", err))
+		return
+	}
+	if student == nil {
+		utils.ErrorResponse(w, http.StatusNotFound, "student not found")
+		return
+	}
+	utils.SuccessResponse(w, "student retrieved", student)
+}
+
+func (h *StudentHandler) GetAllStudents(w http.ResponseWriter, r *http.Request) {
+	students, err := h.scheduleService.GetAllStudents(r.Context())
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get students: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "students retrieved", students)
+}
+
+func (h *StudentHandler) UpdateStudentGroup(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid id: %v", err))
+		return
+	}
+
+	var req struct {
+		GroupID int `json:"group_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+	if err := h.scheduleService.UpdateStudentGroup(r.Context(), id, req.GroupID); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update student group: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "student group updated", nil)
+}
+
+func (h *StudentHandler) DeleteStudent(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid id: %v", err))
+		return
+	}
+	if err := h.scheduleService.DeleteStudent(r.Context(), id); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to delete student: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "student deleted", nil)
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/subject.go
+package handlers
+
+import (
+	"core/internal/dto"
+	"core/internal/models"
+	"core/internal/services"
+	"core/pkg/utils"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type SubjectHandler struct {
+	scheduleService *services.ScheduleService
+}
+
+func NewSubjectHandler(scheduleService *services.ScheduleService) *SubjectHandler {
+	return &SubjectHandler{scheduleService: scheduleService}
+}
+
+func (h *SubjectHandler) CreateSubject(w http.ResponseWriter, r *http.Request) {
+	var req dto.CreateSubjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+	endDate, err := time.Parse("2006-01-02", req.EndDate)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+	subject := models.Subject{
+		Title: req.Title,
+		Semester: req.Semester,
+		HoursLoad: req.HoursLoad,
+		GroupID: req.GroupID,
+		StartDate: startDate,
+		EndDate: endDate,
+	}
+	if subject.StartDate.After(subject.EndDate) {
+		utils.ErrorResponse(w, http.StatusBadRequest, "start_date must be before end_date")
+		return
+	}
+	if err := h.scheduleService.CreateSubject(r.Context(), &subject); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create subject: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "subject created", subject)
+}
+
+func (h *SubjectHandler) GetSubject(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	subject, err := h.scheduleService.GetSubjectByID(r.Context(), id)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get subject: %v", err))
+		return
+	}
+	if subject == nil {
+		utils.ErrorResponse(w, http.StatusNotFound, "subject not found")
+		return
+	}
+	utils.SuccessResponse(w, "subject retrieved", subject)
+}
+
+func (h *SubjectHandler) GetAllSubjects(w http.ResponseWriter, r *http.Request) {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+	sortBy := r.URL.Query().Get("sort_by")
+	sortOrder := r.URL.Query().Get("sort_order")
+
+	req := dto.PaginatedSubjectsRequest{
+		Page:      page,
+		PerPage:   perPage,
+		SortBy:    sortBy,
+		SortOrder: sortOrder,
+	}
+	resp, err := h.scheduleService.GetAllSubjects(r.Context(), &req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get subjects: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "subjects retrieved", resp)
+}
+
+func (h *SubjectHandler) GetSubjectsByGroup(w http.ResponseWriter, r *http.Request) {
+	groupID, err := strconv.Atoi(chi.URLParam(r, "group_id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid group_id")
+		return
+	}
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+	sortBy := r.URL.Query().Get("sort_by")
+	sortOrder := r.URL.Query().Get("sort_order")
+
+	req := dto.PaginatedSubjectsRequest{
+		Page:      page,
+		PerPage:   perPage,
+		SortBy:    sortBy,
+		SortOrder: sortOrder,
+	}
+	resp, err := h.scheduleService.GetSubjectsByGroupID(r.Context(), groupID, &req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get subjects: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "subjects retrieved", resp)
+}
+
+func (h *SubjectHandler) UpdateSubject(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var subject models.Subject
+	if err := json.NewDecoder(r.Body).Decode(&subject); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+	subject.ID = id
+	if subject.StartDate.After(subject.EndDate) {
+		utils.ErrorResponse(w, http.StatusBadRequest, "start_date must be before end_date")
+		return
+	}
+	if err := h.scheduleService.UpdateSubject(r.Context(), &subject); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update subject: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "subject updated", subject)
+}
+
+func (h *SubjectHandler) DeleteSubject(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := h.scheduleService.DeleteSubject(r.Context(), id); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to delete subject: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "subject deleted", nil)
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/teacher.go
+package handlers
+
+import (
+	"core/internal/dto"
+	"core/internal/services"
+	"core/pkg/utils"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type TeacherHandler struct {
+	scheduleService *services.ScheduleService
+}
+
+func NewTeacherHandler(scheduleService *services.ScheduleService) *TeacherHandler {
+	return &TeacherHandler{scheduleService: scheduleService}
+}
+
+func (h *TeacherHandler) CreateTeacher(w http.ResponseWriter, r *http.Request) {
+	var req dto.CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+	teacher, err := h.scheduleService.CreateTeacher(r.Context(), &req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create teacher: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "teacher created", teacher)
+}
+
+func (h *TeacherHandler) GetTeacher(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid id: %v", err))
+		return
+	}
+	teacher, err := h.scheduleService.GetTeacher(r.Context(), id)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get teacher: %v", err))
+		return
+	}
+	if teacher == nil {
+		utils.ErrorResponse(w, http.StatusNotFound, "teacher not found")
+		return
+	}
+	utils.SuccessResponse(w, "teacher retrieved", teacher)
+}
+
+func (h *TeacherHandler) GetAllTeachers(w http.ResponseWriter, r *http.Request) {
+	teachers, err := h.scheduleService.GetAllTeachers(r.Context())
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get teachers: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "teachers retrieved", teachers)
+}
+
+func (h *TeacherHandler) DeleteTeacher(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid id: %v", err))
+		return
+	}
+	if err := h.scheduleService.DeleteTeacher(r.Context(), id); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to delete teacher: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "teacher deleted", nil)
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/user.go
+package handlers
+
+import (
+	"core/internal/dto"
+	"core/internal/models"
+	"core/internal/services"
+	"core/pkg/utils"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type UserHandler struct {
+	userService *services.UserService
+}
+
+func NewUserHandler(userService *services.UserService) *UserHandler {
+	return &UserHandler{userService: userService}
+}
+
+func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var req dto.CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to decode body: %v", err))
+		return
+	}
+
+	user, err := h.userService.CreateUser(r.Context(), &req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to create user: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "user created", user)
+}
+
+func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
+	var req dto.PagiantedUserRequest
+	req.Page, _ = strconv.Atoi(r.URL.Query().Get("page"))
+	req.PerPage, _ = strconv.Atoi(r.URL.Query().Get("per_page"))
+	req.SortBy = r.URL.Query().Get("sort_by")
+	req.SortOrder = r.URL.Query().Get("sort_order")
+
+	users, err := h.userService.GetPaginatedUsers(r.Context(), &req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get users: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "paginated users", users)
+}
+
+func (h *UserHandler) GetUser(w http.ResponseWriter, r* http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid path value: %v", err))
+		return
+	}
+
+	user, err := h.userService.GetUser(r.Context(), id)	
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get user wtih id %d: %v", id, err))
+		return 
+	}
+
+	utils.SuccessResponse(w, "get user success", user)
+}
+
+func (h *UserHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := r.Context().Value("user").(models.User)
+	if !ok {
+		utils.ErrorResponse(w, http.StatusBadRequest, "failed to get current user")
+		return
+	}
+
+	user, err := h.userService.GetUser(r.Context(), currentUser.ID)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get user: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "get user success", user)
+}
+
+func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request) {
+	var req dto.UpdateUserPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+
+	currentUser, ok := r.Context().Value("user").(models.User)
+	if !ok {
+		utils.ErrorResponse(w, http.StatusBadRequest, "failed to get current user")
+		return
+	}
+
+	isAdmin := currentUser.RequireRole("admin")
+
+	if !isAdmin && currentUser.ID != req.UserID {
+		utils.ErrorResponse(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	userID := currentUser.ID
+	if isAdmin {
+		if err := h.userService.UpdatePasswordAdmin(r.Context(), req.UserID, req.NewPassword); err != nil {
+			utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to get user: %v", err))
+			return
+		}
+	} else {
+		user, err := h.userService.GetUser(r.Context(), userID)
+		if err != nil {
+			utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to get user: %v", err))
+			return
+		}
+
+		if err := h.userService.UpdatePassword(r.Context(), user, req.NewPassword, req.OldPassword); err != nil {
+			utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update password: %v", err))
+			return
+		}
+	}
+
+	utils.SuccessResponse(w, "password changed", nil)
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/middlewares/tokens.go
+package middlewares
+
+import (
+	"context"
+	"core/internal/models"
+	"core/internal/services"
+	"core/pkg/utils"
+	"net/http"
+)
+
+type AuthMiddleware struct {
+	userService *services.UserService
+}
+
+func NewAuthMiddleware(userService *services.UserService) *AuthMiddleware {
+	return &AuthMiddleware{userService: userService}
+}
+
+func (m *AuthMiddleware) ValidateToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if len(authHeader) < 7 {
+			utils.ErrorResponse(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+
+		tokenStr := authHeader[7:]
+		user, err := m.userService.ValidateToken(tokenStr)
+		if err != nil {
+			utils.ErrorResponse(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), "user", *user)
+		ctx = context.WithValue(ctx, "access_token", tokenStr)
+
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (m *AuthMiddleware) AdminRequire(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, ok := r.Context().Value("user").(models.User)
+
+		if !ok || !user.RequireRole("admin") {
+			utils.ErrorResponse(w, http.StatusForbidden, "access denied")
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/models/schedule.go
+package models
+
+import "time"
+
+type Audience struct {
+	ID     int    `json:"id"`
+	Name   string `json:"name"`
+	Number string `json:"number"`
+}
+
+type Subject struct {
+	ID        int       `json:"id"`
+	Title     string    `json:"title"`
+	Semester  int       `json:"semester"`
+	HoursLoad int       `json:"hours_load"`
+	StartDate time.Time `json:"start_date"`
+	EndDate   time.Time `json:"end_date"`
+	GroupID   int       `json:"group_id"`
+
+	Group Group `json:"group"`
+}
+
+type ScheduleTemplate struct {
+	ID         int `json:"id"`
+	DayOfWeek  int `json:"day_of_week"`
+	Number     int `json:"number"`
+	WeekType   int `json:"week_type"`
+	SubjectID  int `json:"subject_id"`
+	TeacherID  int `json:"teacher_id"`
+	AudienceID int `json:"audience_id"`
+
+	Subject  Subject  `json:"subject"`
+	Teacher  Teacher  `json:"teacher"`
+	Audience Audience `json:"audience"`
+}
+
+type LessonLog struct {
+	ID         int       `json:"id"`
+	Date       time.Time `json:"date"`
+	Number     int       `json:"number"`
+	Status     string    `json:"status"`
+	Comment    string    `json:"comment"`
+	SubjectID  int       `json:"subject_id"`
+	TeacherID  int       `json:"teacher_id"`
+	AudienceID int       `json:"audience_id"`
+
+	Subject  Subject  `json:"subject"`
+	Teacher  Teacher  `json:"teacher"`
+	Audience Audience `json:"audience"`
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/models/session.go
+package models
+
+import (
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type Session struct {
+	ID           pgtype.UUID
+	RefreshToken string
+	UserAgent    string
+	ClientIP     string
+	User         *User
+	CreatedAt    time.Time
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/models/user.go
+package models
+
+import (
+	"slices"
+	"time"
+)
+
+type Role struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type User struct {
+	ID           int       `json:"id"`
+	Email        string    `json:"email"`
+	Name         string    `json:"username"`
+	FullName     string    `json:"full_name"`
+	PasswordHash string    `json:"-"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+
+	Roles []Role `json:"roles"`
+}
+
+type Group struct {
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	Specialty     string `json:"specialty"`
+	AdmissionYear int    `json:"admission_year"`
+}
+
+type Student struct {
+	User  User   `json:"user"`
+	Group *Group `json:"group"`
+}
+
+type Teacher struct {
+	User User `json:"user"`
+}
+
+func (u *User) RequireRole(role string) bool {
+	return slices.ContainsFunc(u.Roles, func(r Role) bool {
+		return r.Name == role
+	})
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/audience.go
+package repository
+
+import (
+	"context"
+	"core/internal/models"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type AudienceRepo struct {
+	db *pgxpool.Pool
+}
+
+func NewAudienceRepo(db *pgxpool.Pool) *AudienceRepo {
+	return &AudienceRepo{db: db}
+}
+
+func (r *AudienceRepo) Create(ctx context.Context, audience *models.Audience) error {
+	query := `
+	INSERT INTO schedule.audiences(name, number)
+	VALUES ($1, $2)
+	RETURNING id
+	`
+	return r.db.QueryRow(ctx, query, audience.Name, audience.Number).Scan(&audience.ID)
+}
+
+func (r *AudienceRepo) Get(ctx context.Context, id int) (*models.Audience, error) {
+	var audience models.Audience
+	query := `
+	SELECT id, name, number
+	FROM schedule.audiences
+	WHERE id = $1
+	`
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&audience.ID,
+		&audience.Name,
+		&audience.Number,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &audience, nil
+}
+
+func (r *AudienceRepo) GetAll(ctx context.Context) ([]models.Audience, error) {
+	audiences := []models.Audience{}
+	query := `
+	SELECT id, name, number
+	FROM schedule.audiences
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return audiences, nil
+		} else {
+			return nil, err
+		}
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var audience models.Audience
+		err := rows.Scan(
+			&audience.ID,
+			&audience.Name,
+			&audience.Number,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		audiences = append(audiences, audience)
+	}
+
+	return audiences, nil
+}
+
+func (r *AudienceRepo) Update(ctx context.Context, audience *models.Audience) error {
+	query := `
+	UPDATE schedule.audiences
+	SET name = $1, number = $2
+	WHERE id = $3
+	`
+	_, err := r.db.Exec(ctx, query, audience.Name, audience.Number, audience.ID)
+	return err
+}
+
+func (r *AudienceRepo) Delete(ctx context.Context, id int) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM schedule.audiences WHERE id = $1`, id)
+	return err
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/group.go
+package repository
+
+import (
+	"context"
+	"core/internal/models"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type GroupRepo struct {
+	db *pgxpool.Pool
+}
+
+func NewGroupRepo(db *pgxpool.Pool) *GroupRepo {
+	return &GroupRepo{db: db}
+}
+
+func (r *GroupRepo) Create(ctx context.Context, group *models.Group) error {
+	query := `
+	INSERT INTO auth.groups (name, specialty, admission_year)
+	VALUES ($1, $2, $3)
+	RETURNING id
+	`
+	return r.db.QueryRow(ctx, query, group.Name, group.Specialty, group.AdmissionYear).Scan(&group.ID)
+}
+
+func (r *GroupRepo) GetByID(ctx context.Context, id int) (*models.Group, error) {
+	var group models.Group
+	query := `
+	SELECT id, name, specialty, admission_year
+	FROM auth.groups
+	WHERE id = $1
+	`
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&group.ID,
+		&group.Name,
+		&group.Specialty,
+		&group.AdmissionYear,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &group, nil
+}
+
+func (r *GroupRepo) GetAll(ctx context.Context) ([]models.Group, error) {
+	groups := []models.Group{}
+	query := `
+	SELECT id, name, specialty, admission_year
+	FROM auth.groups
+	ORDER BY id
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var g models.Group
+		if err := rows.Scan(&g.ID, &g.Name, &g.Specialty, &g.AdmissionYear); err != nil {
+			return nil, err
+		}
+		groups = append(groups, g)
+	}
+	return groups, nil
+}
+
+func (r *GroupRepo) Update(ctx context.Context, group *models.Group) error {
+	query := `
+	UPDATE auth.groups
+	SET name = $1, specialty = $2, admission_year = $3
+	WHERE id = $4
+	`
+	_, err := r.db.Exec(ctx, query, group.Name, group.Specialty, group.AdmissionYear, group.ID)
+	return err
+}
+
+func (r *GroupRepo) Delete(ctx context.Context, id int) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM auth.groups WHERE id = $1`, id)
+	return err
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/role.go
+package repository
+
+import (
+	"context"
+	"core/internal/models"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type RoleRepo struct {
+	db *pgxpool.Pool
+}
+
+func NewRoleRepo(db *pgxpool.Pool) *RoleRepo {
+	return &RoleRepo{db: db}
+}
+
+func (r *RoleRepo) GetRoleByName(ctx context.Context, name string) (*models.Role, error) {
+	var role models.Role
+	query := `SELECT id, name, description FROM auth.roles WHERE name = $1`
+	err := r.db.QueryRow(ctx, query, name).Scan(&role.ID, &role.Name, &role.Description)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &role, nil
+}
+
+func (r *RoleRepo) AssignRoleToUser(ctx context.Context, userID int, roleName string) error {
+	query := `
+	INSERT INTO auth.user_roles (user_id, role_id)
+	VALUES ($1, (SELECT id FROM auth.roles WHERE name = $2))
+	ON CONFLICT (user_id, role_id) DO NOTHING
+	`
+	_, err := r.db.Exec(ctx, query, userID, roleName)
+	return err
+}
+
+func (r *RoleRepo) RemoveRoleFromUser(ctx context.Context, userID int, roleName string) error {
+	query := `
+	DELETE FROM auth.user_roles
+	WHERE user_id = $1 AND role_id = (SELECT id FROM auth.roles WHERE name = $2)
+	`
+	_, err := r.db.Exec(ctx, query, userID, roleName)
+	return err
+}
+
+func (r *RoleRepo) GetUserRoles(ctx context.Context, userID int) ([]models.Role, error) {
+	query := `
+	SELECT r.id, r.name, r.description
+	FROM auth.roles r
+	JOIN auth.user_roles ur ON r.id = ur.role_id
+	WHERE ur.user_id = $1
+	`
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var roles []models.Role
+	for rows.Next() {
+		var role models.Role
+		if err := rows.Scan(&role.ID, &role.Name, &role.Description); err != nil {
+			return nil, err
+		}
+		roles = append(roles, role)
+	}
+	return roles, nil
+}
+
+func (r *RoleRepo) GetRoles(ctx context.Context) ([]models.Role, error) {
+	var roles []models.Role
+
+	query := `
+	SELECT id, name, description
+	FROM auth.roles
+	`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		if errors.As(err, pgx.ErrNoRows) {
+			return roles, nil
+		} else {
+			return nil, err
+		}
+	}
+
+	for rows.Next() {
+		var role models.Role
+		err := rows.Scan(
+			&role.ID,
+			&role.Name,
+			&role.Description,
+		)
+		if err != nil {
+			return nil, err
+		}
+		roles = append(roles, role)
+	}
+
+	return roles, nil
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/session.go
+package repository
+
+import (
+	"context"
+	"core/internal/models"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type SessionRepo struct {
+	db *pgxpool.Pool
+}
+
+func NewSessionRepo(db *pgxpool.Pool) *SessionRepo {
+	return &SessionRepo{db: db}
+}
+
+func (r *SessionRepo) Create(ctx context.Context, session *models.Session) error {
+	query := `
+	INSERT INTO auth.sessions (user_id, refresh_token, user_agent, client_ip)
+	VALUES ($1, $2, $3, $4)
+	RETURNING id, created_at
+	`
+	return r.db.QueryRow(ctx, query,
+		session.User.ID,
+		session.RefreshToken,
+		session.UserAgent,
+		session.ClientIP,
+	).Scan(
+		&session.ID,
+		&session.CreatedAt,
+	)
+}
+
+func (r *SessionRepo) GetByID(ctx context.Context, id string) (*models.Session, error) {
+	session := models.Session{
+		User: &models.User{},
+	}
+
+	query := `
+	SELECT s.id, s.refresh_token, s.user_agent, s.client_ip,
+		u.id, u.username, u.full_name, u.email, u.password_hash,
+		u.created_at, u.updated_at
+	FROM auth.sessions s
+	JOIN auth.users u ON u.id = s.user_id
+	WHERE s.id = $1
+	`
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&session.ID,
+		&session.RefreshToken,
+		&session.UserAgent,
+		&session.ClientIP,
+		&session.User.ID,
+		&session.User.Name,
+		&session.User.FullName,
+		&session.User.Email,
+		&session.User.PasswordHash,
+		&session.User.CreatedAt,
+		&session.User.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &session, nil
+}
+
+func (r *SessionRepo) GetByUserID(ctx context.Context, id int) ([]models.Session, error) {
+	sessions := []models.Session{}
+	query := `
+	SELECT id, refresh_token, user_agent, client_ip
+	FROM auth.sessions
+	WHERE user_id = $1
+	`
+	row, err := r.db.Query(ctx, query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer row.Close()
+
+	for row.Next() {
+		session := models.Session{}
+		err := row.Scan(
+			&session.ID,
+			&session.RefreshToken,
+			&session.UserAgent,
+			&session.ClientIP,
+		)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, session)
+	}
+
+	return sessions, nil
+}
+
+func (r *SessionRepo) UpdateRefreshToken(ctx context.Context, id string, refreshToken string) error {
+	query := `
+	UPDATE auth.sessions
+	SET refresh_token = $1
+	WHERE id = $2
+	`
+	_, err := r.db.Exec(ctx, query, refreshToken, id)
+	return err
+}
+
+func (r *SessionRepo) Delete(ctx context.Context, id pgtype.UUID) error {
+	query := `
+	DELETE FROM auth.sessions WHERE id = $1
+	`
+	_, err := r.db.Exec(ctx, query, id)
+	return err
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/student.go
+package repository
+
+import (
+	"context"
+	"core/internal/models"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type StudentRepo struct {
+	db *pgxpool.Pool
+}
+
+func NewStudentRepo(db *pgxpool.Pool) *StudentRepo {
+	return &StudentRepo{db: db}
+}
+
+func (r *StudentRepo) CreateStudent(ctx context.Context, user *models.User, groupID int) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+	INSERT INTO auth.user_roles (user_id, role_id)
+	VALUES ($1, (SELECT id FROM auth.roles WHERE name = 'student'))
+	ON CONFLICT DO NOTHING
+	`
+	if _, err = tx.Exec(ctx, query, user.ID); err != nil {
+		return err
+	}
+
+	query = `
+	INSERT INTO auth.student_profiles (user_id, group_id)
+	VALUES ($1, $2)
+	`
+	if _, err = tx.Exec(ctx, query, user.ID, groupID); err != nil {
+		return err
+	}
+
+	query = `
+	SELECT r.id, r.name, r.description
+	FROM auth.user_roles ur
+	JOIN auth.roles r ON ur.role_id = r.id
+	WHERE ur.user_id = $1
+	`
+	rows, err := tx.Query(ctx, query, user.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var role models.Role
+		if err := rows.Scan(&role.ID, &role.Name, &role.Description); err != nil {
+			return err
+		}
+		user.Roles = append(user.Roles, role)
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *StudentRepo) GetStudentByUserID(ctx context.Context, userID int) (*models.Student, error) {
+	student := models.Student{
+		User: models.User{},
+		Group: &models.Group{},
+	}
+	query := `
+	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at,
+	       g.id, g.name, g.specialty, g.admission_year
+	FROM auth.users u
+	JOIN auth.student_profiles sp ON u.id = sp.user_id
+	LEFT JOIN auth.groups g ON sp.group_id = g.id
+	WHERE u.id = $1
+	`
+	err := r.db.QueryRow(ctx, query, userID).Scan(
+		&student.User.ID,
+		&student.User.Name,
+		&student.User.FullName,
+		&student.User.Email,
+		&student.User.PasswordHash,
+		&student.User.CreatedAt,
+		&student.User.UpdatedAt,
+		&student.Group.ID,
+		&student.Group.Name,
+		&student.Group.Specialty,
+		&student.Group.AdmissionYear,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	query = `
+	SELECT r.id, r.name, r.description
+	FROM auth.roles r
+	JOIN auth.user_roles ur ON r.id = ur.role_id
+	WHERE ur.user_id = $1
+	`
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var role models.Role
+		if err := rows.Scan(&role.ID, &role.Name, &role.Description); err != nil {
+			return nil, err
+		}
+		student.User.Roles = append(student.User.Roles, role)
+	}
+
+	return &student, nil
+}
+
+func (r *StudentRepo) GetAllStudents(ctx context.Context) ([]models.Student, error) {
+	query := `
+	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at,
+	       g.id, g.name, g.specialty, g.admission_year
+	FROM auth.users u
+	JOIN auth.student_profiles sp ON u.id = sp.user_id
+	LEFT JOIN auth.groups g ON sp.group_id = g.id
+	ORDER BY u.id
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var students []models.Student
+	for rows.Next() {
+		s := models.Student{
+			User: models.User{},
+			Group: &models.Group{},
+		}
+		if err := rows.Scan(
+			&s.User.ID,
+			&s.User.Name,
+			&s.User.FullName,
+			&s.User.Email,
+			&s.User.PasswordHash,
+			&s.User.CreatedAt,
+			&s.User.UpdatedAt,
+			&s.Group.ID,
+			&s.Group.Name,
+			&s.Group.Specialty,
+			&s.Group.AdmissionYear,
+		); err != nil {
+			return nil, err
+		}
+		students = append(students, s)
+	}
+	return students, nil
+}
+
+func (r *StudentRepo) UpdateStudentGroup(ctx context.Context, userID int, groupID int) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE auth.student_profiles
+		SET group_id = $1
+		WHERE user_id = $2
+	`, groupID, userID)
+	return err
+}
+
+func (r *StudentRepo) DeleteStudent(ctx context.Context, userID int) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM auth.student_profiles WHERE user_id = $1`, userID)
+	return err
+}
+
+func ( r *StudentRepo) IsStudent(ctx context.Context, userID int) (bool, error) {
+	var exists bool
+	query := `SELECT EXISTS(SELECT 1 FROM auth.student_profiles WHERE user_id = $1)`
+	err := r.db.QueryRow(ctx, query, userID).Scan(&exists)
+	return exists, err
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/subject.go
+package repository
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math"
+	"strings"
+
+	"core/internal/dto"
+	"core/internal/models"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type SubjectRepo struct {
+	db                *pgxpool.Pool
+	allowedSortFields map[string]bool
+}
+
+func NewSubjectRepo(db *pgxpool.Pool) *SubjectRepo {
+	return &SubjectRepo{
+		db: db,
+		allowedSortFields: map[string]bool{
+			"id":          true,
+			"title":       true,
+			"semester":    true,
+			"hours_load":  true,
+			"start_date":  true,
+			"end_date":    true,
+			"group_id":    true,
+		},
+	}
+}
+
+func (r *SubjectRepo) CreateSubject(ctx context.Context, subject *models.Subject) error {
+	query := `
+	INSERT INTO schedule.subjects (title, semester, hours_load, start_date, end_date, group_id)
+	VALUES ($1, $2, $3, $4, $5, $6)
+	RETURNING id
+	`
+	err := r.db.QueryRow(ctx, query,
+		subject.Title,
+		subject.Semester,
+		subject.HoursLoad,
+		subject.StartDate,
+		subject.EndDate,
+		subject.GroupID,
+	).Scan(&subject.ID)
+	return err
+}
+
+func (r *SubjectRepo) GetSubjectByID(ctx context.Context, id int) (*models.Subject, error) {
+	subject := models.Subject{
+		Group: models.Group{},
+	}
+	query := `
+	SELECT s.id, s.title, s.semester, s.hours_load, s.start_date, s.end_date, s.group_id,
+	       g.id, g.name, g.specialty, g.admission_year
+	FROM schedule.subjects s
+	LEFT JOIN auth.groups g ON s.group_id = g.id
+	WHERE s.id = $1
+	`
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&subject.ID,
+		&subject.Title,
+		&subject.Semester,
+		&subject.HoursLoad,
+		&subject.StartDate,
+		&subject.EndDate,
+		&subject.GroupID,
+		&subject.Group.ID,
+		&subject.Group.Name,
+		&subject.Group.Specialty,
+		&subject.Group.AdmissionYear,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &subject, nil
+}
+
+func (r *SubjectRepo) GetAllSubjects(ctx context.Context, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
+	page := req.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := req.PerPage
+	if perPage < 1 {
+		perPage = 10 // default
+	}
+	if perPage > 100 {
+		perPage = 100
+	}
+
+	sortBy := req.SortBy
+	if sortBy == "" || !r.allowedSortFields[sortBy] {
+		sortBy = "id"
+	}
+	sortOrder := strings.ToUpper(req.SortOrder)
+	if sortOrder != "ASC" && sortOrder != "DESC" {
+		sortOrder = "ASC"
+	}
+
+	offset := (page - 1) * perPage
+	orderClause := fmt.Sprintf("%s %s", sortBy, sortOrder)
+
+	query := fmt.Sprintf(`
+	SELECT s.id, s.title, s.semester, s.hours_load, s.start_date, s.end_date, s.group_id,
+	       g.id, g.name, g.specialty, g.admission_year
+	FROM schedule.subjects s
+	LEFT JOIN auth.groups g ON s.group_id = g.id
+	ORDER BY %s
+	LIMIT $1 OFFSET $2
+	`, orderClause)
+
+	rows, err := r.db.Query(ctx, query, perPage, offset)
+	if err != nil {
+		return nil, fmt.Errorf("query subjects: %w", err)
+	}
+	defer rows.Close()
+
+	var subjects []models.Subject
+	for rows.Next() {
+		subject := models.Subject{
+			Group: models.Group{},
+		}
+		if err := rows.Scan(
+			&subject.ID,
+			&subject.Title,
+			&subject.Semester,
+			&subject.HoursLoad,
+			&subject.StartDate,
+			&subject.EndDate,
+			&subject.GroupID,
+			&subject.Group.ID,
+			&subject.Group.Name,
+			&subject.Group.Specialty,
+			&subject.Group.AdmissionYear,
+		); err != nil {
+			return nil, fmt.Errorf("scan subject: %w", err)
+		}
+		subjects = append(subjects, subject)
+	}
+
+	var total int
+	err = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM schedule.subjects`).Scan(&total)
+	if err != nil {
+		return nil, fmt.Errorf("count subjects: %w", err)
+	}
+
+	totalPages := int(math.Ceil(float64(total) / float64(perPage)))
+
+	return &dto.PaginatedSubjectsResponse{
+		Subjects:   subjects,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+func (r *SubjectRepo) GetSubjectsByGroupID(ctx context.Context, groupID int, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
+	page := req.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := req.PerPage
+	if perPage < 1 {
+		perPage = 10
+	}
+	if perPage > 100 {
+		perPage = 100
+	}
+
+	sortBy := req.SortBy
+	if sortBy == "" || !r.allowedSortFields[sortBy] {
+		sortBy = "id"
+	}
+	sortOrder := strings.ToUpper(req.SortOrder)
+	if sortOrder != "ASC" && sortOrder != "DESC" {
+		sortOrder = "ASC"
+	}
+
+	offset := (page - 1) * perPage
+	orderClause := fmt.Sprintf("%s %s", sortBy, sortOrder)
+
+	query := fmt.Sprintf(`
+	SELECT s.id, s.title, s.semester, s.hours_load, s.start_date, s.end_date, s.group_id,
+	       g.id, g.name, g.specialty, g.admission_year
+	FROM schedule.subjects s
+	LEFT JOIN auth.groups g ON s.group_id = g.id
+	WHERE s.group_id = $1
+	ORDER BY %s
+	LIMIT $2 OFFSET $3
+	`, orderClause)
+
+	rows, err := r.db.Query(ctx, query, groupID, perPage, offset)
+	if err != nil {
+		return nil, fmt.Errorf("query subjects by group: %w", err)
+	}
+	defer rows.Close()
+
+	var subjects []models.Subject
+	for rows.Next() {
+		subject := models.Subject{
+			Group: models.Group{},
+		}
+		if err := rows.Scan(
+			&subject.ID,
+			&subject.Title,
+			&subject.Semester,
+			&subject.HoursLoad,
+			&subject.StartDate,
+			&subject.EndDate,
+			&subject.GroupID,
+			&subject.Group.ID,
+			&subject.Group.Name,
+			&subject.Group.Specialty,
+			&subject.Group.AdmissionYear,
+		); err != nil {
+			return nil, fmt.Errorf("scan subject: %w", err)
+		}
+		subjects = append(subjects, subject)
+	}
+
+	var total int
+	err = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM schedule.subjects WHERE group_id = $1`, groupID).Scan(&total)
+	if err != nil {
+		return nil, fmt.Errorf("count subjects for group: %w", err)
+	}
+
+	totalPages := int(math.Ceil(float64(total) / float64(perPage)))
+
+	return &dto.PaginatedSubjectsResponse{
+		Subjects:   subjects,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+func (r *SubjectRepo) UpdateSubject(ctx context.Context, subject *models.Subject) error {
+	query := `
+	UPDATE schedule.subjects
+	SET title = $1, semester = $2, hours_load = $3, start_date = $4, end_date = $5
+	WHERE id = $6
+	`
+	_, err := r.db.Exec(ctx, query,
+		subject.Title,
+		subject.Semester,
+		subject.HoursLoad,
+		subject.StartDate,
+		subject.EndDate,
+		subject.ID,
+	)
+	return err
+}
+
+func (r *SubjectRepo) DeleteSubject(ctx context.Context, id int) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM schedule.subjects WHERE id = $1`, id)
+	return err
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/teacher.go
+package repository
+
+import (
+	"context"
+	"core/internal/models"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type TeacherRepo struct {
+	db *pgxpool.Pool
+}
+
+func NewTeacherRepo(db *pgxpool.Pool) *TeacherRepo {
+	return &TeacherRepo{db: db}
+}
+
+func (r *TeacherRepo) CreateTeacher(ctx context.Context, user *models.User) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+	INSERT INTO auth.user_roles (user_id, role_id)
+	VALUES ($1, (SELECT id FROM auth.roles WHERE name = 'teacher'))
+	ON CONFLICT DO NOTHING
+	`
+	if _, err = tx.Exec(ctx, query, user.ID); err != nil {
+		return err
+	}
+
+	query = `
+	INSERT INTO auth.teacher_profiles (user_id)
+	VALUES ($1)
+	`
+	if _, err = tx.Exec(ctx, query, user.ID); err != nil {
+		return err
+	}
+
+	query = `
+	SELECT r.id, r.name, r.description
+	FROM auth.user_roles ur
+	JOIN auth.roles r ON ur.role_id = r.id
+	WHERE ur.user_id = $1
+	`
+	rows, err := tx.Query(ctx, query, user.ID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var role models.Role
+		if err := rows.Scan(&role.ID, &role.Name, &role.Description); err != nil {
+			return err
+		}
+		user.Roles = append(user.Roles, role)
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *TeacherRepo) GetTeacherByUserID(ctx context.Context, userID int) (*models.Teacher, error) {
+	var teacher models.Teacher
+	query := `
+	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at
+	FROM auth.users u
+	JOIN auth.teacher_profiles tp ON u.id = tp.user_id
+	WHERE u.id = $1
+	`
+	err := r.db.QueryRow(ctx, query, userID).Scan(
+		&teacher.User.ID,
+		&teacher.User.Name,
+		&teacher.User.FullName,
+		&teacher.User.Email,
+		&teacher.User.PasswordHash,
+		&teacher.User.CreatedAt,
+		&teacher.User.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	query = `
+	SELECT r.id, r.name, r.description
+	FROM auth.roles r
+	JOIN auth.user_roles ur ON r.id = ur.role_id
+	WHERE ur.user_id = $1
+	`
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var role models.Role
+		if err := rows.Scan(&role.ID, &role.Name, &role.Description); err != nil {
+			return nil, err
+		}
+		teacher.User.Roles = append(teacher.User.Roles, role)
+	}
+
+	return &teacher, nil
+}
+
+func (r *TeacherRepo) GetAllTeachers(ctx context.Context) ([]models.Teacher, error) {
+	query := `
+	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at
+	FROM auth.users u
+	JOIN auth.teacher_profiles tp ON u.id = tp.user_id
+	ORDER BY u.id
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var teachers []models.Teacher
+	for rows.Next() {
+		var t models.Teacher
+		if err := rows.Scan(
+			&t.User.ID,
+			&t.User.Name,
+			&t.User.FullName,
+			&t.User.Email,
+			&t.User.PasswordHash,
+			&t.User.CreatedAt,
+			&t.User.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		teachers = append(teachers, t)
+	}
+	return teachers, nil
+}
+
+func (r *TeacherRepo) DeleteTeacher(ctx context.Context, userID int) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM auth.teacher_profiles WHERE user_id = $1`, userID)
+	return err
+}
+
+func ( r *TeacherRepo) IsTeacher(ctx context.Context, userID int) (bool, error) {
+	var exists bool
+	query := `SELECT EXISTS(SELECT 1 FROM auth.teacher_profiles WHERE user_id = $1)`
+	err := r.db.QueryRow(ctx, query, userID).Scan(&exists)
+	return exists, err
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/user.go
+package repository
+
+import (
+	"context"
+	"core/internal/dto"
+	"core/internal/models"
+	"fmt"
+	"math"
+	"strings"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type UserRepo struct {
+	db                *pgxpool.Pool
+	allowedSortFields map[string]bool
+	allowedSortOrders map[string]bool
+}
+
+func NewUserRepo(db *pgxpool.Pool) *UserRepo {
+	return &UserRepo{
+		db: db,
+		allowedSortFields: map[string]bool{
+			"id":         true,
+			"username":   true,
+			"full_name":  true,
+			"email":      true,
+			"created_at": true,
+		},
+		allowedSortOrders: map[string]bool{
+			"ASC":  true,
+			"DESC": true,
+		},
+	}
+}
+
+func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+	INSERT INTO auth.users (username, full_name, email, password_hash) 
+	VALUES ($1, $2, $3, $4)
+	RETURNING id, created_at, updated_at
+	`
+	err = tx.QueryRow(ctx, query,
+		user.Name,
+		user.FullName,
+		user.Email,
+		user.PasswordHash,
+	).Scan(
+		&user.ID,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err != nil {
+		return err
+	}
+
+	query = `
+	INSERT INTO auth.user_roles (user_id, role_id)
+	VALUES (
+		$1,
+		(SELECT id FROM auth.roles WHERE name = 'user' LIMIT 1)
+	)
+	ON CONFLICT (user_id, role_id) DO NOTHING
+	`
+	_, err = tx.Exec(ctx, query, user.ID)
+	if err != nil {
+		return err
+	}
+
+	query = `
+	SELECT r.id, r.name, r.description
+	FROM auth.user_roles ur
+	JOIN auth.roles r ON ur.role_id = r.id
+	WHERE ur.user_id = $1
+	`
+
+	row, err := tx.Query(ctx, query, user.ID)
+	if err == nil {
+		for row.Next() {
+			var role models.Role
+			err := row.Scan(&role.ID, &role.Name, &role.Description)
+			if err == nil {
+				user.Roles = append(user.Roles, role)
+			}
+		}
+	}
+	row.Close()
+
+	return tx.Commit(ctx)
+}
+
+func (r *UserRepo) GetByID(ctx context.Context, id int) (*models.User, error) {
+	var user models.User
+	query := `
+	SELECT id, username, full_name, email, password_hash, created_at, updated_at
+	FROM auth.users
+	WHERE id = $1
+	`
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&user.ID,
+		&user.Name,
+		&user.FullName,
+		&user.Email,
+		&user.PasswordHash,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	query = `
+	SELECT r.id, r.name, r.description
+	FROM auth.roles r
+	JOIN auth.user_roles ur ON ur.role_id = r.id
+	WHERE ur.user_id = $1
+	`
+	row, err := r.db.Query(ctx, query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer row.Close()
+
+	for row.Next() {
+		var role models.Role
+		err = row.Scan(&role.ID, &role.Name, &role.Description)
+		if err != nil {
+			return nil, err
+		}
+		user.Roles = append(user.Roles, role)
+	}
+
+	return &user, nil
+}
+
+func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.User, error) {
+	var user models.User
+	query := `
+	SELECT id, username, full_name, email, password_hash, created_at, updated_at
+	FROM auth.users
+	WHERE username = $1
+	`
+	err := r.db.QueryRow(ctx, query, username).Scan(
+		&user.ID,
+		&user.Name,
+		&user.FullName,
+		&user.Email,
+		&user.PasswordHash,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	query = `
+	SELECT r.id, r.name, r.description
+	FROM auth.roles r
+	JOIN auth.user_roles ur ON ur.role_id = r.id
+	WHERE ur.user_id = $1
+	`
+	row, err := r.db.Query(ctx, query, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer row.Close()
+
+	for row.Next() {
+		var role models.Role
+		err = row.Scan(&role.ID, &role.Name, &role.Description)
+		if err != nil {
+			return nil, err
+		}
+		user.Roles = append(user.Roles, role)
+	}
+
+	return &user, nil
+}
+
+func (r *UserRepo) GetUsersPaginated(ctx context.Context, page, perPage int, sortBy, sortOrder string) (*dto.PaginatedUsers, error) {
+	if page < 1 {
+		page = 1
+	}
+
+	if perPage < 1 {
+		page = 1
+	}
+
+	if sortBy == "" || !r.allowedSortFields[sortBy] {
+		sortBy = "id"
+	}
+
+	sortOrder = strings.ToUpper(sortOrder)
+	if sortOrder == "" || !r.allowedSortOrders[sortOrder] {
+		sortOrder = "ASC"
+	}
+
+	offset := (page - 1) * perPage
+	orderClause := fmt.Sprintf("%s %s", sortBy, sortOrder)
+
+	query := fmt.Sprintf(`
+	SELECT id, username, full_name, email, created_at, updated_at
+	FROM auth.users
+	ORDER BY %s
+	LIMIT $1 OFFSET $2
+	`, orderClause)
+
+	rows, err := r.db.Query(ctx, query, perPage, offset)
+	if err != nil {
+		return nil, fmt.Errorf("query users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var user models.User
+		err := rows.Scan(
+			&user.ID,
+			&user.Name,
+			&user.FullName,
+			&user.Email,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan user: %w", err)
+		}
+
+		users = append(users, user)
+	}
+
+	var total int
+	err = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM auth.users`).Scan(&total)
+	if err != nil {
+		return nil, fmt.Errorf("count users: %w", err)
+	}
+
+	totalPages := int(math.Ceil(float64(total) / float64(perPage)))
+
+	return &dto.PaginatedUsers{
+		Users: users,
+		Total: total,
+		Page: page,
+		PerPage: perPage,
+		TotalPages: totalPages,
+	}, nil
+}
+
+func (r *UserRepo) GetAll(ctx context.Context) ([]models.User, error) {
+	var users []models.User
+
+	query := `
+	SELECT id, username, full_name, email, created_at, updated_at
+	FROM auth.users 
+	`
+
+	row, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer row.Close()
+
+	for row.Next() {
+		var user models.User
+		err := row.Scan(
+			&user.ID,
+			&user.Name,
+			&user.FullName,
+			&user.Email,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		users = append(users, user)
+	}
+
+	return users, nil
+}
+
+func (r *UserRepo) UpdatePasswordHash(ctx context.Context, id int, passwordHash string) error {
+	query := `
+	UPDATE auth.users
+	SET password_hash = $1
+	WHERE id = $2
+	`
+	_, err := r.db.Exec(ctx, query, passwordHash, id)
+	return err
+}
+
+func (r *UserRepo) UpdateFullName(ctx context.Context, id int, fullName string) error {
+	query := `
+	UPDATE auth.users
+	SET full_name = $1
+	WHERE id = $2
+	`
+	_, err := r.db.Exec(ctx, query, fullName, id)
+	return err
+}
+
+func (r *UserRepo) Delete(ctx context.Context, id int) error {
+	query := `
+	DELETE FROM auth.users WHERE id = $1
+	`
+	_, err := r.db.Exec(ctx, query, id)
+	return err
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/router/router.go
+package router
+
+import (
+	"core/internal/config"
+	"core/internal/handlers"
+	"core/internal/middlewares"
+	"core/internal/repository"
+	"core/internal/services"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type Router struct {
+	tokenService    *services.JWTService
+	authService     *services.UserService
+	scheduleService *services.ScheduleService
+	router          *chi.Mux
+}
+
+func New(cfg *config.Config, pool *pgxpool.Pool) *Router {
+	userRepo := repository.NewUserRepo(pool)
+	sessionRepo := repository.NewSessionRepo(pool)
+	audienceRepo := repository.NewAudienceRepo(pool)
+	groupRepo := repository.NewGroupRepo(pool)
+	teacherRepo := repository.NewTeacherRepo(pool)
+	studentRepo := repository.NewStudentRepo(pool)
+	roleRepo := repository.NewRoleRepo(pool)
+	subjectRepo := repository.NewSubjectRepo(pool)
+
+	tokenService := services.NewJWTService([]byte("123"), 24*time.Hour)
+	userService := services.NewUserService(userRepo, sessionRepo, tokenService)
+	scheduleService := services.NewScheduleService(audienceRepo, groupRepo, teacherRepo, studentRepo, userRepo, roleRepo, subjectRepo)
+
+	router := Router{
+		tokenService:    tokenService,
+		authService:     userService,
+		scheduleService: scheduleService,
+		router:          chi.NewRouter(),
+	}
+
+	router.SetupRoutes()
+
+	return &router
+}
+
+func (r *Router) SetupRoutes() {
+	authMiddleware := middlewares.NewAuthMiddleware(r.authService)
+
+	authHandler := handlers.NewAuthHandler(r.authService)
+	userHandler := handlers.NewUserHandler(r.authService)
+	audienceHandler := handlers.NewAudienceHandler(r.scheduleService)
+	groupHandler := handlers.NewGroupHandler(r.scheduleService)
+	teacherHandler := handlers.NewTeacherHandler(r.scheduleService)
+	studentHandler := handlers.NewStudentHandler(r.scheduleService)
+	roleHandler := handlers.NewRoleHandler(r.scheduleService)
+	subjectHandler := handlers.NewSubjectHandler(r.scheduleService)
+
+	r.router.Use(middleware.Logger)
+	r.router.Use(middleware.Recoverer)
+
+	r.router.Post("/login", authHandler.Login)
+	r.router.Post("/refresh", authHandler.RefreshToken)
+
+	r.router.With(authMiddleware.ValidateToken).Group(func(r chi.Router) {
+		r.Get("/logout", authHandler.Logout)
+
+		r.Route("/admin", func(r chi.Router) {
+			r.Use(authMiddleware.AdminRequire)
+			r.Route("/users", func(r chi.Router) {
+				r.Get("/", userHandler.GetUsers)
+				r.Get("/{id}", userHandler.GetUser)
+				r.Post("/", userHandler.CreateUser)
+
+				r.Patch("/password", userHandler.UpdateUserPassword)
+
+			})
+			r.Route("/roles", func(r chi.Router) {
+				r.Post("/assign", roleHandler.AssignRole)
+				r.Delete("/remove", roleHandler.RemoveRole)
+			})
+
+		})
+
+		r.Route("/user", func(r chi.Router) {
+			r.Get("/", userHandler.GetCurrentUser)
+			r.Get("/{id}", userHandler.GetUser)
+			r.Patch("/password", userHandler.UpdateUserPassword)
+		})
+
+		r.Route("/teachers", func(r chi.Router) {
+			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+				r.Post("/", teacherHandler.CreateTeacher)
+				r.Post("/assign", roleHandler.AssignTeacher)
+				r.Delete("/{id}", teacherHandler.DeleteTeacher)
+			})
+			r.Get("/", teacherHandler.GetAllTeachers)
+			r.Get("/{id}", teacherHandler.GetTeacher)
+		})
+
+		r.Route("/students", func(r chi.Router) {
+			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+				r.Post("/", studentHandler.CreateStudent)
+				r.Post("/assign", roleHandler.AssignStudent)
+				r.Patch("/{id}/group", studentHandler.UpdateStudentGroup)
+				r.Delete("/{id}", studentHandler.DeleteStudent)
+			})
+			r.Get("/", studentHandler.GetAllStudents)
+			r.Get("/{id}", studentHandler.GetStudent)
+		})
+
+		r.Route("/groups", func(r chi.Router) {
+			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+				r.Post("/", groupHandler.CreateGroup)
+				r.Patch("/", groupHandler.UpdateGroup)
+				r.Delete("/{id}", groupHandler.DeleteGroup)
+			})
+			r.Get("/", groupHandler.GetAllGroups)
+			r.Get("/{id}", groupHandler.GetGroup)
+		})
+
+		r.Route("/audiences", func(r chi.Router) {
+			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+				r.Post("/", audienceHandler.CreateAudience)
+				r.Patch("/", audienceHandler.UpdateAudience)
+				r.Delete("/{id}", audienceHandler.DeleteAudience)
+			})
+			r.Get("/{id}", audienceHandler.GetAudience)
+			r.Get("/", audienceHandler.GetAllAudience)
+		})
+
+		r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+		})
+
+		r.Route("/subjects", func(r chi.Router) {
+			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+				r.Post("/", subjectHandler.CreateSubject)
+				r.Patch("/{id}", subjectHandler.UpdateSubject)
+				r.Delete("/{id}", subjectHandler.DeleteSubject)
+			})
+			r.Get("/", subjectHandler.GetAllSubjects)
+			r.Get("/group/{group_id}", subjectHandler.GetSubjectsByGroup)
+			r.Get("/{id}", subjectHandler.GetSubject)
+		})
+	})
+}
+
+func (r *Router) Router() *chi.Mux {
+	return r.router
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/services/schedule.go
+package services
+
+import (
+	"context"
+	"core/internal/dto"
+	"core/internal/models"
+	"core/internal/repository"
+	"errors"
+	"fmt"
+	"slices"
+)
+
+type ScheduleService struct {
+	audienceRepo *repository.AudienceRepo
+	groupRepo    *repository.GroupRepo
+	teacherRepo  *repository.TeacherRepo
+	studentRepo  *repository.StudentRepo
+	userRepo     *repository.UserRepo
+	roleRepo     *repository.RoleRepo
+	subjectRepo  *repository.SubjectRepo
+}
+
+func NewScheduleService(
+	audienceRepo *repository.AudienceRepo,
+	groupRepo *repository.GroupRepo,
+	teacherRepo *repository.TeacherRepo,
+	studentRepo *repository.StudentRepo,
+	userRepo *repository.UserRepo,
+	roleRepo *repository.RoleRepo,
+	subjectRepo *repository.SubjectRepo,
+) *ScheduleService {
+	return &ScheduleService{
+		audienceRepo: audienceRepo,
+		groupRepo:    groupRepo,
+		teacherRepo:  teacherRepo,
+		studentRepo:  studentRepo,
+		userRepo:     userRepo,
+		roleRepo:     roleRepo,
+		subjectRepo:  subjectRepo,
+	}
+}
+
+// ---------- Audience methods ----------
+func (s *ScheduleService) CreateAudience(ctx context.Context, audience *models.Audience) error {
+	return s.audienceRepo.Create(ctx, audience)
+}
+
+func (s *ScheduleService) GetAudience(ctx context.Context, id int) (*models.Audience, error) {
+	return s.audienceRepo.Get(ctx, id)
+}
+
+func (s *ScheduleService) GetAllAudience(ctx context.Context) ([]models.Audience, error) {
+	return s.audienceRepo.GetAll(ctx)
+}
+
+func (s *ScheduleService) UpdateAudience(ctx context.Context, audience *models.Audience) error {
+	return s.audienceRepo.Update(ctx, audience)
+}
+
+func (s *ScheduleService) DeleteAudience(ctx context.Context, id int) error {
+	return s.audienceRepo.Delete(ctx, id)
+}
+
+// ---------- Group methods ----------
+func (s *ScheduleService) CreateGroup(ctx context.Context, group *models.Group) error {
+	return s.groupRepo.Create(ctx, group)
+}
+
+func (s *ScheduleService) GetGroup(ctx context.Context, id int) (*models.Group, error) {
+	return s.groupRepo.GetByID(ctx, id)
+}
+
+func (s *ScheduleService) GetAllGroups(ctx context.Context) ([]models.Group, error) {
+	return s.groupRepo.GetAll(ctx)
+}
+
+func (s *ScheduleService) UpdateGroup(ctx context.Context, group *models.Group) error {
+	return s.groupRepo.Update(ctx, group)
+}
+
+func (s *ScheduleService) DeleteGroup(ctx context.Context, id int) error {
+	return s.groupRepo.Delete(ctx, id)
+}
+
+func (s *ScheduleService) CreateTeacher(ctx context.Context, req *dto.CreateUserRequest) (*models.Teacher, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	passwordHash, err := hashPassword(req.Password)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+	user := models.User{
+		Name:         req.Username,
+		FullName:     req.FullName,
+		Email:        req.Email,
+		PasswordHash: passwordHash,
+	}
+	if err := s.userRepo.Create(ctx, &user); err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+	if err := s.teacherRepo.CreateTeacher(ctx, &user); err != nil {
+		return nil, err
+	}
+	return &models.Teacher{User: user}, nil
+}
+
+func (s *ScheduleService) GetTeacher(ctx context.Context, userID int) (*models.Teacher, error) {
+	return s.teacherRepo.GetTeacherByUserID(ctx, userID)
+}
+
+func (s *ScheduleService) GetAllTeachers(ctx context.Context) ([]models.Teacher, error) {
+	return s.teacherRepo.GetAllTeachers(ctx)
+}
+
+func (s *ScheduleService) DeleteTeacher(ctx context.Context, userID int) error {
+	return s.teacherRepo.DeleteTeacher(ctx, userID)
+}
+
+func (s *ScheduleService) CreateStudent(ctx context.Context, req *dto.CreateStudentRequest) (*models.Student, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	group, err := s.groupRepo.GetByID(ctx, req.GroupID)
+	if err != nil {
+		return nil, fmt.Errorf("get group: %w", err)
+	}
+	if group == nil {
+		return nil, fmt.Errorf("group with id %d not found", req.GroupID)
+	}
+
+	passwordHash, err := hashPassword(req.Password)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+	user := models.User{
+		Name:         req.Username,
+		FullName:     req.FullName,
+		Email:        req.Email,
+		PasswordHash: passwordHash,
+	}
+	if err := s.userRepo.Create(ctx, &user); err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+	if err := s.studentRepo.CreateStudent(ctx, &user, req.GroupID); err != nil {
+		return nil, err
+	}
+	return &models.Student{User: user, Group: group}, nil
+}
+
+func (s *ScheduleService) GetStudent(ctx context.Context, userID int) (*models.Student, error) {
+	return s.studentRepo.GetStudentByUserID(ctx, userID)
+}
+
+func (s *ScheduleService) GetAllStudents(ctx context.Context) ([]models.Student, error) {
+	return s.studentRepo.GetAllStudents(ctx)
+}
+
+func (s *ScheduleService) UpdateStudentGroup(ctx context.Context, userID int, groupID int) error {
+	group, err := s.groupRepo.GetByID(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	if group == nil {
+		return fmt.Errorf("group with id %d not found", groupID)
+	}
+	return s.studentRepo.UpdateStudentGroup(ctx, userID, groupID)
+}
+
+func (s *ScheduleService) DeleteStudent(ctx context.Context, userID int) error {
+	return s.studentRepo.DeleteStudent(ctx, userID)
+}
+
+func (s *ScheduleService) AssignStudent(ctx context.Context, userID int, groupID int) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get user: %w", err)
+	}
+	if user == nil {
+		return errors.New("user not found")
+	}
+
+	isTeacher, err := s.teacherRepo.IsTeacher(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check teacher: %w", err)
+	}
+	if isTeacher {
+		return errors.New("user is already a teacher, cannot assign student")
+	}
+
+	group, err := s.groupRepo.GetByID(ctx, groupID)
+	if err != nil {
+		return fmt.Errorf("get group: %w", err)
+	}
+	if group == nil {
+		return errors.New("group not found")
+	}
+
+	if err := s.studentRepo.CreateStudent(ctx, user, groupID); err != nil {
+		return fmt.Errorf("create student profile: %w", err)
+	}
+
+	return nil
+}
+
+func (s *ScheduleService) AssignTeacher(ctx context.Context, userID int) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("get user: %w", err)
+	}
+	if user == nil {
+		return errors.New("user not found")
+	}
+
+	isStudent, err := s.studentRepo.IsStudent(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check student: %w", err)
+	}
+	if isStudent {
+		return errors.New("user is already student, cannot assign teacher")
+	}
+
+	if err := s.teacherRepo.CreateTeacher(ctx, user); err != nil {
+		return fmt.Errorf("create teacher: %w", err)
+	}
+
+	return nil
+}
+
+func (s *ScheduleService) AssignRole(ctx context.Context, userID int, roleName string) error {
+	if roleName != "admin" && roleName != "manager" {
+		return errors.New("role must be 'admin' or 'manager'")
+	}
+
+	role, err := s.roleRepo.GetRoleByName(ctx, roleName)
+	if err != nil {
+		return fmt.Errorf("get role: %w", err)
+	}
+	if role == nil {
+		return errors.New("role not found")
+	}
+
+	return s.roleRepo.AssignRoleToUser(ctx, userID, roleName)
+}
+
+func (s *ScheduleService) RemoveRole(ctx context.Context, userID int, roleName string) error {
+	roles, err := s.roleRepo.GetRoles(ctx)
+	if err != nil {
+		return err
+	}
+
+	if !slices.ContainsFunc(roles, func(r models.Role) bool {
+		return r.Name == roleName
+	}) {
+		return errors.New("invalid role name")
+	}
+
+	return s.roleRepo.RemoveRoleFromUser(ctx, userID, roleName)
+}
+
+func (s *ScheduleService) RemoveStudent(ctx context.Context, userID int) error {
+	isStudent, err := s.studentRepo.IsStudent(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check student: %w", err)
+	}
+	if !isStudent {
+		return errors.New("user is not a student")
+	}
+
+	if err := s.studentRepo.DeleteStudent(ctx, userID); err != nil {
+		return fmt.Errorf("delete student profile: %w", err)
+	}
+
+	if err := s.roleRepo.RemoveRoleFromUser(ctx, userID, "student"); err != nil {
+		return fmt.Errorf("remove student role: %w", err)
+	}
+
+	return nil
+}
+
+func (s *ScheduleService) RemoveTeacher(ctx context.Context, userID int) error {
+	isTeacher, err := s.teacherRepo.IsTeacher(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check teacher: %w", err)
+	}
+	if !isTeacher {
+		return errors.New("user is not a teacher")
+	}
+
+	if err := s.teacherRepo.DeleteTeacher(ctx, userID); err != nil {
+		return fmt.Errorf("delete teacher profile: %w", err)
+	}
+
+	if err := s.roleRepo.RemoveRoleFromUser(ctx, userID, "teacher"); err != nil {
+		return fmt.Errorf("remove student role: %w", err)
+	}
+
+	return nil
+}
+
+func (s *ScheduleService) GetUserRoles(ctx context.Context, userID int) ([]models.Role, error) {
+	return s.roleRepo.GetUserRoles(ctx, userID)
+}
+
+func (s *ScheduleService) CreateSubject(ctx context.Context, subject *models.Subject) error {
+	return s.subjectRepo.CreateSubject(ctx, subject)
+}
+
+func (s *ScheduleService) GetSubjectByID(ctx context.Context, id int) (*models.Subject, error) {
+	return s.subjectRepo.GetSubjectByID(ctx, id)
+}
+
+func (s *ScheduleService) GetAllSubjects(ctx context.Context, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
+	return s.subjectRepo.GetAllSubjects(ctx, req)
+}
+
+func (s *ScheduleService) GetSubjectsByGroupID(ctx context.Context, groupID int, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
+	return s.subjectRepo.GetSubjectsByGroupID(ctx, groupID, req)
+}
+
+func (s *ScheduleService) UpdateSubject(ctx context.Context, subject *models.Subject) error {
+	return s.subjectRepo.UpdateSubject(ctx, subject)
+}
+
+func (s *ScheduleService) DeleteSubject(ctx context.Context, id int) error {
+	return s.subjectRepo.DeleteSubject(ctx, id)
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/services/tokens.go
+package services
+
+import (
+	"core/internal/models"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+type JWTService struct {
+	secretKey []byte
+	expires   time.Duration
+}
+
+type CustomClaims struct {
+	User      models.User `json:"user"`
+	SessionID string      `json:"session_id"`
+	jwt.RegisteredClaims
+}
+
+func NewJWTService(secretKey []byte, expires time.Duration) *JWTService {
+	return &JWTService{
+		secretKey: secretKey,
+		expires:   expires,
+	}
+}
+
+func (s *JWTService) GenerateToken(user *models.User, sessionID string) (string, error) {
+	claims := CustomClaims{
+		User:  *user,
+		SessionID: sessionID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.expires)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(s.secretKey)
+}
+
+func (s *JWTService) ValidateToken(tokenString string) (*CustomClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &CustomClaims{}, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return s.secretKey, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(*CustomClaims); ok && token.Valid {
+		return claims, nil
+	}
+
+	return nil, errors.New("invalid token")
+}
+
+func (s *JWTService) GenerateRefreshToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/services/user.go
+package services
+
+import (
+	"context"
+	"core/internal/dto"
+	"core/internal/models"
+	"core/internal/repository"
+	"errors"
+	"fmt"
+)
+
+type UserService struct {
+	userRepo    *repository.UserRepo
+	sessionRepo *repository.SessionRepo
+	jwtService  *JWTService
+	perPage     int
+}
+
+func NewUserService(userRepo *repository.UserRepo, sessionRepo *repository.SessionRepo, jwtService *JWTService) *UserService {
+	return &UserService{
+		userRepo:    userRepo,
+		sessionRepo: sessionRepo,
+		jwtService:  jwtService,
+		perPage:     20,
+	}
+}
+
+func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error) {
+	user, err := s.userRepo.GetByUsername(ctx, req.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	if !checkPasswordHash(req.Password, user.PasswordHash) {
+		return nil, errors.New("invalid password")
+	}
+
+	refreshToken, err := s.jwtService.GenerateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+	session := models.Session{
+		User:         user,
+		RefreshToken: refreshToken,
+		UserAgent:    req.UserAgent,
+		ClientIP:     req.ClientIP,
+	}
+	err = s.sessionRepo.Create(ctx, &session)
+	if err != nil {
+		return nil, err
+	}
+
+	accessToken, err := s.jwtService.GenerateToken(user, session.ID.String())
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.LoginResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		SessionID:    session.ID.String(),
+	}, nil
+}
+
+func (s *UserService) ValidateToken(accessToken string) (*models.User, error) {
+	claims, err := s.jwtService.ValidateToken(accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	user := claims.User
+
+	return &user, nil
+}
+
+func (s *UserService) ValidateSession(ctx context.Context, accessToken string) (*models.Session, error) {
+	claims, err := s.jwtService.ValidateToken(accessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.sessionRepo.GetByID(ctx, claims.SessionID)
+}
+
+func (s *UserService) RefreshToken(ctx context.Context, req *dto.RefreshTokenRequest) (*dto.LoginResponse, error) {
+	session, err := s.sessionRepo.GetByID(ctx, req.SessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	if session.RefreshToken != req.RefreshToken {
+		invalidErr := errors.New("invalid refresh token")
+		if err := s.sessionRepo.Delete(ctx, session.ID); err != nil {
+			return nil, errors.Join(invalidErr, err)
+		} else {
+			return nil, invalidErr
+		}
+	}
+
+	user, err := s.userRepo.GetByID(ctx, session.User.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	refreshToken, err := s.jwtService.GenerateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.sessionRepo.UpdateRefreshToken(ctx, session.ID.String(), refreshToken); err != nil {
+		return nil, err
+	}
+
+	accessToken, err := s.jwtService.GenerateToken(user, session.ID.String())
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.LoginResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}, nil
+
+}
+
+func (s *UserService) Logout(ctx context.Context, accessToken string) error {
+	session, err := s.ValidateSession(ctx, accessToken)
+	if err != nil {
+		return err
+	}
+
+	return s.sessionRepo.Delete(ctx, session.ID)
+}
+
+func (s *UserService) LogoutSession(ctx context.Context, accessToken string, session *models.Session) error {
+	userSession, err := s.ValidateSession(ctx, accessToken)
+	if err != nil {
+		return err
+	}
+
+	if userSession.User.ID != session.User.ID {
+		return errors.New("access denied")
+	}
+
+	return s.sessionRepo.Delete(ctx, session.ID)
+}
+
+func (s *UserService) CreateUser(ctx context.Context, req *dto.CreateUserRequest) (*models.User, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+	password_hash, err := hashPassword(req.Password)
+	if err != nil {
+		return nil, err
+	}
+	user := models.User{
+		Name:         req.Username,
+		FullName:     req.FullName,
+		Email:        req.Email,
+		PasswordHash: password_hash,
+	}
+	if err := s.userRepo.Create(ctx, &user); err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func (s *UserService) GetPaginatedUsers(ctx context.Context, req *dto.PagiantedUserRequest) (*dto.PaginatedUsers, error) {
+	page := req.Page
+	perPage := req.PerPage
+	sortBy := req.SortBy
+	sortOrder := req.SortOrder
+
+	if page < 1 {
+		page = 1
+	}
+
+	if perPage < s.perPage {
+		perPage = s.perPage
+	}
+
+	if sortOrder == "" {
+		sortOrder = "ASC"
+	}
+
+	if sortBy == "" {
+		sortBy = "id"
+	}
+
+	return s.userRepo.GetUsersPaginated(ctx, page, perPage, sortBy, sortOrder)
+}
+
+func (s *UserService) GetUser(ctx context.Context, userID int) (*models.User, error) {
+	return s.userRepo.GetByID(ctx, userID)
+}
+
+func (s *UserService) UpdatePassword(ctx context.Context, user *models.User, newPassword, oldPassword string) error {
+	if !checkPasswordHash(oldPassword, user.PasswordHash) {
+		return errors.New("failed to match old password")
+	}
+
+	newPasswordHash, err := hashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	return s.userRepo.UpdatePasswordHash(ctx, user.ID, newPasswordHash)
+}
+
+func (s *UserService) UpdatePasswordAdmin(ctx context.Context, userID int, newPassword string) error {
+	newPasswordHash, err := hashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	return s.userRepo.UpdatePasswordHash(ctx, userID, newPasswordHash)
+
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/internal/services/utils.go
+package services
+
+import "golang.org/x/crypto/bcrypt"
+
+func hashPassword(password string) (string ,error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(bytes), err
+}
+
+func checkPasswordHash(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/pkg/postgres/postgres.go
+package postgres
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+func NewPostgresPool(dsn string) (*pgxpool.Pool, error) {
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse DSN: %v", err)
+	}
+
+	config.MaxConns = 20
+	config.MinConns = 5
+	config.MaxConnLifetime = time.Hour
+	config.MaxConnIdleTime = 30 * time.Minute
+	config.HealthCheckPeriod = time.Minute
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create connection pool: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("failed to ping database: %v", err)
+	}
+
+	log.Println("Successfully connected to PostgreSQL")
+	return pool, nil
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/pkg/utils/response.go
+package utils
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+)
+
+type Response struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Data    any    `json:"data,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+func JSONResponse(w http.ResponseWriter, status int, data any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(data)
+}
+
+func SuccessResponse(w http.ResponseWriter, message string, data any) {
+	response := Response{
+		Success: true,
+		Message: message,
+		Data:    data,
+	}
+	JSONResponse(w, http.StatusOK, response)
+}
+
+func ErrorResponse(w http.ResponseWriter, status int, message string) {
+	log.Printf("ERR %s", message)
+	response := Response{
+		Success: false,
+		Error:   message,
+	}
+	JSONResponse(w, status, response)
+}
+

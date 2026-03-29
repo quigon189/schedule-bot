@@ -72,13 +72,13 @@ func main() {
 func Migrations(pool *pgxpool.Pool, path string) error {
 	err := goose.SetDialect(string(goose.DialectPostgres))
 	if err != nil {
-		return nil
+		return fmt.Errorf("set dialect: %w", err)
 	}
 
 	db := stdlib.OpenDBFromPool(pool)
 
 	if err := goose.Up(db, path); err != nil {
-		return err
+		return fmt.Errorf("goose Up migrations: %w", err)
 	}
 
 	return db.Close()

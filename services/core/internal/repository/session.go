@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"core/internal/models"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -94,6 +96,49 @@ func (r *SessionRepo) GetByUserID(ctx context.Context, id int) ([]models.Session
 	}
 
 	return sessions, nil
+}
+
+func (r *SessionRepo) GetAllSessions(ctx context.Context) ([]models.Session, error) {
+	sessions := []models.Session{}
+	query := `
+	SELECT s.id, s.refresh_token, s.user_agent, s.client_ip, s.created_at,
+		   u.id, u.username, u.full_name, u.email, u.created_at, u.updated_at
+	FROM auth.sessions s
+	JOIN auth.users u ON u.id = s.user_id
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return sessions, nil
+		} else {
+			return nil, err
+		}
+	}
+
+	for rows.Next() {
+		session := models.Session{
+			User: &models.User{},
+		}
+		err := rows.Scan(
+			&session.ID,
+			&session.RefreshToken,
+			&session.UserAgent,
+			&session.ClientIP,
+			&session.CreatedAt,
+			&session.User.ID,
+			&session.User.Name,
+			&session.User.FullName,
+			&session.User.Email,
+			&session.User.CreatedAt,
+			&session.User.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, session)
+	}
+
+	return sessions, err
 }
 
 func (r *SessionRepo) UpdateRefreshToken(ctx context.Context, id string, refreshToken string) error {

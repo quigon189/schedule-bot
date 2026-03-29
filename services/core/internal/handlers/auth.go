@@ -25,6 +25,20 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
+	req.UserAgent = r.Header.Get("User-Agent")
+
+	clientIP := r.Header.Get("X-Forwarded-For")
+	if clientIP == "" {
+		clientIP = r.RemoteAddr
+	}
+
+	req.ClientIP = clientIP
+
 	resp, err := h.userService.Login(r.Context(), req)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to login: %v", err))
@@ -37,7 +51,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	accessToken, ok := r.Context().Value("access_token").(string)
 	if !ok {
-		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get access token"))
+		utils.ErrorResponse(w, http.StatusInternalServerError, "failed to get access token")
 		return
 	}
 	err := h.userService.Logout(r.Context(), accessToken)
@@ -56,6 +70,11 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
 	resp, err := h.userService.RefreshToken(r.Context(), &req)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to refresh token: %v", err))
@@ -63,4 +82,14 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.SuccessResponse(w, "success refresh token", resp)
+}
+
+func (h *AuthHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
+	sessions, err := h.userService.GetSessions(r.Context())
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get sessions: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "success get sessions", sessions)
 }

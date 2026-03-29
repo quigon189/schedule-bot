@@ -146,9 +146,6 @@ func (s *UserService) LogoutSession(ctx context.Context, accessToken string, ses
 }
 
 func (s *UserService) CreateUser(ctx context.Context, req *dto.CreateUserRequest) (*models.User, error) {
-	if err := req.Validate(); err != nil {
-		return nil, err
-	}
 	password_hash, err := hashPassword(req.Password)
 	if err != nil {
 		return nil, err
@@ -216,4 +213,8 @@ func (s *UserService) UpdatePasswordAdmin(ctx context.Context, userID int, newPa
 
 	return s.userRepo.UpdatePasswordHash(ctx, userID, newPasswordHash)
 
+}
+
+func (s *UserService) GetSessions(ctx context.Context) ([]models.Session, error) {
+	return s.sessionRepo.GetAllSessions(ctx)
 }

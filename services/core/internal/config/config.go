@@ -1,6 +1,10 @@
 package config
 
-import "os"
+import (
+	"log"
+	"os"
+	"strconv"
+)
 
 type DBConfig struct {
 	Host           string
@@ -16,9 +20,15 @@ type ServerConfig struct {
 	Port string
 }
 
+type JWTConfig struct {
+	Secret  string
+	Expires int //seconds
+}
+
 type Config struct {
 	DB     DBConfig
 	Server ServerConfig
+	JWT    JWTConfig
 }
 
 func Load() *Config {
@@ -35,15 +45,35 @@ func Load() *Config {
 		Host: getEnv("SERVER_HOST", "localhost"),
 		Port: getEnv("SERVER_PORT", "8080"),
 	}
+
+	jwt := JWTConfig{
+		Secret:  getEnv("JWT_SECRET", ""),
+		Expires: getIntEnv("JWT_EXPIRES_SECONDS", 15*60),
+	}
+
+	if db.User == "" || db.Password == "" || db.Name == "" || jwt.Secret == "" {
+		log.Fatal("DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET must be set")
+	}
+
 	return &Config{
 		DB:     db,
 		Server: server,
+		JWT:    jwt,
 	}
 }
 
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+func getIntEnv(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
 	}
 	return defaultValue
 }

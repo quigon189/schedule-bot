@@ -28,6 +28,11 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
 	user, err := h.userService.CreateUser(r.Context(), &req)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to create user: %v", err))
@@ -92,6 +97,11 @@ func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
 	currentUser, ok := r.Context().Value("user").(models.User)
 	if !ok {
 		utils.ErrorResponse(w, http.StatusBadRequest, "failed to get current user")
@@ -100,13 +110,18 @@ func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request)
 
 	isAdmin := currentUser.RequireRole("admin")
 
-	if !(isAdmin || currentUser.ID != req.UserID) {
+	if !isAdmin && currentUser.ID != req.UserID {
 		utils.ErrorResponse(w, http.StatusForbidden, "access denied")
 		return
 	}
 
 	userID := currentUser.ID
 	if isAdmin {
+		if req.UserID < 1 {
+			utils.ErrorResponse(w, http.StatusBadRequest, "invalid user_id")
+			return
+		}
+
 		if err := h.userService.UpdatePasswordAdmin(r.Context(), req.UserID, req.NewPassword); err != nil {
 			utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to get user: %v", err))
 			return

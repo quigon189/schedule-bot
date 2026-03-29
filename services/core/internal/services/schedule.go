@@ -17,6 +17,7 @@ type ScheduleService struct {
 	studentRepo  *repository.StudentRepo
 	userRepo     *repository.UserRepo
 	roleRepo     *repository.RoleRepo
+	subjectRepo  *repository.SubjectRepo
 }
 
 func NewScheduleService(
@@ -26,6 +27,7 @@ func NewScheduleService(
 	studentRepo *repository.StudentRepo,
 	userRepo *repository.UserRepo,
 	roleRepo *repository.RoleRepo,
+	subjectRepo *repository.SubjectRepo,
 ) *ScheduleService {
 	return &ScheduleService{
 		audienceRepo: audienceRepo,
@@ -34,6 +36,7 @@ func NewScheduleService(
 		studentRepo:  studentRepo,
 		userRepo:     userRepo,
 		roleRepo:     roleRepo,
+		subjectRepo:  subjectRepo,
 	}
 }
 
@@ -80,9 +83,6 @@ func (s *ScheduleService) DeleteGroup(ctx context.Context, id int) error {
 }
 
 func (s *ScheduleService) CreateTeacher(ctx context.Context, req *dto.CreateUserRequest) (*models.Teacher, error) {
-	if err := req.Validate(); err != nil {
-		return nil, err
-	}
 	passwordHash, err := hashPassword(req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
@@ -115,9 +115,6 @@ func (s *ScheduleService) DeleteTeacher(ctx context.Context, userID int) error {
 }
 
 func (s *ScheduleService) CreateStudent(ctx context.Context, req *dto.CreateStudentRequest) (*models.Student, error) {
-	if err := req.Validate(); err != nil {
-		return nil, err
-	}
 	group, err := s.groupRepo.GetByID(ctx, req.GroupID)
 	if err != nil {
 		return nil, fmt.Errorf("get group: %w", err)
@@ -297,4 +294,28 @@ func (s *ScheduleService) RemoveTeacher(ctx context.Context, userID int) error {
 
 func (s *ScheduleService) GetUserRoles(ctx context.Context, userID int) ([]models.Role, error) {
 	return s.roleRepo.GetUserRoles(ctx, userID)
+}
+
+func (s *ScheduleService) CreateSubject(ctx context.Context, subject *models.Subject) error {
+	return s.subjectRepo.CreateSubject(ctx, subject)
+}
+
+func (s *ScheduleService) GetSubjectByID(ctx context.Context, id int) (*models.Subject, error) {
+	return s.subjectRepo.GetSubjectByID(ctx, id)
+}
+
+func (s *ScheduleService) GetAllSubjects(ctx context.Context, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
+	return s.subjectRepo.GetAllSubjects(ctx, req)
+}
+
+func (s *ScheduleService) GetSubjectsByGroupID(ctx context.Context, groupID int, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
+	return s.subjectRepo.GetSubjectsByGroupID(ctx, groupID, req)
+}
+
+func (s *ScheduleService) UpdateSubject(ctx context.Context, subject *models.Subject) error {
+	return s.subjectRepo.UpdateSubject(ctx, subject)
+}
+
+func (s *ScheduleService) DeleteSubject(ctx context.Context, id int) error {
+	return s.subjectRepo.DeleteSubject(ctx, id)
 }
