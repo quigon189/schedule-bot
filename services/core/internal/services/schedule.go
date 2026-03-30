@@ -12,13 +12,14 @@ import (
 )
 
 type ScheduleService struct {
-	audienceRepo *repository.AudienceRepo
-	groupRepo    *repository.GroupRepo
-	teacherRepo  *repository.TeacherRepo
-	studentRepo  *repository.StudentRepo
-	userRepo     *repository.UserRepo
-	roleRepo     *repository.RoleRepo
-	subjectRepo  *repository.SubjectRepo
+	audienceRepo       *repository.AudienceRepo
+	groupRepo          *repository.GroupRepo
+	teacherRepo        *repository.TeacherRepo
+	studentRepo        *repository.StudentRepo
+	userRepo           *repository.UserRepo
+	roleRepo           *repository.RoleRepo
+	subjectRepo        *repository.SubjectRepo
+	academicPeriodRepo *repository.AcademicPeriodRepo
 }
 
 func NewScheduleService(
@@ -29,15 +30,17 @@ func NewScheduleService(
 	userRepo *repository.UserRepo,
 	roleRepo *repository.RoleRepo,
 	subjectRepo *repository.SubjectRepo,
+	academicPeriodRepo *repository.AcademicPeriodRepo,
 ) *ScheduleService {
 	return &ScheduleService{
-		audienceRepo: audienceRepo,
-		groupRepo:    groupRepo,
-		teacherRepo:  teacherRepo,
-		studentRepo:  studentRepo,
-		userRepo:     userRepo,
-		roleRepo:     roleRepo,
-		subjectRepo:  subjectRepo,
+		audienceRepo:       audienceRepo,
+		groupRepo:          groupRepo,
+		teacherRepo:        teacherRepo,
+		studentRepo:        studentRepo,
+		userRepo:           userRepo,
+		roleRepo:           roleRepo,
+		subjectRepo:        subjectRepo,
+		academicPeriodRepo: academicPeriodRepo,
 	}
 }
 
@@ -353,12 +356,12 @@ func (s *ScheduleService) CreateSubject(ctx context.Context, req *dto.CreateSubj
 		return nil, errors.New("start_date must be before end_date")
 	}
 	subject := models.Subject{
-		Title: req.Title,
-		Semester: req.Semester,
+		Title:     req.Title,
+		Semester:  req.Semester,
 		HoursLoad: req.HoursLoad,
 		StartDate: startDate,
-		EndDate: endDate,
-		GroupID: req.GroupID,
+		EndDate:   endDate,
+		GroupID:   req.GroupID,
 	}
 	err = s.subjectRepo.CreateSubject(ctx, &subject)
 	return &subject, err
@@ -381,7 +384,6 @@ func (s *ScheduleService) UpdateSubject(ctx context.Context, id int, req *dto.Up
 	if err != nil {
 		return nil, fmt.Errorf("get subject: %w", err)
 	}
-
 
 	if req.Title != "" {
 		subject.Title = req.Title
@@ -421,4 +423,77 @@ func (s *ScheduleService) UpdateSubject(ctx context.Context, id int, req *dto.Up
 
 func (s *ScheduleService) DeleteSubject(ctx context.Context, id int) error {
 	return s.subjectRepo.DeleteSubject(ctx, id)
+}
+
+func (s *ScheduleService) CreateAcademicPeriod(ctx context.Context, req *dto.CreateAcademicPeriodRequest) (*models.AcademicPeriod, error) {
+	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	if err != nil {
+		return nil, fmt.Errorf("parse start_date: %w", err)
+	}
+	endDate, err := time.Parse("2006-01-02", req.EndDate)
+	if err != nil {
+		return nil, fmt.Errorf("parse end_date: %w", err)
+	}
+	if startDate.After(endDate) {
+		return nil, errors.New("start_date must be before end_date")
+	}
+	acdemicPeriod := models.AcademicPeriod{
+		Year:      req.Year,
+		Semester:  req.Semester,
+		StartDate: startDate,
+		EndDate:   endDate,
+	}
+
+	err = s.academicPeriodRepo.Create(ctx, &acdemicPeriod)
+	return &acdemicPeriod, err
+}
+
+func (s *ScheduleService) GetAcademicPeriodByID(ctx context.Context, id int) (*models.AcademicPeriod, error) {
+	return s.academicPeriodRepo.GetByID(ctx, id)
+}
+
+func (s *ScheduleService) GetAllAcademicPeriods(ctx context.Context) ([]models.AcademicPeriod, error) {
+	return s.academicPeriodRepo.GetAll(ctx)
+}
+
+func (s *ScheduleService) UpdateAcademicPeriod(ctx context.Context, id int, req *dto.UpdateAcademicPeriodRequest) (*models.AcademicPeriod, error) {
+	academicPeriod, err := s.GetAcademicPeriodByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get academic period: %w", err)
+	}
+
+	if req.Year != "" {
+		academicPeriod.Year = req.Year
+	}
+
+	if req.Semester != 0 {
+		academicPeriod.Semester = req.Semester
+	}
+
+	if req.StartDate != "" {
+		startDate, err := time.Parse("2006-01-02", req.StartDate)
+		if err != nil {
+			return nil, fmt.Errorf("parse start_date: %w", err)
+		}
+		academicPeriod.StartDate = startDate
+	}
+
+	if req.EndDate != "" {
+		endDate, err := time.Parse("2006-01-02", req.EndDate)
+		if err != nil {
+			return nil, fmt.Errorf("parse end_date: %w", err)
+		}
+		academicPeriod.EndDate = endDate
+	}
+
+	if academicPeriod.StartDate.After(academicPeriod.StartDate) {
+		return nil, errors.New("start_date must be before end_date")
+	}
+
+	err = s.academicPeriodRepo.Update(ctx, academicPeriod)
+	return academicPeriod, err
+}
+
+func (s *ScheduleService) DeleteAcademicPeriod(ctx context.Context, id int) error {
+	return s.academicPeriodRepo.Delete(ctx, id)
 }

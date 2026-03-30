@@ -1,5 +1,6 @@
 Текущий каталог: /home/admin/schedule-bot/services/core
 ├── Dockerfile
+├── README.md
 ├── cmd
 |   └── main.go
 ├── go.mod
@@ -8,7 +9,9 @@
 |   ├── config
 |   |   └── config.go
 |   ├── dto
+|   |   ├── audience.go
 |   |   ├── auth.go
+|   |   ├── group.go
 |   |   ├── role.go
 |   |   ├── schedule.go
 |   |   ├── subject.go
@@ -53,6 +56,979 @@
     |   └── postgres.go
     └── utils
         └── response.go
+--------------------------
+Файл: /home/admin/schedule-bot/services/core/README.md
+# API Документация сервиса управления расписанием и пользователями
+
+## Введение
+
+Сервис предоставляет REST API для управления пользователями, ролями (администратор, менеджер, преподаватель, студент, пользователь), группами, аудиториями и учебными предметами. Аутентификация осуществляется с помощью JWT токенов. Все эндпоинты, кроме `/login` и `/refresh`, требуют передачи JWT токена в заголовке `Authorization: Bearer <token>`.
+
+## Общая информация
+
+- **Базовый URL**: `http://<host>:<port>` (по умолчанию порт `8080`)
+- **Формат ответов**: JSON
+- **Структура ответа**:
+  - Успешный ответ:
+    ```json
+    {
+      "success": true,
+      "message": "string",
+      "data": { ... } // может отсутствовать
+    }
+    ```
+  - Ответ с ошибкой:
+    ```json
+    {
+      "success": false,
+      "error": "string"
+    }
+    ```
+- **Аутентификация**: JWT токен передается в заголовке `Authorization: Bearer <access_token>`
+- **Роли**:
+  - `admin` – полный доступ ко всем админским операциям
+  - `manager` – управление ролями (назначает/удаляет роли `admin`, `manager`)
+  - `teacher` – преподаватель (профиль)
+  - `student` – студент (профиль с привязкой к группе)
+  - `user` – базовая роль, присваивается при регистрации
+
+## Эндпоинты
+
+### Аутентификация
+
+#### POST `/login`
+Вход в систему, получение токенов доступа и обновления.
+
+**Тело запроса**:
+```json
+{
+  "username": "string",  // обязательное, от 3 до 20 символов, только буквы, цифры, _
+  "password": "string",  // обязательное
+  "user_agent": "string", // опционально, будет заполнено из заголовка User-Agent
+  "client_ip": "string"   // опционально, будет заполнено из X-Forwarded-For или RemoteAddr
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "success login",
+  "data": {
+    "access_token": "string",
+    "refresh_token": "string",
+    "session_id": "string",
+	"roles": ["string"]  // список ролей
+  }
+}
+```
+
+**Ошибки**:
+- 400 – неверный формат запроса или ошибка валидации
+- 400 – неверное имя пользователя или пароль
+
+#### POST `/refresh`
+Обновление access-токена с использованием refresh-токена.
+
+**Тело запроса**:
+```json
+{
+  "session_id": "string",   // обязательное
+  "refresh_token": "string" // обязательное
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "success refresh token",
+  "data": {
+    "access_token": "string",
+    "refresh_token": "string"
+  }
+}
+```
+
+**Ошибки**:
+- 400 – неверный формат запроса или ошибка валидации
+- 500 – внутренняя ошибка сервера
+
+#### GET `/logout`
+Выход из системы (удаление сессии). Требует валидный access-токен.
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "success logout",
+  "data": null
+}
+```
+
+**Ошибки**:
+- 401 – невалидный токен
+- 500 – внутренняя ошибка сервера
+
+### Администрирование (требуется роль `admin`)
+
+#### GET `/admin/sessions`
+Получить список всех активных сессий.
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "success get sessions",
+  "data": [ ... ] // массив объектов Session (см. модель)
+}
+```
+
+**Ошибки**:
+- 403 – доступ запрещен (не admin)
+- 500 – внутренняя ошибка сервера
+
+#### Управление пользователями
+
+##### GET `/admin/users`
+Получить список пользователей с пагинацией.
+
+**Параметры запроса (query)**:
+- `page` (int, опционально, по умолчанию 1) – номер страницы
+- `per_page` (int, опционально, по умолчанию 20) – количество записей на странице
+- `sort_by` (string, опционально, по умолчанию `id`) – поле для сортировки: `id`, `username`, `full_name`, `email`, `created_at`
+- `sort_order` (string, опционально, по умолчанию `ASC`) – порядок сортировки: `ASC` или `DESC`
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "paginated users",
+  "data": {
+    "users": [ ... ],      // массив объектов User (см. модель)
+    "total": 100,
+    "page": 1,
+    "per_page": 20,
+    "total_pages": 5
+  }
+}
+```
+
+##### GET `/admin/users/{id}`
+Получить информацию о пользователе по его ID.
+
+**Параметры пути**:
+- `id` (int) – идентификатор пользователя
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "get user success",
+  "data": { ... } // объект User
+}
+```
+
+**Ошибки**:
+- 400 – неверный ID
+- 404 – пользователь не найден
+- 500 – внутренняя ошибка сервера
+
+##### POST `/admin/users`
+Создание нового пользователя (без профиля студента/преподавателя). Пользователю автоматически присваивается роль `user`.
+
+**Тело запроса**:
+```json
+{
+  "username": "string",   // обязательное, 3-20 символов, буквы/цифры/_
+  "full_name": "string",  // обязательное, минимум 3 символа
+  "email": "string",      // обязательное, валидный email
+  "password": "string"    // обязательное, минимум 6 символов
+}
+```
+
+**Успешный ответ (201 Created)**:
+```json
+{
+  "success": true,
+  "message": "user created",
+  "data": { ... } // объект User
+}
+```
+
+**Ошибки**:
+- 400 – ошибка валидации или конфликт (уже существует)
+- 500 – внутренняя ошибка сервера
+
+##### PATCH `/admin/users/password`
+Смена пароля пользователя (администратором). Администратор может сменить пароль любому пользователю, указав `user_id`. Если `user_id` не указан, считается, что смена пароля для текущего пользователя (но в этом случае используется эндпоинт `/user/password`).
+
+**Тело запроса**:
+```json
+{
+  "user_id": 123,          // обязательное, если администратор меняет пароль другому пользователю
+  "new_password": "string" // обязательное, минимум 6 символов
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "password changed",
+  "data": null
+}
+```
+
+**Ошибки**:
+- 400 – неверные данные
+- 403 – доступ запрещен (не admin или попытка смены чужого пароля без прав)
+- 500 – внутренняя ошибка сервера
+
+#### Управление ролями
+
+##### POST `/admin/roles/assign`
+Назначить роль `admin` или `manager` пользователю.
+
+**Тело запроса**:
+```json
+{
+  "user_id": 123,          // обязательное
+  "role_name": "admin"     // обязательное, одно из: admin, manager
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "role assigned",
+  "data": null
+}
+```
+
+**Ошибки**:
+- 400 – неверные данные (неверная роль, пользователь не найден)
+- 500 – внутренняя ошибка сервера
+
+##### DELETE `/admin/roles/remove`
+Удалить роль у пользователя.
+
+**Тело запроса**:
+```json
+{
+  "user_id": 123,          // обязательное
+  "role_name": "student"   // обязательное, одно из: admin, manager, student, teacher
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "role removed",
+  "data": null
+}
+```
+
+**Ошибки**:
+- 400 – неверные данные
+- 500 – внутренняя ошибка сервера
+
+### Текущий пользователь (требуется аутентификация)
+
+#### GET `/user`
+Получить информацию о текущем авторизованном пользователе.
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "get user success",
+  "data": { ... } // объект User
+}
+```
+
+**Ошибки**:
+- 401 – невалидный токен
+- 500 – внутренняя ошибка сервера
+
+#### GET `/user/{id}`
+Получить информацию о пользователе по ID. Доступен для любого авторизованного пользователя.
+
+**Параметры пути**:
+- `id` (int) – идентификатор пользователя
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "get user success",
+  "data": { ... } // объект User
+}
+```
+
+**Ошибки**:
+- 401 – невалидный токен
+- 404 – пользователь не найден
+- 500 – внутренняя ошибка сервера
+
+#### PATCH `/user/password`
+Смена пароля текущего пользователя.
+
+**Тело запроса**:
+```json
+{
+  "old_password": "string", // обязательное, минимум 6 символов
+  "new_password": "string"  // обязательное, минимум 6 символов
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "password changed",
+  "data": null
+}
+```
+
+**Ошибки**:
+- 400 – неверные данные (несовпадение старого пароля)
+- 401 – невалидный токен
+- 500 – внутренняя ошибка сервера
+
+### Преподаватели (требуется аутентификация)
+
+#### POST `/teachers` (требуется `admin`)
+Создание нового преподавателя. Создается пользователь с ролью `teacher` и профиль преподавателя.
+
+**Тело запроса**:
+```json
+{
+  "username": "string",
+  "full_name": "string",
+  "email": "string",
+  "password": "string"
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "teacher created",
+  "data": { ... } // объект Teacher (см. модель)
+}
+```
+
+**Ошибки**:
+- 400 – ошибка валидации
+- 500 – внутренняя ошибка сервера
+
+#### POST `/teachers/assign` (требуется `admin`)
+Назначить существующему пользователю роль `teacher` и создать профиль преподавателя.
+
+**Тело запроса**:
+```json
+{
+  "user_id": 123 // обязательное
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "teacher assigned",
+  "data": null
+}
+```
+
+**Ошибки**:
+- 400 – пользователь не найден или уже является студентом
+- 500 – внутренняя ошибка сервера
+
+#### DELETE `/teachers/{id}` (требуется `admin`)
+Удалить профиль преподавателя (удаляется только связь, пользователь остается с ролью `user`).
+
+**Параметры пути**:
+- `id` (int) – идентификатор пользователя
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "teacher deleted",
+  "data": null
+}
+```
+
+**Ошибки**:
+- 400 – неверный ID
+- 500 – внутренняя ошибка сервера
+
+#### GET `/teachers`
+Получить список всех преподавателей.
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "teachers retrieved",
+  "data": [ ... ] // массив объектов Teacher
+}
+```
+
+#### GET `/teachers/{id}`
+Получить информацию о преподавателе по ID пользователя.
+
+**Параметры пути**:
+- `id` (int) – идентификатор пользователя
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "teacher retrieved",
+  "data": { ... } // объект Teacher
+}
+```
+
+### Студенты (требуется аутентификация)
+
+#### POST `/students` (требуется `admin`)
+Создание нового студента. Создается пользователь с ролью `student` и профиль студента с привязкой к группе.
+
+**Тело запроса**:
+```json
+{
+  "username": "string",
+  "full_name": "string",
+  "email": "string",
+  "password": "string",
+  "group_id": 123 // обязательное
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "student created",
+  "data": { ... } // объект Student (см. модель)
+}
+```
+
+**Ошибки**:
+- 400 – ошибка валидации или группа не найдена
+- 500 – внутренняя ошибка сервера
+
+#### POST `/students/assign` (требуется `admin`)
+Назначить существующему пользователю роль `student` и привязать к группе.
+
+**Тело запроса**:
+```json
+{
+  "user_id": 123,
+  "group_id": 456 // обязательное
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "student assigned",
+  "data": null
+}
+```
+
+**Ошибки**:
+- 400 – пользователь не найден, уже является преподавателем или группа не найдена
+- 500 – внутренняя ошибка сервера
+
+#### PATCH `/students/{id}/group` (требуется `admin`)
+Изменить группу студента.
+
+**Параметры пути**:
+- `id` (int) – идентификатор пользователя
+
+**Тело запроса**:
+```json
+{
+  "group_id": 456 // обязательное
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "student group updated",
+  "data": null
+}
+```
+
+**Ошибки**:
+- 400 – неверный ID или группа не найдена
+- 500 – внутренняя ошибка сервера
+
+#### DELETE `/students/{id}` (требуется `admin`)
+Удалить профиль студента.
+
+**Параметры пути**:
+- `id` (int) – идентификатор пользователя
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "student deleted",
+  "data": null
+}
+```
+
+**Ошибки**:
+- 400 – неверный ID
+- 500 – внутренняя ошибка сервера
+
+#### GET `/students`
+Получить список всех студентов.
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "students retrieved",
+  "data": [ ... ] // массив объектов Student
+}
+```
+
+#### GET `/students/{id}`
+Получить информацию о студенте по ID пользователя.
+
+**Параметры пути**:
+- `id` (int) – идентификатор пользователя
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "student retrieved",
+  "data": { ... } // объект Student
+}
+```
+
+### Группы (требуется аутентификация)
+
+#### POST `/groups` (требуется `admin`)
+Создание новой учебной группы.
+
+**Тело запроса**:
+```json
+{
+  "name": "string",
+  "specialty": "string",
+  "admission_year": 2024
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "group created",
+  "data": { ... } // объект Group
+}
+```
+
+#### PATCH `/groups` (требуется `admin`)
+Обновление информации о группе. В теле запроса передается объект `Group` с полем `id`.
+
+**Тело запроса**:
+```json
+{
+  "id": 123,
+  "name": "string",
+  "specialty": "string",
+  "admission_year": 2024
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "group updated",
+  "data": { ... } // обновленный объект Group
+}
+```
+
+#### DELETE `/groups/{id}` (требуется `admin`)
+Удаление группы.
+
+**Параметры пути**:
+- `id` (int) – идентификатор группы
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "group deleted",
+  "data": null
+}
+```
+
+#### GET `/groups`
+Получить список всех групп.
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "groups retrieved",
+  "data": [ ... ] // массив объектов Group
+}
+```
+
+#### GET `/groups/{id}`
+Получить информацию о группе.
+
+**Параметры пути**:
+- `id` (int) – идентификатор группы
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "group retrieved",
+  "data": { ... } // объект Group
+}
+```
+
+### Аудитории (требуется аутентификация)
+
+#### POST `/audiences` (требуется `admin`)
+Создание новой аудитории.
+
+**Тело запроса**:
+```json
+{
+  "name": "string",
+  "number": "string"
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "audience created",
+  "data": { ... } // объект Audience
+}
+```
+
+#### PATCH `/audiences` (требуется `admin`)
+Обновление информации об аудитории. В теле запроса передается объект `Audience` с полем `id`.
+
+**Тело запроса**:
+```json
+{
+  "id": 123,
+  "name": "string",
+  "number": "string"
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "audience updated",
+  "data": { ... } // обновленный объект Audience
+}
+```
+
+#### DELETE `/audiences/{id}` (требуется `admin`)
+Удаление аудитории.
+
+**Параметры пути**:
+- `id` (int) – идентификатор аудитории
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "audience deleted",
+  "data": null
+}
+```
+
+#### GET `/audiences`
+Получить список всех аудиторий.
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "audiences getted",
+  "data": [ ... ] // массив объектов Audience
+}
+```
+
+#### GET `/audiences/{id}`
+Получить информацию об аудитории.
+
+**Параметры пути**:
+- `id` (int) – идентификатор аудитории
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "audience getted",
+  "data": { ... } // объект Audience
+}
+```
+
+### Предметы (требуется аутентификация)
+
+#### POST `/subjects` (требуется `admin`)
+Создание нового предмета.
+
+**Тело запроса**:
+```json
+{
+  "title": "string",
+  "semester": 1,
+  "hours_load": 72,
+  "start_date": "2024-09-01",
+  "end_date": "2024-12-31",
+  "group_id": 123
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "subject created",
+  "data": { ... } // объект Subject
+}
+```
+
+**Ошибки**:
+- 400 – неверный формат даты или start_date > end_date
+- 500 – внутренняя ошибка сервера
+
+#### PATCH `/subjects/{id}` (требуется `admin`)
+Обновление предмета.
+
+**Параметры пути**:
+- `id` (int) – идентификатор предмета
+
+**Тело запроса**:
+```json
+{
+  "title": "string",
+  "semester": 1,
+  "hours_load": 72,
+  "start_date": "2024-09-01",
+  "end_date": "2024-12-31",
+  "group_id": 123
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "subject updated",
+  "data": { ... } // обновленный объект Subject
+}
+```
+
+#### DELETE `/subjects/{id}` (требуется `admin`)
+Удаление предмета.
+
+**Параметры пути**:
+- `id` (int) – идентификатор предмета
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "subject deleted",
+  "data": null
+}
+```
+
+#### GET `/subjects`
+Получить список предметов с пагинацией.
+
+**Параметры запроса (query)**:
+- `page` (int, опционально, по умолчанию 1) – номер страницы
+- `per_page` (int, опционально, по умолчанию 10, макс. 100) – количество записей на странице
+- `sort_by` (string, опционально, по умолчанию `id`) – поле для сортировки: `id`, `title`, `semester`, `hours_load`, `start_date`, `end_date`, `group_id`
+- `sort_order` (string, опционально, по умолчанию `ASC`) – порядок сортировки: `ASC` или `DESC`
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "subjects retrieved",
+  "data": {
+    "subjects": [ ... ], // массив объектов Subject
+    "total": 100,
+    "page": 1,
+    "per_page": 10,
+    "total_pages": 10
+  }
+}
+```
+
+#### GET `/subjects/group/{group_id}`
+Получить список предметов для конкретной группы с пагинацией.
+
+**Параметры пути**:
+- `group_id` (int) – идентификатор группы
+
+**Параметры запроса (query)**:
+- `page` (int, опционально)
+- `per_page` (int, опционально)
+- `sort_by` (string, опционально)
+- `sort_order` (string, опционально)
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "subjects retrieved",
+  "data": {
+    "subjects": [ ... ],
+    "total": 50,
+    "page": 1,
+    "per_page": 10,
+    "total_pages": 5
+  }
+}
+```
+
+#### GET `/subjects/{id}`
+Получить предмет по ID.
+
+**Параметры пути**:
+- `id` (int) – идентификатор предмета
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "subject retrieved",
+  "data": { ... } // объект Subject
+}
+```
+
+## Модели данных
+
+### User
+```json
+{
+  "id": 1,
+  "username": "john_doe",
+  "full_name": "John Doe",
+  "email": "john@example.com",
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-01T00:00:00Z",
+  "roles": [
+    {
+      "id": 1,
+      "name": "user",
+      "description": "Обычный пользователь"
+    }
+  ]
+}
+```
+
+### Group
+```json
+{
+  "id": 1,
+  "name": "ИС-41",
+  "specialty": "Информатика",
+  "admission_year": 2024
+}
+```
+
+### Student
+```json
+{
+  "user": { ... }, // объект User
+  "group": { ... } // объект Group или null
+}
+```
+
+### Teacher
+```json
+{
+  "user": { ... } // объект User
+}
+```
+
+### Audience
+```json
+{
+  "id": 1,
+  "name": "Аудитория 101",
+  "number": "101"
+}
+```
+
+### Subject
+```json
+{
+  "id": 1,
+  "title": "Математика",
+  "semester": 1,
+  "hours_load": 72,
+  "start_date": "2024-09-01T00:00:00Z",
+  "end_date": "2024-12-31T00:00:00Z",
+  "group_id": 1,
+  "group": { ... } // объект Group
+}
+```
+
+### Session
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "refresh_token": "string",
+  "user_agent": "Mozilla/5.0 ...",
+  "client_ip": "192.168.1.1",
+  "created_at": "2024-01-01T00:00:00Z",
+  "user": { ... } // объект User
+}
+```
+
+### Role
+```json
+{
+  "id": 1,
+  "name": "admin",
+  "description": "Администратор"
+}
+```
+
+## Коды ответов
+
+- `200 OK` – успешное выполнение запроса
+- `201 Created` – ресурс создан (используется для создания пользователя)
+- `400 Bad Request` – неверный запрос (ошибка валидации, неправильный формат)
+- `401 Unauthorized` – отсутствует или невалидный JWT токен
+- `403 Forbidden` – доступ запрещен (недостаточно прав)
+- `404 Not Found` – ресурс не найден
+- `500 Internal Server Error` – внутренняя ошибка сервера
 --------------------------
 Файл: /home/admin/schedule-bot/services/core/cmd/main.go
 package main
@@ -152,6 +1128,7 @@ go 1.25.0
 
 require (
 	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/cors v1.2.2
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.8.0
@@ -258,6 +1235,20 @@ func getIntEnv(key string, defaultValue int) int {
 }
 
 --------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/dto/audience.go
+package dto
+
+type CreateAudienceRequest struct {
+	Name   string `json:"name" validate:"required"`
+	Number string `json:"number" validate:"required"`
+}
+
+type UpdateAudienceRequest struct {
+	Name   string `json:"name"`
+	Number string `json:"number"`
+}
+
+--------------------------
 Файл: /home/admin/schedule-bot/services/core/internal/dto/auth.go
 package dto
 
@@ -269,14 +1260,31 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	AccessToken  string `json:"access_token"`
-	SessionID    string `json:"session_id"`
-	RefreshToken string `json:"refresh_token"`
+	AccessToken  string   `json:"access_token"`
+	SessionID    string   `json:"session_id"`
+	RefreshToken string   `json:"refresh_token"`
+	Roles        []string `json:"roles"`
 }
 
 type RefreshTokenRequest struct {
 	SessionID    string `json:"session_id" validate:"required"`
 	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/dto/group.go
+package dto
+
+type CreateGroupRequest struct {
+	Name          string `json:"name" validate:"required"`
+	Specialty     string `json:"specialty" validate:"required"`
+	AdmissionYear int    `json:"admission_year" validate:"required"`
+}
+
+type UpdateGroupRequest struct {
+	Name          string `json:"name"`
+	Specialty     string `json:"specialty"`
+	AdmissionYear int    `json:"admission_year"`
 }
 
 --------------------------
@@ -318,12 +1326,20 @@ package dto
 import "core/internal/models"
 
 type CreateSubjectRequest struct {
-	Title string `json:"title" validate:"required"`
-	Semester int `json:"semester" validate:"required"`
-	HoursLoad int `json:"hours_load" validate:"required"`
+	Title     string `json:"title" validate:"required"`
+	Semester  int    `json:"semester" validate:"required,min=1,max=10"`
+	HoursLoad int    `json:"hours_load" validate:"required,min=1"`
 	StartDate string `json:"start_date" validate:"required"`
-	EndDate string `json:"end_date" validate:"required"`
-	GroupID int `json:"group_id" validate:"required"`
+	EndDate   string `json:"end_date" validate:"required"`
+	GroupID   int    `json:"group_id" validate:"required"`
+}
+
+type UpdateSubjectRequest struct {
+	Title     string `json:"title"`
+	Semester  int    `json:"semester"`
+	HoursLoad int    `json:"hours_load"`
+	StartDate string `json:"start_date"`
+	EndDate   string `json:"end_date"`
 }
 
 type PaginatedSubjectsRequest struct {
@@ -350,7 +1366,6 @@ import (
 )
 
 type CreateUserRequest struct {
-	*BaseRequest
 	Username string `json:"username" validate:"required,username"`
 	FullName string `json:"full_name" validate:"required,min=3"`
 	Email    string `json:"email" validate:"required,email"`
@@ -409,7 +1424,7 @@ func ValidateStruct(s any) error {
 package handlers
 
 import (
-	"core/internal/models"
+	"core/internal/dto"
 	"core/internal/services"
 	"core/pkg/utils"
 	"encoding/json"
@@ -429,13 +1444,19 @@ func NewAudienceHandler(scheduleService *services.ScheduleService) *AudienceHand
 }
 
 func (h *AudienceHandler) CreateAudience(w http.ResponseWriter, r *http.Request) {
-	var audience models.Audience
-	if err := json.NewDecoder(r.Body).Decode(&audience); err != nil {
+	var req dto.CreateAudienceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad requset: %v", err))
 		return
 	}
 
-	if err := h.scheduleService.CreateAudience(r.Context(), &audience); err != nil {
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
+	audience, err := h.scheduleService.CreateAudience(r.Context(), &req)
+	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create audience: %v", err))
 		return
 	}
@@ -470,13 +1491,20 @@ func (h *AudienceHandler) GetAllAudience(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *AudienceHandler) UpdateAudience(w http.ResponseWriter, r *http.Request) {
-	var audience models.Audience
-	if err := json.NewDecoder(r.Body).Decode(&audience); err != nil {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid id: %v", err))
+		return
+	}
+
+	var req dto.UpdateAudienceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad requset: %v", err))
 		return
 	}
 
-	if err := h.scheduleService.UpdateAudience(r.Context(), &audience); err != nil {
+	audience, err := h.scheduleService.UpdateAudience(r.Context(), id, &req)
+	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update audience: %v", err))
 		return
 	}
@@ -602,7 +1630,7 @@ func (h *AuthHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
 package handlers
 
 import (
-	"core/internal/models"
+	"core/internal/dto"
 	"core/internal/services"
 	"core/pkg/utils"
 	"encoding/json"
@@ -622,13 +1650,19 @@ func NewGroupHandler(scheduleService *services.ScheduleService) *GroupHandler {
 }
 
 func (h *GroupHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
-	var group models.Group
-	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
+	var req dto.CreateGroupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
 		return
 	}
 
-	if err := h.scheduleService.CreateGroup(r.Context(), &group); err != nil {
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
+	group, err := h.scheduleService.CreateGroup(r.Context(), &req)
+	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create group: %v", err))
 		return
 	}
@@ -663,16 +1697,28 @@ func (h *GroupHandler) GetAllGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GroupHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
-	var group models.Group
-	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid id: %v", err))
+		return
+	}
+	var req dto.UpdateGroupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
 		return
 	}
 
-	if err := h.scheduleService.UpdateGroup(r.Context(), &group); err != nil {
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
+	group, err := h.scheduleService.UpdateGroup(r.Context(), id, &req)
+	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update group: %v", err))
 		return
 	}
+
 	utils.SuccessResponse(w, "group updated", group)
 }
 
@@ -855,10 +1901,12 @@ func (h *StudentHandler) UpdateStudentGroup(w http.ResponseWriter, r *http.Reque
 	var req struct {
 		GroupID int `json:"group_id"`
 	}
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
 		return
 	}
+
 	if err := h.scheduleService.UpdateStudentGroup(r.Context(), id, req.GroupID); err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update student group: %v", err))
 		return
@@ -885,14 +1933,12 @@ package handlers
 
 import (
 	"core/internal/dto"
-	"core/internal/models"
 	"core/internal/services"
 	"core/pkg/utils"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -911,29 +1957,14 @@ func (h *SubjectHandler) CreateSubject(w http.ResponseWriter, r *http.Request) {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
 		return
 	}
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+	
+	subject, err := h.scheduleService.CreateSubject(r.Context(), &req)
 	if err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
-		return
-	}
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
-		return
-	}
-	subject := models.Subject{
-		Title: req.Title,
-		Semester: req.Semester,
-		HoursLoad: req.HoursLoad,
-		GroupID: req.GroupID,
-		StartDate: startDate,
-		EndDate: endDate,
-	}
-	if subject.StartDate.After(subject.EndDate) {
-		utils.ErrorResponse(w, http.StatusBadRequest, "start_date must be before end_date")
-		return
-	}
-	if err := h.scheduleService.CreateSubject(r.Context(), &subject); err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create subject: %v", err))
 		return
 	}
@@ -1009,17 +2040,20 @@ func (h *SubjectHandler) UpdateSubject(w http.ResponseWriter, r *http.Request) {
 		utils.ErrorResponse(w, http.StatusBadRequest, "invalid id")
 		return
 	}
-	var subject models.Subject
-	if err := json.NewDecoder(r.Body).Decode(&subject); err != nil {
+
+	var req dto.UpdateSubjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
 		return
 	}
-	subject.ID = id
-	if subject.StartDate.After(subject.EndDate) {
-		utils.ErrorResponse(w, http.StatusBadRequest, "start_date must be before end_date")
+
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
 		return
 	}
-	if err := h.scheduleService.UpdateSubject(r.Context(), &subject); err != nil {
+
+	subject, err := h.scheduleService.UpdateSubject(r.Context(), id, &req)
+	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update subject: %v", err))
 		return
 	}
@@ -2848,6 +3882,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -2898,6 +3933,14 @@ func (r *Router) SetupRoutes() {
 
 	r.router.Use(middleware.Logger)
 	r.router.Use(middleware.Recoverer)
+
+	r.router.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 
 	r.router.Post("/login", authHandler.Login)
 	r.router.Post("/refresh", authHandler.RefreshToken)
@@ -2955,7 +3998,7 @@ func (r *Router) SetupRoutes() {
 		r.Route("/groups", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", groupHandler.CreateGroup)
-				r.Patch("/", groupHandler.UpdateGroup)
+				r.Patch("/{id}", groupHandler.UpdateGroup)
 				r.Delete("/{id}", groupHandler.DeleteGroup)
 			})
 			r.Get("/", groupHandler.GetAllGroups)
@@ -2965,14 +4008,11 @@ func (r *Router) SetupRoutes() {
 		r.Route("/audiences", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", audienceHandler.CreateAudience)
-				r.Patch("/", audienceHandler.UpdateAudience)
+				r.Patch("/{id}", audienceHandler.UpdateAudience)
 				r.Delete("/{id}", audienceHandler.DeleteAudience)
 			})
 			r.Get("/{id}", audienceHandler.GetAudience)
 			r.Get("/", audienceHandler.GetAllAudience)
-		})
-
-		r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 		})
 
 		r.Route("/subjects", func(r chi.Router) {
@@ -3004,6 +4044,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 )
 
 type ScheduleService struct {
@@ -3037,8 +4078,13 @@ func NewScheduleService(
 }
 
 // ---------- Audience methods ----------
-func (s *ScheduleService) CreateAudience(ctx context.Context, audience *models.Audience) error {
-	return s.audienceRepo.Create(ctx, audience)
+func (s *ScheduleService) CreateAudience(ctx context.Context, req *dto.CreateAudienceRequest) (*models.Audience, error) {
+	audience := models.Audience{
+		Name:   req.Name,
+		Number: req.Number,
+	}
+	err := s.audienceRepo.Create(ctx, &audience)
+	return &audience, err
 }
 
 func (s *ScheduleService) GetAudience(ctx context.Context, id int) (*models.Audience, error) {
@@ -3049,8 +4095,21 @@ func (s *ScheduleService) GetAllAudience(ctx context.Context) ([]models.Audience
 	return s.audienceRepo.GetAll(ctx)
 }
 
-func (s *ScheduleService) UpdateAudience(ctx context.Context, audience *models.Audience) error {
-	return s.audienceRepo.Update(ctx, audience)
+func (s *ScheduleService) UpdateAudience(ctx context.Context, id int, req *dto.UpdateAudienceRequest) (*models.Audience, error) {
+	audience, err := s.GetAudience(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get audience: %w", err)
+	}
+
+	if req.Name != "" {
+		audience.Name = req.Name
+	}
+	if req.Number != "" {
+		audience.Number = req.Number
+	}
+
+	err = s.audienceRepo.Update(ctx, audience)
+	return audience, err
 }
 
 func (s *ScheduleService) DeleteAudience(ctx context.Context, id int) error {
@@ -3058,8 +4117,14 @@ func (s *ScheduleService) DeleteAudience(ctx context.Context, id int) error {
 }
 
 // ---------- Group methods ----------
-func (s *ScheduleService) CreateGroup(ctx context.Context, group *models.Group) error {
-	return s.groupRepo.Create(ctx, group)
+func (s *ScheduleService) CreateGroup(ctx context.Context, req *dto.CreateGroupRequest) (*models.Group, error) {
+	group := models.Group{
+		Name:          req.Name,
+		Specialty:     req.Specialty,
+		AdmissionYear: req.AdmissionYear,
+	}
+	err := s.groupRepo.Create(ctx, &group)
+	return &group, err
 }
 
 func (s *ScheduleService) GetGroup(ctx context.Context, id int) (*models.Group, error) {
@@ -3070,8 +4135,26 @@ func (s *ScheduleService) GetAllGroups(ctx context.Context) ([]models.Group, err
 	return s.groupRepo.GetAll(ctx)
 }
 
-func (s *ScheduleService) UpdateGroup(ctx context.Context, group *models.Group) error {
-	return s.groupRepo.Update(ctx, group)
+func (s *ScheduleService) UpdateGroup(ctx context.Context, id int, req *dto.UpdateGroupRequest) (*models.Group, error) {
+	group, err := s.GetGroup(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get group: %w", err)
+	}
+
+	if req.Name != "" {
+		group.Name = req.Name
+	}
+
+	if req.Specialty != "" {
+		group.Specialty = req.Specialty
+	}
+
+	if req.AdmissionYear != 0 {
+		group.AdmissionYear = req.AdmissionYear
+	}
+
+	err = s.groupRepo.Update(ctx, group)
+	return group, err
 }
 
 func (s *ScheduleService) DeleteGroup(ctx context.Context, id int) error {
@@ -3292,8 +4375,29 @@ func (s *ScheduleService) GetUserRoles(ctx context.Context, userID int) ([]model
 	return s.roleRepo.GetUserRoles(ctx, userID)
 }
 
-func (s *ScheduleService) CreateSubject(ctx context.Context, subject *models.Subject) error {
-	return s.subjectRepo.CreateSubject(ctx, subject)
+// --------Subject Methods
+func (s *ScheduleService) CreateSubject(ctx context.Context, req *dto.CreateSubjectRequest) (*models.Subject, error) {
+	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	if err != nil {
+		return nil, fmt.Errorf("parse start_date: %w", err)
+	}
+	endDate, err := time.Parse("2006-01-02", req.EndDate)
+	if err != nil {
+		return nil, fmt.Errorf("parse end_date: %w", err)
+	}
+	if startDate.After(endDate) {
+		return nil, errors.New("start_date must be before end_date")
+	}
+	subject := models.Subject{
+		Title: req.Title,
+		Semester: req.Semester,
+		HoursLoad: req.HoursLoad,
+		StartDate: startDate,
+		EndDate: endDate,
+		GroupID: req.GroupID,
+	}
+	err = s.subjectRepo.CreateSubject(ctx, &subject)
+	return &subject, err
 }
 
 func (s *ScheduleService) GetSubjectByID(ctx context.Context, id int) (*models.Subject, error) {
@@ -3308,8 +4412,47 @@ func (s *ScheduleService) GetSubjectsByGroupID(ctx context.Context, groupID int,
 	return s.subjectRepo.GetSubjectsByGroupID(ctx, groupID, req)
 }
 
-func (s *ScheduleService) UpdateSubject(ctx context.Context, subject *models.Subject) error {
-	return s.subjectRepo.UpdateSubject(ctx, subject)
+func (s *ScheduleService) UpdateSubject(ctx context.Context, id int, req *dto.UpdateSubjectRequest) (*models.Subject, error) {
+	subject, err := s.GetSubjectByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get subject: %w", err)
+	}
+
+
+	if req.Title != "" {
+		subject.Title = req.Title
+	}
+
+	if req.Semester != 0 {
+		subject.Semester = req.Semester
+	}
+
+	if req.HoursLoad != 0 {
+		subject.HoursLoad = req.HoursLoad
+	}
+
+	if req.StartDate != "" {
+		startDate, err := time.Parse("2006-01-02", req.StartDate)
+		if err != nil {
+			return nil, fmt.Errorf("parse start_date: %w", err)
+		}
+		subject.StartDate = startDate
+	}
+
+	if req.EndDate != "" {
+		endDate, err := time.Parse("2006-01-02", req.EndDate)
+		if err != nil {
+			return nil, fmt.Errorf("parse end_date: %w", err)
+		}
+		subject.EndDate = endDate
+	}
+
+	if subject.StartDate.After(subject.EndDate) {
+		return nil, errors.New("start_date must be before end_date")
+	}
+
+	err = s.subjectRepo.UpdateSubject(ctx, subject)
+	return subject, err
 }
 
 func (s *ScheduleService) DeleteSubject(ctx context.Context, id int) error {
@@ -3448,10 +4591,17 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 		return nil, err
 	}
 
+	var roles []string
+
+	for _, role := range user.Roles {
+		roles = append(roles, role.Name)
+	}
+
 	return &dto.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		SessionID:    session.ID.String(),
+		Roles:        roles,
 	}, nil
 }
 

@@ -3,6 +3,17 @@ CREATE SCHEMA schedule;
 
 CREATE TYPE lesson_status AS ENUM ('planned', 'completed', 'canceled', 'rescheduled');
 
+CREATE TABLE schedule.academic_periods (
+	id SERIAL PRIMARY KEY,
+	year VARCHAR(10) NOT NULL,
+	semester INTEGER NOT NULL CHECK(semester IN (1,2)),
+	start_date DATE NOT NULL,
+	end_date DATE NOT NULL,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(year, semester)
+);
+
 CREATE TABLE schedule.subjects (
 	id SERIAL PRIMARY KEY,
 	title VARCHAR(255) NOT NULL,
@@ -26,6 +37,7 @@ CREATE TABLE schedule.templates (
 	day_of_week INTEGER,
 	number INTEGER ,
 	week_type INTEGER,
+	academic_period_id INTEGER REFERENCES schedule.academic_periods(id) ON DELETE CASCADE,
 	subject_id INTEGER REFERENCES schedule.subjects(id) ON DELETE CASCADE,
 	teacher_id INTEGER REFERENCES auth.teacher_profiles(user_id) ON DELETE SET NULL,
 	audience_id INTEGER REFERENCES schedule.audiences(id) ON DELETE SET NULL,

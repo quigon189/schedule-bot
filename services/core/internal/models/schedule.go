@@ -2,6 +2,16 @@ package models
 
 import "time"
 
+type AcademicPeriod struct {
+	ID        int       `json:"id"`
+	Year      string    `json:"yaer"`
+	Semester  int       `json:"semester"`
+	StartDate time.Time `json:"start_date"`
+	EndDate   time.Time `json:"end_date"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type Audience struct {
 	ID     int    `json:"id"`
 	Name   string `json:"name"`
