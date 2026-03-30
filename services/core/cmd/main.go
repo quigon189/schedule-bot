@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"core/internal/config"
+	"core/internal/dto"
 	"core/internal/router"
 	"core/pkg/postgres"
 	"fmt"
@@ -20,6 +21,8 @@ import (
 
 func main() {
 	cfg := config.Load()
+
+	dto.SetupValidator()
 
 	dsn := fmt.Sprintf(
 		"postgresql://%s:%s@%s:%s/%s?sslmode=disable",

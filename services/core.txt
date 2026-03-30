@@ -1,4 +1,4 @@
-Текущий каталог: /home/quigon/schedule-bot/services/core
+Текущий каталог: /home/admin/schedule-bot/services/core
 ├── Dockerfile
 ├── cmd
 |   └── main.go
@@ -12,7 +12,8 @@
 |   |   ├── role.go
 |   |   ├── schedule.go
 |   |   ├── subject.go
-|   |   └── user.go
+|   |   ├── user.go
+|   |   └── validator.go
 |   ├── handlers
 |   |   ├── audience.go
 |   |   ├── auth.go
@@ -53,12 +54,13 @@
     └── utils
         └── response.go
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/cmd/main.go
+Файл: /home/admin/schedule-bot/services/core/cmd/main.go
 package main
 
 import (
 	"context"
 	"core/internal/config"
+	"core/internal/dto"
 	"core/internal/router"
 	"core/pkg/postgres"
 	"fmt"
@@ -76,6 +78,8 @@ import (
 
 func main() {
 	cfg := config.Load()
+
+	dto.SetupValidator()
 
 	dsn := fmt.Sprintf(
 		"postgresql://%s:%s@%s:%s/%s?sslmode=disable",
@@ -141,13 +145,14 @@ func Migrations(pool *pgxpool.Pool, path string) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/go.mod
+Файл: /home/admin/schedule-bot/services/core/go.mod
 module core
 
 go 1.25.0
 
 require (
 	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-playground/validator/v10 v10.30.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/pressly/goose/v3 v3.27.0
@@ -155,18 +160,23 @@ require (
 )
 
 require (
+	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
+	github.com/go-playground/locales v0.14.1 // indirect
+	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 )
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/config/config.go
+Файл: /home/admin/schedule-bot/services/core/internal/config/config.go
 package config
 
 import (
@@ -248,12 +258,12 @@ func getIntEnv(key string, defaultValue int) int {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/auth.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/auth.go
 package dto
 
 type LoginRequest struct {
-	Username  string `json:"username"`
-	Password  string `json:"password"`
+	Username  string `json:"username" validate:"required,min=3,max=20"`
+	Password  string `json:"password" validate:"required"`
 	UserAgent string `json:"user_agent"`
 	ClientIP  string `json:"client_ip"`
 }
@@ -265,12 +275,12 @@ type LoginResponse struct {
 }
 
 type RefreshTokenRequest struct {
-	SessionID    string `json:"session_id"`
-	RefreshToken string `json:"refresh_token"`
+	SessionID    string `json:"session_id" validate:"required"`
+	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/role.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/role.go
 package dto
 
 type AssignStudentRequest struct {
@@ -293,7 +303,7 @@ type RemoveRoleRequest struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/schedule.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/schedule.go
 package dto
 
 type CreateStudentRequest struct {
@@ -302,7 +312,7 @@ type CreateStudentRequest struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/subject.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/subject.go
 package dto
 
 import "core/internal/models"
@@ -332,54 +342,19 @@ type PaginatedSubjectsResponse struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/user.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/user.go
 package dto
 
 import (
 	"core/internal/models"
-	"errors"
-	"net/mail"
-	"regexp"
-	"strings"
-)
-
-const (
-	PASSWORD_LENGHT = 8
 )
 
 type CreateUserRequest struct {
-	Username string `json:"username"`
-	FullName string `json:"full_name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
-func (r *CreateUserRequest) Validate() error {
-	var errs []string
-
-	reUsername := regexp.MustCompile(`^[a-zA-Z0-9_]{3,20}$`)
-	if !reUsername.MatchString(r.Username) {
-		errs = append(errs, "username error")
-	}
-
-	if len(r.FullName) < 3 {
-		errs = append(errs, "full_name error")
-	}
-
-	if _, err := mail.ParseAddress(r.Email); err != nil {
-		errs = append(errs, "email error")
-	}
-
-	if len(r.Password) < PASSWORD_LENGHT {
-		errs = append(errs, "password error")
-	}
-
-	if len(errs) > 0 {
-		errStr := strings.Join(errs, "; ")
-		return errors.New(errStr)
-	}
-
-	return nil
+	*BaseRequest
+	Username string `json:"username" validate:"required,username"`
+	FullName string `json:"full_name" validate:"required,min=3"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=6"`
 }
 
 type PaginatedUsers struct {
@@ -398,13 +373,39 @@ type PagiantedUserRequest struct {
 }
 
 type UpdateUserPasswordRequest struct {
-	UserID int `json:"user_id"`
-	NewPassword string `json:"new_password"`
-	OldPassword string `json:"old_password"`
+	UserID      int    `json:"user_id"`
+	NewPassword string `json:"new_password" validate:"required,min=6"`
+	OldPassword string `json:"old_password" validate:"required,min=6"`
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/audience.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/validator.go
+package dto
+
+import (
+	"regexp"
+
+	"github.com/go-playground/validator/v10"
+)
+
+var validate = validator.New()
+
+func validateUsername(fl validator.FieldLevel) bool {
+	username := fl.Field().String()
+	return regexp.MustCompile("^[a-zA-Z0-9_]{3,20}$").MatchString(username)
+}
+
+func SetupValidator() {
+	validate.RegisterValidation("username", validateUsername)
+}
+
+func ValidateStruct(s any) error {
+	return validate.Struct(s)
+}
+
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/audience.go
 package handlers
 
 import (
@@ -499,7 +500,7 @@ func (h *AudienceHandler) DeleteAudience(w http.ResponseWriter, r *http.Request)
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/auth.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/auth.go
 package handlers
 
 import (
@@ -527,6 +528,20 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
+	req.UserAgent = r.Header.Get("User-Agent")
+
+	clientIP := r.Header.Get("X-Forwarded-For")
+	if clientIP == "" {
+		clientIP = r.RemoteAddr
+	}
+
+	req.ClientIP = clientIP
+
 	resp, err := h.userService.Login(r.Context(), req)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to login: %v", err))
@@ -539,7 +554,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	accessToken, ok := r.Context().Value("access_token").(string)
 	if !ok {
-		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get access token"))
+		utils.ErrorResponse(w, http.StatusInternalServerError, "failed to get access token")
 		return
 	}
 	err := h.userService.Logout(r.Context(), accessToken)
@@ -558,6 +573,11 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
 	resp, err := h.userService.RefreshToken(r.Context(), &req)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to refresh token: %v", err))
@@ -567,8 +587,18 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, "success refresh token", resp)
 }
 
+func (h *AuthHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
+	sessions, err := h.userService.GetSessions(r.Context())
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get sessions: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "success get sessions", sessions)
+}
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/group.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/group.go
 package handlers
 
 import (
@@ -660,7 +690,7 @@ func (h *GroupHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/role.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/role.go
 package handlers
 
 import (
@@ -746,7 +776,7 @@ func (h *RoleHandler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/student.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/student.go
 package handlers
 
 import (
@@ -775,6 +805,11 @@ func (h *StudentHandler) CreateStudent(w http.ResponseWriter, r *http.Request) {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
 		return
 	}
+
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+	}
+
 	student, err := h.scheduleService.CreateStudent(r.Context(), &req)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create student: %v", err))
@@ -845,7 +880,7 @@ func (h *StudentHandler) DeleteStudent(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/subject.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/subject.go
 package handlers
 
 import (
@@ -1005,7 +1040,7 @@ func (h *SubjectHandler) DeleteSubject(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/teacher.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/teacher.go
 package handlers
 
 import (
@@ -1034,6 +1069,11 @@ func (h *TeacherHandler) CreateTeacher(w http.ResponseWriter, r *http.Request) {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
 		return
 	}
+
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+	}
+
 	teacher, err := h.scheduleService.CreateTeacher(r.Context(), &req)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create teacher: %v", err))
@@ -1083,7 +1123,7 @@ func (h *TeacherHandler) DeleteTeacher(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/user.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/user.go
 package handlers
 
 import (
@@ -1111,6 +1151,11 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to decode body: %v", err))
+		return
+	}
+
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
 		return
 	}
 
@@ -1178,6 +1223,11 @@ func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
 	currentUser, ok := r.Context().Value("user").(models.User)
 	if !ok {
 		utils.ErrorResponse(w, http.StatusBadRequest, "failed to get current user")
@@ -1193,6 +1243,11 @@ func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request)
 
 	userID := currentUser.ID
 	if isAdmin {
+		if req.UserID < 1 {
+			utils.ErrorResponse(w, http.StatusBadRequest, "invalid user_id")
+			return
+		}
+
 		if err := h.userService.UpdatePasswordAdmin(r.Context(), req.UserID, req.NewPassword); err != nil {
 			utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("failed to get user: %v", err))
 			return
@@ -1214,7 +1269,7 @@ func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request)
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/middlewares/tokens.go
+Файл: /home/admin/schedule-bot/services/core/internal/middlewares/tokens.go
 package middlewares
 
 import (
@@ -1269,7 +1324,7 @@ func (m *AuthMiddleware) AdminRequire(next http.Handler) http.Handler {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/models/schedule.go
+Файл: /home/admin/schedule-bot/services/core/internal/models/schedule.go
 package models
 
 import "time"
@@ -1322,7 +1377,7 @@ type LessonLog struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/models/session.go
+Файл: /home/admin/schedule-bot/services/core/internal/models/session.go
 package models
 
 import (
@@ -1341,7 +1396,7 @@ type Session struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/models/user.go
+Файл: /home/admin/schedule-bot/services/core/internal/models/user.go
 package models
 
 import (
@@ -1390,7 +1445,7 @@ func (u *User) RequireRole(role string) bool {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/audience.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/audience.go
 package repository
 
 import (
@@ -1487,7 +1542,7 @@ func (r *AudienceRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/group.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/group.go
 package repository
 
 import (
@@ -1577,7 +1632,7 @@ func (r *GroupRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/role.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/role.go
 package repository
 
 import (
@@ -1687,13 +1742,15 @@ func (r *RoleRepo) GetRoles(ctx context.Context) ([]models.Role, error) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/session.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/session.go
 package repository
 
 import (
 	"context"
 	"core/internal/models"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -1786,6 +1843,49 @@ func (r *SessionRepo) GetByUserID(ctx context.Context, id int) ([]models.Session
 	return sessions, nil
 }
 
+func (r *SessionRepo) GetAllSessions(ctx context.Context) ([]models.Session, error) {
+	sessions := []models.Session{}
+	query := `
+	SELECT s.id, s.refresh_token, s.user_agent, s.client_ip, s.created_at,
+		   u.id, u.username, u.full_name, u.email, u.created_at, u.updated_at
+	FROM auth.sessions s
+	JOIN auth.users u ON u.id = s.user_id
+	`
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return sessions, nil
+		} else {
+			return nil, err
+		}
+	}
+
+	for rows.Next() {
+		session := models.Session{
+			User: &models.User{},
+		}
+		err := rows.Scan(
+			&session.ID,
+			&session.RefreshToken,
+			&session.UserAgent,
+			&session.ClientIP,
+			&session.CreatedAt,
+			&session.User.ID,
+			&session.User.Name,
+			&session.User.FullName,
+			&session.User.Email,
+			&session.User.CreatedAt,
+			&session.User.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, session)
+	}
+
+	return sessions, err
+}
+
 func (r *SessionRepo) UpdateRefreshToken(ctx context.Context, id string, refreshToken string) error {
 	query := `
 	UPDATE auth.sessions
@@ -1805,7 +1905,7 @@ func (r *SessionRepo) Delete(ctx context.Context, id pgtype.UUID) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/student.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/student.go
 package repository
 
 import (
@@ -1989,7 +2089,7 @@ func ( r *StudentRepo) IsStudent(ctx context.Context, userID int) (bool, error) 
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/subject.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/subject.go
 package repository
 
 import (
@@ -2260,7 +2360,7 @@ func (r *SubjectRepo) DeleteSubject(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/teacher.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/teacher.go
 package repository
 
 import (
@@ -2417,7 +2517,7 @@ func ( r *TeacherRepo) IsTeacher(ctx context.Context, userID int) (bool, error) 
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/user.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/user.go
 package repository
 
 import (
@@ -2735,7 +2835,7 @@ func (r *UserRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/router/router.go
+Файл: /home/admin/schedule-bot/services/core/internal/router/router.go
 package router
 
 import (
@@ -2807,6 +2907,9 @@ func (r *Router) SetupRoutes() {
 
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(authMiddleware.AdminRequire)
+
+			r.Get("/sessions", authHandler.GetSessions)
+
 			r.Route("/users", func(r chi.Router) {
 				r.Get("/", userHandler.GetUsers)
 				r.Get("/{id}", userHandler.GetUser)
@@ -2890,7 +2993,7 @@ func (r *Router) Router() *chi.Mux {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/services/schedule.go
+Файл: /home/admin/schedule-bot/services/core/internal/services/schedule.go
 package services
 
 import (
@@ -2976,9 +3079,6 @@ func (s *ScheduleService) DeleteGroup(ctx context.Context, id int) error {
 }
 
 func (s *ScheduleService) CreateTeacher(ctx context.Context, req *dto.CreateUserRequest) (*models.Teacher, error) {
-	if err := req.Validate(); err != nil {
-		return nil, err
-	}
 	passwordHash, err := hashPassword(req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
@@ -3011,9 +3111,6 @@ func (s *ScheduleService) DeleteTeacher(ctx context.Context, userID int) error {
 }
 
 func (s *ScheduleService) CreateStudent(ctx context.Context, req *dto.CreateStudentRequest) (*models.Student, error) {
-	if err := req.Validate(); err != nil {
-		return nil, err
-	}
 	group, err := s.groupRepo.GetByID(ctx, req.GroupID)
 	if err != nil {
 		return nil, fmt.Errorf("get group: %w", err)
@@ -3220,7 +3317,7 @@ func (s *ScheduleService) DeleteSubject(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/services/tokens.go
+Файл: /home/admin/schedule-bot/services/core/internal/services/tokens.go
 package services
 
 import (
@@ -3293,7 +3390,7 @@ func (s *JWTService) GenerateRefreshToken() (string, error) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/services/user.go
+Файл: /home/admin/schedule-bot/services/core/internal/services/user.go
 package services
 
 import (
@@ -3442,9 +3539,6 @@ func (s *UserService) LogoutSession(ctx context.Context, accessToken string, ses
 }
 
 func (s *UserService) CreateUser(ctx context.Context, req *dto.CreateUserRequest) (*models.User, error) {
-	if err := req.Validate(); err != nil {
-		return nil, err
-	}
 	password_hash, err := hashPassword(req.Password)
 	if err != nil {
 		return nil, err
@@ -3514,8 +3608,12 @@ func (s *UserService) UpdatePasswordAdmin(ctx context.Context, userID int, newPa
 
 }
 
+func (s *UserService) GetSessions(ctx context.Context) ([]models.Session, error) {
+	return s.sessionRepo.GetAllSessions(ctx)
+}
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/services/utils.go
+Файл: /home/admin/schedule-bot/services/core/internal/services/utils.go
 package services
 
 import "golang.org/x/crypto/bcrypt"
@@ -3531,7 +3629,7 @@ func checkPasswordHash(password, hash string) bool {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/pkg/postgres/postgres.go
+Файл: /home/admin/schedule-bot/services/core/pkg/postgres/postgres.go
 package postgres
 
 import (
@@ -3573,7 +3671,7 @@ func NewPostgresPool(dsn string) (*pgxpool.Pool, error) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/pkg/utils/response.go
+Файл: /home/admin/schedule-bot/services/core/pkg/utils/response.go
 package utils
 
 import (

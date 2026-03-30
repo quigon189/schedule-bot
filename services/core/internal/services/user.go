@@ -55,10 +55,17 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 		return nil, err
 	}
 
+	var roles []string
+
+	for _, role := range user.Roles {
+		roles = append(roles, role.Name)
+	}
+
 	return &dto.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		SessionID:    session.ID.String(),
+		Roles:        roles,
 	}, nil
 }
 

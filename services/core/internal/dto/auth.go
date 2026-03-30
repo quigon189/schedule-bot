@@ -8,9 +8,10 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	AccessToken  string `json:"access_token"`
-	SessionID    string `json:"session_id"`
-	RefreshToken string `json:"refresh_token"`
+	AccessToken  string   `json:"access_token"`
+	SessionID    string   `json:"session_id"`
+	RefreshToken string   `json:"refresh_token"`
+	Roles        []string `json:"roles"`
 }
 
 type RefreshTokenRequest struct {
