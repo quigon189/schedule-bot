@@ -3,12 +3,20 @@ package dto
 import "core/internal/models"
 
 type CreateSubjectRequest struct {
-	Title string `json:"title" validate:"required"`
-	Semester int `json:"semester" validate:"required"`
-	HoursLoad int `json:"hours_load" validate:"required"`
+	Title     string `json:"title" validate:"required"`
+	Semester  int    `json:"semester" validate:"required,min=1,max=10"`
+	HoursLoad int    `json:"hours_load" validate:"required,min=1"`
 	StartDate string `json:"start_date" validate:"required"`
-	EndDate string `json:"end_date" validate:"required"`
-	GroupID int `json:"group_id" validate:"required"`
+	EndDate   string `json:"end_date" validate:"required"`
+	GroupID   int    `json:"group_id" validate:"required"`
+}
+
+type UpdateSubjectRequest struct {
+	Title     string `json:"title"`
+	Semester  int    `json:"semester"`
+	HoursLoad int    `json:"hours_load"`
+	StartDate string `json:"start_date"`
+	EndDate   string `json:"end_date"`
 }
 
 type PaginatedSubjectsRequest struct {

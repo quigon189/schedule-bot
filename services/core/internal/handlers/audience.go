@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"core/internal/models"
+	"core/internal/dto"
 	"core/internal/services"
 	"core/pkg/utils"
 	"encoding/json"
@@ -21,13 +21,19 @@ func NewAudienceHandler(scheduleService *services.ScheduleService) *AudienceHand
 }
 
 func (h *AudienceHandler) CreateAudience(w http.ResponseWriter, r *http.Request) {
-	var audience models.Audience
-	if err := json.NewDecoder(r.Body).Decode(&audience); err != nil {
+	var req dto.CreateAudienceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad requset: %v", err))
 		return
 	}
 
-	if err := h.scheduleService.CreateAudience(r.Context(), &audience); err != nil {
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
+	audience, err := h.scheduleService.CreateAudience(r.Context(), &req)
+	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create audience: %v", err))
 		return
 	}
@@ -62,13 +68,20 @@ func (h *AudienceHandler) GetAllAudience(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *AudienceHandler) UpdateAudience(w http.ResponseWriter, r *http.Request) {
-	var audience models.Audience
-	if err := json.NewDecoder(r.Body).Decode(&audience); err != nil {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid id: %v", err))
+		return
+	}
+
+	var req dto.UpdateAudienceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad requset: %v", err))
 		return
 	}
 
-	if err := h.scheduleService.UpdateAudience(r.Context(), &audience); err != nil {
+	audience, err := h.scheduleService.UpdateAudience(r.Context(), id, &req)
+	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update audience: %v", err))
 		return
 	}

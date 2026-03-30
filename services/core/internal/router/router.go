@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -60,6 +61,14 @@ func (r *Router) SetupRoutes() {
 
 	r.router.Use(middleware.Logger)
 	r.router.Use(middleware.Recoverer)
+
+	r.router.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 
 	r.router.Post("/login", authHandler.Login)
 	r.router.Post("/refresh", authHandler.RefreshToken)
@@ -117,7 +126,7 @@ func (r *Router) SetupRoutes() {
 		r.Route("/groups", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", groupHandler.CreateGroup)
-				r.Patch("/", groupHandler.UpdateGroup)
+				r.Patch("/{id}", groupHandler.UpdateGroup)
 				r.Delete("/{id}", groupHandler.DeleteGroup)
 			})
 			r.Get("/", groupHandler.GetAllGroups)
@@ -127,14 +136,11 @@ func (r *Router) SetupRoutes() {
 		r.Route("/audiences", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", audienceHandler.CreateAudience)
-				r.Patch("/", audienceHandler.UpdateAudience)
+				r.Patch("/{id}", audienceHandler.UpdateAudience)
 				r.Delete("/{id}", audienceHandler.DeleteAudience)
 			})
 			r.Get("/{id}", audienceHandler.GetAudience)
 			r.Get("/", audienceHandler.GetAllAudience)
-		})
-
-		r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 		})
 
 		r.Route("/subjects", func(r chi.Router) {

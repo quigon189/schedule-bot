@@ -2,14 +2,12 @@ package handlers
 
 import (
 	"core/internal/dto"
-	"core/internal/models"
 	"core/internal/services"
 	"core/pkg/utils"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -28,29 +26,14 @@ func (h *SubjectHandler) CreateSubject(w http.ResponseWriter, r *http.Request) {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
 		return
 	}
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+	
+	subject, err := h.scheduleService.CreateSubject(r.Context(), &req)
 	if err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
-		return
-	}
-	endDate, err := time.Parse("2006-01-02", req.EndDate)
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
-		return
-	}
-	subject := models.Subject{
-		Title: req.Title,
-		Semester: req.Semester,
-		HoursLoad: req.HoursLoad,
-		GroupID: req.GroupID,
-		StartDate: startDate,
-		EndDate: endDate,
-	}
-	if subject.StartDate.After(subject.EndDate) {
-		utils.ErrorResponse(w, http.StatusBadRequest, "start_date must be before end_date")
-		return
-	}
-	if err := h.scheduleService.CreateSubject(r.Context(), &subject); err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create subject: %v", err))
 		return
 	}
@@ -126,17 +109,20 @@ func (h *SubjectHandler) UpdateSubject(w http.ResponseWriter, r *http.Request) {
 		utils.ErrorResponse(w, http.StatusBadRequest, "invalid id")
 		return
 	}
-	var subject models.Subject
-	if err := json.NewDecoder(r.Body).Decode(&subject); err != nil {
+
+	var req dto.UpdateSubjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
 		return
 	}
-	subject.ID = id
-	if subject.StartDate.After(subject.EndDate) {
-		utils.ErrorResponse(w, http.StatusBadRequest, "start_date must be before end_date")
+
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
 		return
 	}
-	if err := h.scheduleService.UpdateSubject(r.Context(), &subject); err != nil {
+
+	subject, err := h.scheduleService.UpdateSubject(r.Context(), id, &req)
+	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update subject: %v", err))
 		return
 	}

@@ -76,10 +76,12 @@ func (h *StudentHandler) UpdateStudentGroup(w http.ResponseWriter, r *http.Reque
 	var req struct {
 		GroupID int `json:"group_id"`
 	}
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
 		return
 	}
+
 	if err := h.scheduleService.UpdateStudentGroup(r.Context(), id, req.GroupID); err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update student group: %v", err))
 		return

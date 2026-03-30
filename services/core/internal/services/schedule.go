@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 )
 
 type ScheduleService struct {
@@ -41,8 +42,13 @@ func NewScheduleService(
 }
 
 // ---------- Audience methods ----------
-func (s *ScheduleService) CreateAudience(ctx context.Context, audience *models.Audience) error {
-	return s.audienceRepo.Create(ctx, audience)
+func (s *ScheduleService) CreateAudience(ctx context.Context, req *dto.CreateAudienceRequest) (*models.Audience, error) {
+	audience := models.Audience{
+		Name:   req.Name,
+		Number: req.Number,
+	}
+	err := s.audienceRepo.Create(ctx, &audience)
+	return &audience, err
 }
 
 func (s *ScheduleService) GetAudience(ctx context.Context, id int) (*models.Audience, error) {
@@ -53,8 +59,21 @@ func (s *ScheduleService) GetAllAudience(ctx context.Context) ([]models.Audience
 	return s.audienceRepo.GetAll(ctx)
 }
 
-func (s *ScheduleService) UpdateAudience(ctx context.Context, audience *models.Audience) error {
-	return s.audienceRepo.Update(ctx, audience)
+func (s *ScheduleService) UpdateAudience(ctx context.Context, id int, req *dto.UpdateAudienceRequest) (*models.Audience, error) {
+	audience, err := s.GetAudience(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get audience: %w", err)
+	}
+
+	if req.Name != "" {
+		audience.Name = req.Name
+	}
+	if req.Number != "" {
+		audience.Number = req.Number
+	}
+
+	err = s.audienceRepo.Update(ctx, audience)
+	return audience, err
 }
 
 func (s *ScheduleService) DeleteAudience(ctx context.Context, id int) error {
@@ -62,8 +81,14 @@ func (s *ScheduleService) DeleteAudience(ctx context.Context, id int) error {
 }
 
 // ---------- Group methods ----------
-func (s *ScheduleService) CreateGroup(ctx context.Context, group *models.Group) error {
-	return s.groupRepo.Create(ctx, group)
+func (s *ScheduleService) CreateGroup(ctx context.Context, req *dto.CreateGroupRequest) (*models.Group, error) {
+	group := models.Group{
+		Name:          req.Name,
+		Specialty:     req.Specialty,
+		AdmissionYear: req.AdmissionYear,
+	}
+	err := s.groupRepo.Create(ctx, &group)
+	return &group, err
 }
 
 func (s *ScheduleService) GetGroup(ctx context.Context, id int) (*models.Group, error) {
@@ -74,8 +99,26 @@ func (s *ScheduleService) GetAllGroups(ctx context.Context) ([]models.Group, err
 	return s.groupRepo.GetAll(ctx)
 }
 
-func (s *ScheduleService) UpdateGroup(ctx context.Context, group *models.Group) error {
-	return s.groupRepo.Update(ctx, group)
+func (s *ScheduleService) UpdateGroup(ctx context.Context, id int, req *dto.UpdateGroupRequest) (*models.Group, error) {
+	group, err := s.GetGroup(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get group: %w", err)
+	}
+
+	if req.Name != "" {
+		group.Name = req.Name
+	}
+
+	if req.Specialty != "" {
+		group.Specialty = req.Specialty
+	}
+
+	if req.AdmissionYear != 0 {
+		group.AdmissionYear = req.AdmissionYear
+	}
+
+	err = s.groupRepo.Update(ctx, group)
+	return group, err
 }
 
 func (s *ScheduleService) DeleteGroup(ctx context.Context, id int) error {
@@ -296,8 +339,29 @@ func (s *ScheduleService) GetUserRoles(ctx context.Context, userID int) ([]model
 	return s.roleRepo.GetUserRoles(ctx, userID)
 }
 
-func (s *ScheduleService) CreateSubject(ctx context.Context, subject *models.Subject) error {
-	return s.subjectRepo.CreateSubject(ctx, subject)
+// --------Subject Methods
+func (s *ScheduleService) CreateSubject(ctx context.Context, req *dto.CreateSubjectRequest) (*models.Subject, error) {
+	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	if err != nil {
+		return nil, fmt.Errorf("parse start_date: %w", err)
+	}
+	endDate, err := time.Parse("2006-01-02", req.EndDate)
+	if err != nil {
+		return nil, fmt.Errorf("parse end_date: %w", err)
+	}
+	if startDate.After(endDate) {
+		return nil, errors.New("start_date must be before end_date")
+	}
+	subject := models.Subject{
+		Title: req.Title,
+		Semester: req.Semester,
+		HoursLoad: req.HoursLoad,
+		StartDate: startDate,
+		EndDate: endDate,
+		GroupID: req.GroupID,
+	}
+	err = s.subjectRepo.CreateSubject(ctx, &subject)
+	return &subject, err
 }
 
 func (s *ScheduleService) GetSubjectByID(ctx context.Context, id int) (*models.Subject, error) {
@@ -312,8 +376,47 @@ func (s *ScheduleService) GetSubjectsByGroupID(ctx context.Context, groupID int,
 	return s.subjectRepo.GetSubjectsByGroupID(ctx, groupID, req)
 }
 
-func (s *ScheduleService) UpdateSubject(ctx context.Context, subject *models.Subject) error {
-	return s.subjectRepo.UpdateSubject(ctx, subject)
+func (s *ScheduleService) UpdateSubject(ctx context.Context, id int, req *dto.UpdateSubjectRequest) (*models.Subject, error) {
+	subject, err := s.GetSubjectByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get subject: %w", err)
+	}
+
+
+	if req.Title != "" {
+		subject.Title = req.Title
+	}
+
+	if req.Semester != 0 {
+		subject.Semester = req.Semester
+	}
+
+	if req.HoursLoad != 0 {
+		subject.HoursLoad = req.HoursLoad
+	}
+
+	if req.StartDate != "" {
+		startDate, err := time.Parse("2006-01-02", req.StartDate)
+		if err != nil {
+			return nil, fmt.Errorf("parse start_date: %w", err)
+		}
+		subject.StartDate = startDate
+	}
+
+	if req.EndDate != "" {
+		endDate, err := time.Parse("2006-01-02", req.EndDate)
+		if err != nil {
+			return nil, fmt.Errorf("parse end_date: %w", err)
+		}
+		subject.EndDate = endDate
+	}
+
+	if subject.StartDate.After(subject.EndDate) {
+		return nil, errors.New("start_date must be before end_date")
+	}
+
+	err = s.subjectRepo.UpdateSubject(ctx, subject)
+	return subject, err
 }
 
 func (s *ScheduleService) DeleteSubject(ctx context.Context, id int) error {

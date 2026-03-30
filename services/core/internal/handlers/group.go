@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"core/internal/models"
+	"core/internal/dto"
 	"core/internal/services"
 	"core/pkg/utils"
 	"encoding/json"
@@ -21,13 +21,19 @@ func NewGroupHandler(scheduleService *services.ScheduleService) *GroupHandler {
 }
 
 func (h *GroupHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
-	var group models.Group
-	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
+	var req dto.CreateGroupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
 		return
 	}
 
-	if err := h.scheduleService.CreateGroup(r.Context(), &group); err != nil {
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
+	group, err := h.scheduleService.CreateGroup(r.Context(), &req)
+	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create group: %v", err))
 		return
 	}
@@ -62,16 +68,28 @@ func (h *GroupHandler) GetAllGroups(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GroupHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
-	var group models.Group
-	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid id: %v", err))
+		return
+	}
+	var req dto.UpdateGroupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
 		return
 	}
 
-	if err := h.scheduleService.UpdateGroup(r.Context(), &group); err != nil {
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
+	group, err := h.scheduleService.UpdateGroup(r.Context(), id, &req)
+	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to update group: %v", err))
 		return
 	}
+
 	utils.SuccessResponse(w, "group updated", group)
 }
 
