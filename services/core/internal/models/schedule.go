@@ -56,9 +56,32 @@ type LessonLog struct {
 	TeacherID        int       `json:"teacher_id"`
 	AudienceID       int       `json:"audience_id"`
 	AcademicPeriodID int       `json:"academic_period_id"`
+	IsFromTemplate   bool      `json:"id_form_template"`
 
 	AcademicPeriod AcademicPeriod `json:"academic_period"`
 	Subject        Subject        `json:"subject"`
 	Teacher        Teacher        `json:"teacher"`
 	Audience       Audience       `json:"audience"`
+}
+
+const (
+	LessonStatusPlanned     = "planned"
+	LessonStatusCompleted   = "completed"
+	LessonStatusCancelled   = "canceled"
+	LessonStatusRescheduled = "rescheduled"
+)
+
+type SubjectProgress struct {
+	SubjectID          int     `json:"subject_id"`
+	Title              string  `json:"title"`
+	TotalHours         int     `json:"total_hours"`
+	TotalLessons       int     `json:"total_lessons"`        // всего пар (1 пара = 2 часа)
+	CompletedLessons   int     `json:"completed_lessons"`    // проведено пар
+	RemainingLessons   int     `json:"remaining_lessons"`    // осталось пар
+	PlannedLessons     int     `json:"planned_lessons"`      // запланировано
+	CancelledLessons   int     `json:"cancelled_lessons"`    // отменено
+	CompletionPercent  float64 `json:"completion_percent"`   // процент выполнения
+	IsOnSchedule       bool    `json:"is_on_schedule"`       // идём ли по графику
+	NeedMakeupLessons  int     `json:"need_makeup_lessons"`  // сколько нужно добавить
+	Recommendations    string  `json:"recommendations"`      // рекомендации
 }

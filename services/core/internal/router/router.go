@@ -32,10 +32,11 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *Router {
 	subjectRepo := repository.NewSubjectRepo(pool)
 	academicPeriodRepo := repository.NewAcademicPeriodRepo(pool)
 	scheduleRepo := repository.NewScheduleRepo(pool)
+	lessonLogRepo := repository.NewLessonLogRepo(pool)
 
 	tokenService := services.NewJWTService([]byte(cfg.JWT.Secret), time.Duration(cfg.JWT.Expires)*time.Second)
 	userService := services.NewUserService(userRepo, sessionRepo, tokenService)
-	scheduleService := services.NewScheduleService(audienceRepo, groupRepo, teacherRepo, studentRepo, userRepo, roleRepo, subjectRepo, academicPeriodRepo, scheduleRepo)
+	scheduleService := services.NewScheduleService(audienceRepo, groupRepo, teacherRepo, studentRepo, userRepo, roleRepo, subjectRepo, academicPeriodRepo, scheduleRepo, lessonLogRepo)
 
 	router := Router{
 		tokenService:    tokenService,
@@ -62,6 +63,7 @@ func (r *Router) SetupRoutes() {
 	subjectHandler := handlers.NewSubjectHandler(r.scheduleService)
 	academicPeriodHandler := handlers.NewAcademicPeriodHandler(r.scheduleService)
 	scheduleHandler := handlers.NewScheduleHandler(r.scheduleService)
+	lessonLogHandler := handlers.NewLessonLogHandler(r.scheduleService)
 
 	r.router.Use(middleware.Logger)
 	r.router.Use(middleware.Recoverer)
@@ -180,6 +182,13 @@ func (r *Router) SetupRoutes() {
 			r.Get("/group/{group_id}", scheduleHandler.GetGroupSchedule)
 			r.Get("/teacher/{teacher_id}", scheduleHandler.GetTeacherSchedule)
 			r.Get("/audience/{audience_id}", scheduleHandler.GetAudienceSchedule)
+		})
+
+		r.Route("/lessons", func(r chi.Router) {
+			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+				r.Post("/generate", lessonLogHandler.GenerateLessonsFromTemplate)
+			})
+			r.Get("/", lessonLogHandler.GetLessonLogs)
 		})
 	})
 }

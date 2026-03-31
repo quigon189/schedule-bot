@@ -7,6 +7,7 @@ import (
 	"core/internal/repository"
 	"errors"
 	"fmt"
+	"log"
 	"slices"
 	"time"
 )
@@ -21,6 +22,7 @@ type ScheduleService struct {
 	subjectRepo        *repository.SubjectRepo
 	academicPeriodRepo *repository.AcademicPeriodRepo
 	scheduleRepo       *repository.ScheduleRepo
+	lessonLogRepo      *repository.LessonLogRepo
 }
 
 func NewScheduleService(
@@ -33,6 +35,7 @@ func NewScheduleService(
 	subjectRepo *repository.SubjectRepo,
 	academicPeriodRepo *repository.AcademicPeriodRepo,
 	scheduleRepo *repository.ScheduleRepo,
+	lessonLogRepo *repository.LessonLogRepo,
 ) *ScheduleService {
 	return &ScheduleService{
 		audienceRepo:       audienceRepo,
@@ -44,6 +47,7 @@ func NewScheduleService(
 		subjectRepo:        subjectRepo,
 		academicPeriodRepo: academicPeriodRepo,
 		scheduleRepo:       scheduleRepo,
+		lessonLogRepo:      lessonLogRepo,
 	}
 }
 
@@ -806,4 +810,144 @@ func (s *ScheduleService) checkScheduleConflicts(ctx context.Context, entry *dto
 	}
 
 	return nil
+}
+
+func (s *ScheduleService) GenerateLessonsFromTemplate(ctx context.Context, req *dto.GenerateScheduleRequest) error {
+	// Получаем все шаблоны расписания для периода
+	filters := repository.ScheduleFilters{
+		AcademicPeriodID: &req.AcademicPeriodID,
+	}
+	templates, err := s.scheduleRepo.GetAll(ctx, filters)
+	if err != nil {
+		return fmt.Errorf("get schedule templates: %w", err)
+	}
+
+	if len(templates) == 0 {
+		return errors.New("no schedule templates found for this period")
+	}
+
+	// Получаем учебный период
+	period, err := s.academicPeriodRepo.GetByID(ctx, req.AcademicPeriodID)
+	if err != nil {
+		return fmt.Errorf("get academic period: %w", err)
+	}
+	if period == nil {
+		return errors.New("academic period not found")
+	}
+
+	// Начинаем транзакцию
+	tx, err := s.lessonLogRepo.DB.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var generatedLessons []models.LessonLog
+
+	// Генерируем занятия для каждого дня в диапазоне
+	for currentDate := period.StartDate; !currentDate.After(period.EndDate); currentDate = currentDate.AddDate(0, 0, 1) {
+		dayOfWeek := int(currentDate.Weekday())
+		if dayOfWeek == 0 { // воскресенье
+			dayOfWeek = 7
+		}
+
+		// Для каждого шаблона в этот день недели
+		for _, template := range templates {
+			if template.DayOfWeek != dayOfWeek {
+				continue
+			}
+
+			// Проверяем тип недели
+			if template.WeekType != 0 {
+				// Определяем четность недели
+				_, week := currentDate.ISOWeek()
+				isOddWeek := week%2 == 1
+
+				if (template.WeekType == 1 && !isOddWeek) || (template.WeekType == 2 && isOddWeek) {
+					continue
+				}
+			}
+
+			// Проверяем, не выходит ли дата за пределы учебного периода
+			if currentDate.Before(period.StartDate) || currentDate.After(period.EndDate) {
+				continue
+			}
+
+			// Проверяем, не создано ли уже занятие на эту дату
+			existingFilters := repository.LessonLogFilters{
+				SubjectID:        &template.SubjectID,
+				AcademicPeriodID: &req.AcademicPeriodID,
+				DateFrom:         &currentDate,
+				DateTo:           &currentDate,
+				Number:           &template.Number,
+			}
+			existing, err := s.lessonLogRepo.GetAll(ctx, existingFilters)
+			if err != nil {
+				return fmt.Errorf("check existing lessons: %w", err)
+			}
+			if len(existing) > 0 {
+				continue
+			}
+
+			// Создаем занятие
+			lesson := &models.LessonLog{
+				Date:             currentDate,
+				Number:           template.Number,
+				Status:           models.LessonStatusPlanned,
+				Comment:          "Сгенерировано из шаблона расписания",
+				SubjectID:        template.SubjectID,
+				TeacherID:        template.TeacherID,
+				AudienceID:       template.AudienceID,
+				AcademicPeriodID: req.AcademicPeriodID,
+				IsFromTemplate:   true,
+			}
+
+			err = s.lessonLogRepo.Create(ctx, lesson)
+			if err != nil {
+				return fmt.Errorf("create lesson log: %w", err)
+			}
+			generatedLessons = append(generatedLessons, *lesson)
+		}
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	log.Printf("Generated %d lessons for period %d", len(generatedLessons), req.AcademicPeriodID)
+	return nil
+}
+
+func (s *ScheduleService) GetLessonLogs(ctx context.Context, filters *dto.LessonLogFiltersRequest) ([]models.LessonLog, error) {
+	repoFilters := repository.LessonLogFilters{}
+	
+	if filters.GroupID != nil {
+		repoFilters.GroupID = filters.GroupID
+	}
+	if filters.SubjectID != nil {
+		repoFilters.SubjectID = filters.SubjectID
+	}
+	if filters.TeacherID != nil {
+		repoFilters.TeacherID = filters.TeacherID
+	}
+	if filters.AudienceID != nil {
+		repoFilters.AudienceID = filters.AudienceID
+	}
+	if filters.AcademicPeriodID != nil {
+		repoFilters.AcademicPeriodID = filters.AcademicPeriodID
+	}
+	if filters.DateFrom != nil {
+		repoFilters.DateFrom = filters.DateFrom
+	}
+	if filters.DateTo != nil {
+		repoFilters.DateTo = filters.DateTo
+	}
+	if filters.Status != nil {
+		repoFilters.Status = filters.Status
+	}
+	if filters.Number != nil {
+		repoFilters.Number = filters.Number
+	}
+	
+	return s.lessonLogRepo.GetAll(ctx, repoFilters)
 }
