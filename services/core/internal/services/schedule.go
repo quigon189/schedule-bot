@@ -10,9 +10,13 @@ import (
 	"log"
 	"slices"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type ScheduleService struct {
+	pool               *pgxpool.Pool
 	audienceRepo       *repository.AudienceRepo
 	groupRepo          *repository.GroupRepo
 	teacherRepo        *repository.TeacherRepo
@@ -25,29 +29,19 @@ type ScheduleService struct {
 	lessonLogRepo      *repository.LessonLogRepo
 }
 
-func NewScheduleService(
-	audienceRepo *repository.AudienceRepo,
-	groupRepo *repository.GroupRepo,
-	teacherRepo *repository.TeacherRepo,
-	studentRepo *repository.StudentRepo,
-	userRepo *repository.UserRepo,
-	roleRepo *repository.RoleRepo,
-	subjectRepo *repository.SubjectRepo,
-	academicPeriodRepo *repository.AcademicPeriodRepo,
-	scheduleRepo *repository.ScheduleRepo,
-	lessonLogRepo *repository.LessonLogRepo,
-) *ScheduleService {
+func NewScheduleService(pool *pgxpool.Pool) *ScheduleService {
 	return &ScheduleService{
-		audienceRepo:       audienceRepo,
-		groupRepo:          groupRepo,
-		teacherRepo:        teacherRepo,
-		studentRepo:        studentRepo,
-		userRepo:           userRepo,
-		roleRepo:           roleRepo,
-		subjectRepo:        subjectRepo,
-		academicPeriodRepo: academicPeriodRepo,
-		scheduleRepo:       scheduleRepo,
-		lessonLogRepo:      lessonLogRepo,
+		pool:               pool,
+		audienceRepo:       repository.NewAudienceRepo(pool),
+		groupRepo:          repository.NewGroupRepo(pool),
+		teacherRepo:        repository.NewTeacherRepo(pool),
+		studentRepo:        repository.NewStudentRepo(pool),
+		userRepo:           repository.NewUserRepo(pool),
+		roleRepo:           repository.NewRoleRepo(pool),
+		subjectRepo:        repository.NewSubjectRepo(pool),
+		academicPeriodRepo: repository.NewAcademicPeriodRepo(pool),
+		scheduleRepo:       repository.NewScheduleRepo(pool),
+		lessonLogRepo:      repository.NewLessonLogRepo(pool),
 	}
 }
 
@@ -715,7 +709,7 @@ func (s *ScheduleService) CreateSemesterSchedule(ctx context.Context, req *dto.C
 		return errors.New("group not found")
 	}
 
-	tx, err := s.scheduleRepo.DB.Begin(ctx)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
@@ -761,7 +755,7 @@ func (s *ScheduleService) CreateSemesterSchedule(ctx context.Context, req *dto.C
 			AudienceID:       entry.AudienceID,
 			AcademicPeriodID: req.AcademicPeriodID,
 		}
-		err = s.scheduleRepo.Create(ctx, &template)
+		err = s.scheduleRepo.CreateWithTx(ctx, tx, &template)
 		if err != nil {
 			return fmt.Errorf("create schedule template: %w", err)
 		}
@@ -780,7 +774,7 @@ func (s *ScheduleService) checkScheduleConflicts(ctx context.Context, entry *dto
 
 	teacherSchedule, err := s.scheduleRepo.GetAll(ctx, teacherFilter)
 	if err != nil {
-		return fmt.Errorf("check teacher conflict: %w")
+		return fmt.Errorf("check teacher conflict: %w", err)
 	}
 
 	for _, tmpl := range teacherSchedule {
@@ -799,7 +793,7 @@ func (s *ScheduleService) checkScheduleConflicts(ctx context.Context, entry *dto
 
 	audienceSchedule, err := s.scheduleRepo.GetAll(ctx, audienceFilter)
 	if err != nil {
-		return fmt.Errorf("check audience conflict: %w")
+		return fmt.Errorf("check audience conflict: %w", err)
 	}
 
 	for _, tmpl := range audienceSchedule {
@@ -810,6 +804,181 @@ func (s *ScheduleService) checkScheduleConflicts(ctx context.Context, entry *dto
 	}
 
 	return nil
+}
+
+func (s *ScheduleService) RecalculatePlannedLessons(ctx context.Context, periodID int) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	templates, err := s.scheduleRepo.GetAll(ctx, repository.ScheduleFilters{
+		AcademicPeriodID: &periodID,
+	})
+	if err != nil {
+		return fmt.Errorf("get schedule templates: %w", err)
+	}
+	if len(templates) == 0 {
+		err = s.deleteAllPlannedLessons(ctx, tx, periodID)
+		if err != nil {
+			return fmt.Errorf("delete all planned lessons: %w", err)
+		}
+		return tx.Commit(ctx)
+	}
+
+	period, err := s.academicPeriodRepo.GetByID(ctx, periodID)
+	if err != nil {
+		return fmt.Errorf("get academic period: %w", err)
+	}
+	if period == nil {
+		return errors.New("academic period not found")
+	}
+
+	currentLessons, err := s.lessonLogRepo.GetAll(ctx, repository.LessonLogFilters{
+		AcademicPeriodID: &periodID,
+	})
+	if err != nil {
+		return fmt.Errorf("get current lessons: %w", err)
+	}
+
+	expectedLessons := s.generateExpectedLessons(templates, currentLessons, period)
+
+	plannedStatus := models.LessonStatusPlanned
+	currentPlanned, err := s.lessonLogRepo.GetAll(ctx, repository.LessonLogFilters{
+		AcademicPeriodID: &periodID,
+		Status:           &plannedStatus,
+	})
+	if err != nil {
+		return fmt.Errorf("get current planned lessons: %w", err)
+	}
+
+	toDelete, toUpdate, toCreate := s.diffPlannedLessons(currentPlanned, expectedLessons)
+
+	for _, lesson := range toDelete {
+		if err := s.lessonLogRepo.DeleteWithTx(ctx, tx, lesson.ID); err != nil {
+			return fmt.Errorf("delete lesson %d: %w", lesson.ID, err)
+		}
+	}
+
+	for _, lesson := range toUpdate {
+		if err := s.lessonLogRepo.UpdateWithTx(ctx, tx, &lesson); err != nil {
+			return fmt.Errorf("update lesson %d: %w", lesson.ID, err)
+		}
+	}
+
+	for _, lesson := range toCreate {
+		if err := s.lessonLogRepo.CreateWithTx(ctx, tx, &lesson); err != nil {
+			return fmt.Errorf("create lesson %d: %w", lesson.ID, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	log.Printf("Recalculated planned lessons for period %d: deleted %d, updated %d, created %d",
+		periodID, len(toDelete), len(toUpdate), len(toCreate))
+	return nil
+}
+
+func (s *ScheduleService) deleteAllPlannedLessons(ctx context.Context, tx pgx.Tx, periodID int) error {
+	plannedStatus := models.LessonStatusPlanned
+	lessons, err := s.lessonLogRepo.GetAll(ctx, repository.LessonLogFilters{
+		AcademicPeriodID: &periodID,
+		Status:           &plannedStatus,
+	})
+	if err != nil {
+		return fmt.Errorf("get planned lessons for deletion: %w", err)
+	}
+
+	for _, lesson := range lessons {
+		if err := s.lessonLogRepo.DeleteWithTx(ctx, tx, lesson.ID); err != nil {
+			return fmt.Errorf("delete lesson %d: %w", lesson.ID, err)
+		}
+	}
+	log.Printf("Deleted %d planned lessons for period %d (no templates)", len(lessons), periodID)
+	return nil
+}
+
+func (s *ScheduleService) generateExpectedLessons(templates []models.ScheduleTemplate, current []models.LessonLog, period *models.AcademicPeriod) []models.LessonLog {
+	var expected []models.LessonLog
+
+	for _, cur := range current {
+		if cur.Status != models.LessonStatusPlanned {
+			expected = append(expected, cur)
+		}
+	}
+
+	for currentDate := period.StartDate; !currentDate.After(period.EndDate); currentDate = currentDate.AddDate(0, 0, 1) {
+		dayOfWeek := int(currentDate.Weekday())
+		if dayOfWeek == 0 {
+			dayOfWeek = 7
+		}
+
+		for _, tmpl := range templates {
+			if tmpl.DayOfWeek != dayOfWeek {
+				continue
+			}
+
+			if slices.ContainsFunc(expected, func(l models.LessonLog) bool {
+				return l.Date.Equal(currentDate) &&
+				  l.Number == tmpl.Number &&
+				  l.SubjectID == tmpl.SubjectID
+			}) {
+				continue
+			}
+
+			
+
+			lesson := models.LessonLog{
+				Date:             currentDate,
+				Number:           tmpl.Number,
+				Status:           models.LessonStatusPlanned,
+				Comment:          "Сгенерировано автоматически",
+				SubjectID:        tmpl.SubjectID,
+				TeacherID:        tmpl.TeacherID,
+				AudienceID:       tmpl.AudienceID,
+				AcademicPeriodID: period.ID,
+				IsFromTemplate:   true,
+			}
+			expected = append(expected, lesson)
+		}
+	}
+	return expected
+}
+
+func (s *ScheduleService) diffPlannedLessons(current, expected []models.LessonLog) (toDelete, toUpdate, toCreate []models.LessonLog) {
+	expectedMap := make(map[string]models.LessonLog)
+	for _, exp := range expected {
+		key := fmt.Sprintf("%s_%d", exp.Date.Format("2006-01-02"), exp.Number)
+		expectedMap[key] = exp
+	}
+
+	for _, cur := range current {
+		key := fmt.Sprintf("%s_%d", cur.Date.Format("2006-01-02"), cur.Number)
+		if exp, ok := expectedMap[key]; ok {
+			if cur.SubjectID != exp.SubjectID ||
+				cur.TeacherID != exp.TeacherID ||
+				cur.AudienceID != exp.AudienceID {
+				cur.SubjectID = exp.SubjectID
+				cur.TeacherID = exp.TeacherID
+				cur.AudienceID = exp.AudienceID
+				cur.Comment = exp.Comment
+				toUpdate = append(toUpdate, cur)
+			}
+
+			delete(expectedMap, key)
+		} else {
+			toDelete = append(toDelete, cur)
+		}
+	}
+
+	for _, exp := range expectedMap {
+		toCreate = append(toCreate, exp)
+	}
+
+	return
 }
 
 func (s *ScheduleService) GenerateLessonsFromTemplate(ctx context.Context, req *dto.GenerateScheduleRequest) error {
@@ -836,7 +1005,7 @@ func (s *ScheduleService) GenerateLessonsFromTemplate(ctx context.Context, req *
 	}
 
 	// Начинаем транзакцию
-	tx, err := s.lessonLogRepo.DB.Begin(ctx)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
 	}
@@ -902,7 +1071,7 @@ func (s *ScheduleService) GenerateLessonsFromTemplate(ctx context.Context, req *
 				IsFromTemplate:   true,
 			}
 
-			err = s.lessonLogRepo.Create(ctx, lesson)
+			err = s.lessonLogRepo.CreateWithTx(ctx, tx, lesson)
 			if err != nil {
 				return fmt.Errorf("create lesson log: %w", err)
 			}
@@ -920,7 +1089,7 @@ func (s *ScheduleService) GenerateLessonsFromTemplate(ctx context.Context, req *
 
 func (s *ScheduleService) GetLessonLogs(ctx context.Context, filters *dto.LessonLogFiltersRequest) ([]models.LessonLog, error) {
 	repoFilters := repository.LessonLogFilters{}
-	
+
 	if filters.GroupID != nil {
 		repoFilters.GroupID = filters.GroupID
 	}
@@ -948,6 +1117,6 @@ func (s *ScheduleService) GetLessonLogs(ctx context.Context, filters *dto.Lesson
 	if filters.Number != nil {
 		repoFilters.Number = filters.Number
 	}
-	
+
 	return s.lessonLogRepo.GetAll(ctx, repoFilters)
 }

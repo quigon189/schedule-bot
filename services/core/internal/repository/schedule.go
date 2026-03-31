@@ -12,11 +12,11 @@ import (
 )
 
 type ScheduleRepo struct {
-	DB *pgxpool.Pool
+	db *pgxpool.Pool
 }
 
 func NewScheduleRepo(db *pgxpool.Pool) *ScheduleRepo {
-	return &ScheduleRepo{DB: db}
+	return &ScheduleRepo{db: db}
 }
 
 type ScheduleFilters struct {
@@ -31,12 +31,25 @@ type ScheduleFilters struct {
 
 // Create — создание записи расписания
 func (r *ScheduleRepo) Create(ctx context.Context, template *models.ScheduleTemplate) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	err = r.CreateWithTx(ctx, tx, template)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *ScheduleRepo) CreateWithTx(ctx context.Context, tx pgx.Tx, template *models.ScheduleTemplate) error {
 	query := `
 	INSERT INTO schedule.templates (day_of_week, number, week_type, subject_id, teacher_id, audience_id, academic_period_id)
 	VALUES ($1, $2, $3, $4, $5, $6, $7)
 	RETURNING id
 	`
-	return r.DB.QueryRow(ctx, query,
+	return tx.QueryRow(ctx, query,
 		template.DayOfWeek,
 		template.Number,
 		template.WeekType,
@@ -74,7 +87,7 @@ func (r *ScheduleRepo) GetByID(ctx context.Context, id int) (*models.ScheduleTem
 	var audience models.Audience
 	var academicPeriod models.AcademicPeriod
 
-	err := r.DB.QueryRow(ctx, query, id).Scan(
+	err := r.db.QueryRow(ctx, query, id).Scan(
 		&template.ID,
 		&template.DayOfWeek,
 		&template.Number,
@@ -132,8 +145,28 @@ func (r *ScheduleRepo) GetByID(ctx context.Context, id int) (*models.ScheduleTem
 
 // GetAll — получение списка записей расписания с фильтрацией
 func (r *ScheduleRepo) GetAll(ctx context.Context, filters ScheduleFilters) ([]models.ScheduleTemplate, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	templates, err := r.GetAllWithTx(ctx, tx, filters)
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return templates, nil
+}
+
+func (r *ScheduleRepo) GetAllWithTx(ctx context.Context, tx pgx.Tx, filters ScheduleFilters) ([]models.ScheduleTemplate, error) {
 	var conditions []string
-	var args []interface{}
+	var args []any
 	argIndex := 1
 
 	// Базовый запрос с JOIN
@@ -208,7 +241,7 @@ func (r *ScheduleRepo) GetAll(ctx context.Context, filters ScheduleFilters) ([]m
 	// Сортировка по умолчанию: день недели и номер пары
 	query += " ORDER BY st.day_of_week, st.number"
 
-	rows, err := r.DB.Query(ctx, query, args...)
+	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query schedule templates: %w", err)
 	}
@@ -285,12 +318,25 @@ func (r *ScheduleRepo) GetAll(ctx context.Context, filters ScheduleFilters) ([]m
 
 // Update — обновление существующей записи расписания
 func (r *ScheduleRepo) Update(ctx context.Context, template *models.ScheduleTemplate) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	err = r.UpdateWithTx(ctx, tx, template)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *ScheduleRepo) UpdateWithTx(ctx context.Context, tx pgx.Tx, template *models.ScheduleTemplate) error {
 	query := `
 	UPDATE schedule.templates
 	SET day_of_week = $1, number = $2, week_type = $3, subject_id = $4, teacher_id = $5, audience_id = $6, academic_period_id = $7
 	WHERE id = $8
 	`
-	_, err := r.DB.Exec(ctx, query,
+	_, err := tx.Exec(ctx, query,
 		template.DayOfWeek,
 		template.Number,
 		template.WeekType,
@@ -305,6 +351,19 @@ func (r *ScheduleRepo) Update(ctx context.Context, template *models.ScheduleTemp
 
 // Delete — удаление записи расписания по ID
 func (r *ScheduleRepo) Delete(ctx context.Context, id int) error {
-	_, err := r.DB.Exec(ctx, `DELETE FROM schedule.templates WHERE id = $1`, id)
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	err = r.DeleteWithTx(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *ScheduleRepo) DeleteWithTx(ctx context.Context, tx pgx.Tx, id int) error {
+	_, err := tx.Exec(ctx, `DELETE FROM schedule.templates WHERE id = $1`, id)
 	return err
 }

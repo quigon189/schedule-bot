@@ -13,11 +13,11 @@ import (
 )
 
 type LessonLogRepo struct {
-	DB *pgxpool.Pool
+	db *pgxpool.Pool
 }
 
 func NewLessonLogRepo(db *pgxpool.Pool) *LessonLogRepo {
-	return &LessonLogRepo{DB: db}
+	return &LessonLogRepo{db: db}
 }
 
 type LessonLogFilters struct {
@@ -33,12 +33,25 @@ type LessonLogFilters struct {
 }
 
 func (r *LessonLogRepo) Create(ctx context.Context, log *models.LessonLog) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	err = r.CreateWithTx(ctx, tx, log)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *LessonLogRepo) CreateWithTx(ctx context.Context, tx pgx.Tx, log *models.LessonLog) error {
 	query := `
 	INSERT INTO schedule.lesson_logs (date, number, status, comment, subject_id, teacher_id, audience_id, academic_period_id)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	RETURNING id
 	`
-	return r.DB.QueryRow(ctx, query,
+	return r.db.QueryRow(ctx, query,
 		log.Date,
 		log.Number,
 		log.Status,
@@ -77,7 +90,7 @@ func (r *LessonLogRepo) GetByID(ctx context.Context, id int) (*models.LessonLog,
 	var audience models.Audience
 	var period models.AcademicPeriod
 
-	err := r.DB.QueryRow(ctx, query, id).Scan(
+	err := r.db.QueryRow(ctx, query, id).Scan(
 		&log.ID,
 		&log.Date,
 		&log.Number,
@@ -225,7 +238,7 @@ func (r *LessonLogRepo) GetAll(ctx context.Context, filters LessonLogFilters) ([
 	// Сортировка по умолчанию: дата и номер пары
 	query += " ORDER BY ll.date, ll.number"
 
-	rows, err := r.DB.Query(ctx, query, args...)
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query lesson logs: %w", err)
 	}
@@ -301,13 +314,25 @@ func (r *LessonLogRepo) GetAll(ctx context.Context, filters LessonLogFilters) ([
 
 // Update — обновление записи журнала
 func (r *LessonLogRepo) Update(ctx context.Context, log *models.LessonLog) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	err = r.UpdateWithTx(ctx, tx, log)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+func (r *LessonLogRepo) UpdateWithTx(ctx context.Context, tx pgx.Tx, log *models.LessonLog) error {
 	query := `
 	UPDATE schedule.lesson_logs
 	SET date = $1, number = $2, status = $3, comment = $4, 
 	    subject_id = $5, teacher_id = $6, audience_id = $7, academic_period_id = $8
 	WHERE id = $9
 	`
-	_, err := r.DB.Exec(ctx, query,
+	_, err := r.db.Exec(ctx, query,
 		log.Date,
 		log.Number,
 		log.Status,
@@ -323,7 +348,18 @@ func (r *LessonLogRepo) Update(ctx context.Context, log *models.LessonLog) error
 
 // Delete — удаление записи журнала по ID
 func (r *LessonLogRepo) Delete(ctx context.Context, id int) error {
-	_, err := r.DB.Exec(ctx, `DELETE FROM schedule.lesson_logs WHERE id = $1`, id)
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	err = r.DeleteWithTx(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+func (r *LessonLogRepo) DeleteWithTx(ctx context.Context, tx pgx.Tx, id int) error {
+	_, err := tx.Exec(ctx, `DELETE FROM schedule.lesson_logs WHERE id = $1`, id)
 	return err
 }
 
@@ -334,6 +370,6 @@ func (r *LessonLogRepo) UpdateStatus(ctx context.Context, id int, status, commen
 	SET status = $1, comment = $2
 	WHERE id = $3
 	`
-	_, err := r.DB.Exec(ctx, query, status, comment, id)
+	_, err := r.db.Exec(ctx, query, status, comment, id)
 	return err
 }
