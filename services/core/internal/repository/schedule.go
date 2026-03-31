@@ -12,52 +12,57 @@ import (
 )
 
 type ScheduleRepo struct {
-	db *pgxpool.Pool
+	DB *pgxpool.Pool
 }
 
 func NewScheduleRepo(db *pgxpool.Pool) *ScheduleRepo {
-	return &ScheduleRepo{db: db}
+	return &ScheduleRepo{DB: db}
 }
 
 type ScheduleFilters struct {
-	GroupID    *int // идентификатор группы (фильтр по group_id предмета)
-	SubjectID  *int // идентификатор предмета
-	TeacherID  *int // идентификатор преподавателя
-	AudienceID *int // идентификатор аудитории
-	DayOfWeek  *int // день недели (1–7)
-	WeekType   *int // тип недели (0 – обе, 1 – числитель, 2 – знаменатель)
+	GroupID          *int // идентификатор группы (фильтр по group_id предмета)
+	SubjectID        *int // идентификатор предмета
+	TeacherID        *int // идентификатор преподавателя
+	AudienceID       *int // идентификатор аудитории
+	DayOfWeek        *int // день недели (1–7)
+	WeekType         *int // тип недели (0 – обе, 1 – числитель, 2 – знаменатель)
+	AcademicPeriodID *int // идентификатор учебного периода
 }
 
 // Create — создание записи расписания
 func (r *ScheduleRepo) Create(ctx context.Context, template *models.ScheduleTemplate) error {
 	query := `
-	INSERT INTO schedule.schedule_templates (day_of_week, number, week_type, subject_id, teacher_id, audience_id)
-	VALUES ($1, $2, $3, $4, $5, $6)
+	INSERT INTO schedule.templates (day_of_week, number, week_type, subject_id, teacher_id, audience_id, academic_period_id)
+	VALUES ($1, $2, $3, $4, $5, $6, $7)
 	RETURNING id
 	`
-	return r.db.QueryRow(ctx, query,
+	return r.DB.QueryRow(ctx, query,
 		template.DayOfWeek,
 		template.Number,
 		template.WeekType,
 		template.SubjectID,
 		template.TeacherID,
 		template.AudienceID,
+		template.AcademicPeriodID,
 	).Scan(&template.ID)
 }
 
 // GetByID — получение записи расписания по ID с полной загрузкой связанных сущностей
 func (r *ScheduleRepo) GetByID(ctx context.Context, id int) (*models.ScheduleTemplate, error) {
 	query := `
-	SELECT st.id, st.day_of_week, st.number, st.week_type, st.subject_id, st.teacher_id, st.audience_id,
+	SELECT st.id, st.day_of_week, st.number, st.week_type, st.subject_id, st.teacher_id,
+	       st.audience_id, st.academic_period_id,
 	       s.id, s.title, s.semester, s.hours_load, s.start_date, s.end_date, s.group_id,
 	       g.id, g.name, g.specialty, g.admission_year,
 	       t.id, t.username, t.full_name, t.email, t.created_at, t.updated_at,
-	       a.id, a.name, a.number
-	FROM schedule.schedule_templates st
+	       a.id, a.name, a.number,
+		   p.id, p.year, p.semester, p.start_date, p.end_date, p.created_at, p.updated_at
+	FROM schedule.templates st
 	LEFT JOIN schedule.subjects s ON st.subject_id = s.id
 	LEFT JOIN auth.groups g ON s.group_id = g.id
 	LEFT JOIN auth.users t ON st.teacher_id = t.id
 	LEFT JOIN schedule.audiences a ON st.audience_id = a.id
+	LEFT JOIN schedule.academic_periods p ON st.academic_period_id = p.id
 	WHERE st.id = $1
 	`
 
@@ -67,8 +72,9 @@ func (r *ScheduleRepo) GetByID(ctx context.Context, id int) (*models.ScheduleTem
 	var teacher models.Teacher
 	var user models.User
 	var audience models.Audience
+	var academicPeriod models.AcademicPeriod
 
-	err := r.db.QueryRow(ctx, query, id).Scan(
+	err := r.DB.QueryRow(ctx, query, id).Scan(
 		&template.ID,
 		&template.DayOfWeek,
 		&template.Number,
@@ -76,6 +82,7 @@ func (r *ScheduleRepo) GetByID(ctx context.Context, id int) (*models.ScheduleTem
 		&template.SubjectID,
 		&template.TeacherID,
 		&template.AudienceID,
+		&template.AcademicPeriodID,
 		&subject.ID,
 		&subject.Title,
 		&subject.Semester,
@@ -96,6 +103,13 @@ func (r *ScheduleRepo) GetByID(ctx context.Context, id int) (*models.ScheduleTem
 		&audience.ID,
 		&audience.Name,
 		&audience.Number,
+		&academicPeriod.ID,
+		&academicPeriod.Year,
+		&academicPeriod.Semester,
+		&academicPeriod.StartDate,
+		&academicPeriod.EndDate,
+		&academicPeriod.CreatedAt,
+		&academicPeriod.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -111,36 +125,37 @@ func (r *ScheduleRepo) GetByID(ctx context.Context, id int) (*models.ScheduleTem
 	template.Teacher = teacher
 
 	template.Audience = audience
+	template.AcademicPeriod = academicPeriod
 
 	return &template, nil
 }
 
-// GetAll — получение списка записей расписания с фильтрацией и привязкой к семестру
-// Параметр semester позволяет ограничить выборку предметами указанного семестра.
-// Если semester == nil, фильтр по семестру не применяется.
-func (r *ScheduleRepo) GetAll(ctx context.Context, filters ScheduleFilters, semester *int) ([]models.ScheduleTemplate, error) {
+// GetAll — получение списка записей расписания с фильтрацией
+func (r *ScheduleRepo) GetAll(ctx context.Context, filters ScheduleFilters) ([]models.ScheduleTemplate, error) {
 	var conditions []string
 	var args []interface{}
 	argIndex := 1
 
 	// Базовый запрос с JOIN
 	query := `
-	SELECT st.id, st.day_of_week, st.number, st.week_type, st.subject_id, st.teacher_id, st.audience_id,
+	SELECT st.id, st.day_of_week, st.number, st.week_type, st.subject_id, st.teacher_id,
+	       st.audience_id, st.academic_period_id,
 	       s.id, s.title, s.semester, s.hours_load, s.start_date, s.end_date, s.group_id,
 	       g.id, g.name, g.specialty, g.admission_year,
 	       t.id, t.username, t.full_name, t.email, t.created_at, t.updated_at,
-	       a.id, a.name, a.number
-	FROM schedule.schedule_templates st
+	       a.id, a.name, a.number,
+		   p.id, p.year, p.semester, p.start_date, p.end_date, p.created_at, p.updated_at
+	FROM schedule.templates st
 	LEFT JOIN schedule.subjects s ON st.subject_id = s.id
 	LEFT JOIN auth.groups g ON s.group_id = g.id
 	LEFT JOIN auth.users t ON st.teacher_id = t.id
 	LEFT JOIN schedule.audiences a ON st.audience_id = a.id
+	LEFT JOIN schedule.academic_periods p ON st.academic_period_id = p.id
 	`
 
-	// Фильтр по семестру
-	if semester != nil {
-		conditions = append(conditions, fmt.Sprintf("s.semester = $%d", argIndex))
-		args = append(args, *semester)
+	if filters.AcademicPeriodID != nil {
+		conditions = append(conditions, fmt.Sprintf("st.academic_period_id = $%d", argIndex))
+		args = append(args, *filters.AcademicPeriodID)
 		argIndex++
 	}
 
@@ -187,13 +202,13 @@ func (r *ScheduleRepo) GetAll(ctx context.Context, filters ScheduleFilters, seme
 	}
 
 	if len(conditions) > 0 {
-		query += " AND " + strings.Join(conditions, " AND ")
+		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
 
 	// Сортировка по умолчанию: день недели и номер пары
 	query += " ORDER BY st.day_of_week, st.number"
 
-	rows, err := r.db.Query(ctx, query, args...)
+	rows, err := r.DB.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query schedule templates: %w", err)
 	}
@@ -207,6 +222,7 @@ func (r *ScheduleRepo) GetAll(ctx context.Context, filters ScheduleFilters, seme
 		var teacher models.Teacher
 		var user models.User
 		var audience models.Audience
+		var period models.AcademicPeriod
 
 		err := rows.Scan(
 			&template.ID,
@@ -216,6 +232,7 @@ func (r *ScheduleRepo) GetAll(ctx context.Context, filters ScheduleFilters, seme
 			&template.SubjectID,
 			&template.TeacherID,
 			&template.AudienceID,
+			&template.AcademicPeriodID,
 			&subject.ID,
 			&subject.Title,
 			&subject.Semester,
@@ -231,12 +248,18 @@ func (r *ScheduleRepo) GetAll(ctx context.Context, filters ScheduleFilters, seme
 			&user.Name,
 			&user.FullName,
 			&user.Email,
-			&user.PasswordHash,
 			&user.CreatedAt,
 			&user.UpdatedAt,
 			&audience.ID,
 			&audience.Name,
 			&audience.Number,
+			&period.ID,
+			&period.Year,
+			&period.Semester,
+			&period.StartDate,
+			&period.EndDate,
+			&period.CreatedAt,
+			&period.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan schedule template: %w", err)
@@ -249,6 +272,7 @@ func (r *ScheduleRepo) GetAll(ctx context.Context, filters ScheduleFilters, seme
 		template.Teacher = teacher
 
 		template.Audience = audience
+		template.AcademicPeriod = period
 
 		templates = append(templates, template)
 	}
@@ -262,17 +286,18 @@ func (r *ScheduleRepo) GetAll(ctx context.Context, filters ScheduleFilters, seme
 // Update — обновление существующей записи расписания
 func (r *ScheduleRepo) Update(ctx context.Context, template *models.ScheduleTemplate) error {
 	query := `
-	UPDATE schedule.schedule_templates
-	SET day_of_week = $1, number = $2, week_type = $3, subject_id = $4, teacher_id = $5, audience_id = $6
-	WHERE id = $7
+	UPDATE schedule.templates
+	SET day_of_week = $1, number = $2, week_type = $3, subject_id = $4, teacher_id = $5, audience_id = $6, academic_period_id = $7
+	WHERE id = $8
 	`
-	_, err := r.db.Exec(ctx, query,
+	_, err := r.DB.Exec(ctx, query,
 		template.DayOfWeek,
 		template.Number,
 		template.WeekType,
 		template.SubjectID,
 		template.TeacherID,
 		template.AudienceID,
+		template.AcademicPeriodID,
 		template.ID,
 	)
 	return err
@@ -280,6 +305,6 @@ func (r *ScheduleRepo) Update(ctx context.Context, template *models.ScheduleTemp
 
 // Delete — удаление записи расписания по ID
 func (r *ScheduleRepo) Delete(ctx context.Context, id int) error {
-	_, err := r.db.Exec(ctx, `DELETE FROM schedule.schedule_templates WHERE id = $1`, id)
+	_, err := r.DB.Exec(ctx, `DELETE FROM schedule.templates WHERE id = $1`, id)
 	return err
 }

@@ -31,10 +31,11 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *Router {
 	roleRepo := repository.NewRoleRepo(pool)
 	subjectRepo := repository.NewSubjectRepo(pool)
 	academicPeriodRepo := repository.NewAcademicPeriodRepo(pool)
+	scheduleRepo := repository.NewScheduleRepo(pool)
 
 	tokenService := services.NewJWTService([]byte(cfg.JWT.Secret), time.Duration(cfg.JWT.Expires)*time.Second)
 	userService := services.NewUserService(userRepo, sessionRepo, tokenService)
-	scheduleService := services.NewScheduleService(audienceRepo, groupRepo, teacherRepo, studentRepo, userRepo, roleRepo, subjectRepo, academicPeriodRepo)
+	scheduleService := services.NewScheduleService(audienceRepo, groupRepo, teacherRepo, studentRepo, userRepo, roleRepo, subjectRepo, academicPeriodRepo, scheduleRepo)
 
 	router := Router{
 		tokenService:    tokenService,
@@ -60,6 +61,7 @@ func (r *Router) SetupRoutes() {
 	roleHandler := handlers.NewRoleHandler(r.scheduleService)
 	subjectHandler := handlers.NewSubjectHandler(r.scheduleService)
 	academicPeriodHandler := handlers.NewAcademicPeriodHandler(r.scheduleService)
+	scheduleHandler := handlers.NewScheduleHandler(r.scheduleService)
 
 	r.router.Use(middleware.Logger)
 	r.router.Use(middleware.Recoverer)
@@ -164,6 +166,20 @@ func (r *Router) SetupRoutes() {
 			r.Get("/", subjectHandler.GetAllSubjects)
 			r.Get("/group/{group_id}", subjectHandler.GetSubjectsByGroup)
 			r.Get("/{id}", subjectHandler.GetSubject)
+		})
+
+		r.Route("/schedule", func(r chi.Router) {
+			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+				r.Post("/", scheduleHandler.CreateScheduleTemplate)
+				r.Patch("/{id}", scheduleHandler.UpdateScheduleTemplate)
+				r.Delete("/{id}", scheduleHandler.DeleteScheduleTemplate)
+				r.Post("/semester", scheduleHandler.CreateSemesterSchedule)
+			})
+			r.Get("/", scheduleHandler.GetAllScheduleTemplates)
+			r.Get("/{id}", scheduleHandler.GetScheduleTemplate)
+			r.Get("/group/{group_id}", scheduleHandler.GetGroupSchedule)
+			r.Get("/teacher/{teacher_id}", scheduleHandler.GetTeacherSchedule)
+			r.Get("/audience/{audience_id}", scheduleHandler.GetAudienceSchedule)
 		})
 	})
 }

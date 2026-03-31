@@ -20,6 +20,7 @@ type ScheduleService struct {
 	roleRepo           *repository.RoleRepo
 	subjectRepo        *repository.SubjectRepo
 	academicPeriodRepo *repository.AcademicPeriodRepo
+	scheduleRepo       *repository.ScheduleRepo
 }
 
 func NewScheduleService(
@@ -31,6 +32,7 @@ func NewScheduleService(
 	roleRepo *repository.RoleRepo,
 	subjectRepo *repository.SubjectRepo,
 	academicPeriodRepo *repository.AcademicPeriodRepo,
+	scheduleRepo *repository.ScheduleRepo,
 ) *ScheduleService {
 	return &ScheduleService{
 		audienceRepo:       audienceRepo,
@@ -41,6 +43,7 @@ func NewScheduleService(
 		roleRepo:           roleRepo,
 		subjectRepo:        subjectRepo,
 		academicPeriodRepo: academicPeriodRepo,
+		scheduleRepo:       scheduleRepo,
 	}
 }
 
@@ -496,4 +499,311 @@ func (s *ScheduleService) UpdateAcademicPeriod(ctx context.Context, id int, req 
 
 func (s *ScheduleService) DeleteAcademicPeriod(ctx context.Context, id int) error {
 	return s.academicPeriodRepo.Delete(ctx, id)
+}
+
+// ------- Schedule Templates Methods --------
+func (s *ScheduleService) CreateScheduleTemplate(ctx context.Context, req *dto.CreateScheduleTemplateRequest) (*models.ScheduleTemplate, error) {
+	subject, err := s.GetSubjectByID(ctx, req.SubjectID)
+	if err != nil {
+		return nil, fmt.Errorf("get subject with id %d: %w", req.SubjectID, err)
+	}
+	if subject == nil {
+		return nil, errors.New("subject not found")
+	}
+
+	teacher, err := s.GetTeacher(ctx, req.TeacherID)
+	if err != nil {
+		return nil, fmt.Errorf("get teacher with id %d: %w", req.TeacherID, err)
+	}
+	if teacher == nil {
+		return nil, errors.New("teacher not found")
+	}
+
+	audience, err := s.GetAudience(ctx, req.AudienceID)
+	if err != nil {
+		return nil, fmt.Errorf("get audience with id %d: %w", req.AudienceID, err)
+	}
+	if audience == nil {
+		return nil, errors.New("audience not found")
+	}
+
+	period, err := s.GetAcademicPeriodByID(ctx, req.AcademicPeriodID)
+	if err != nil {
+		return nil, fmt.Errorf("get academic period with id %d: %w", req.AcademicPeriodID, err)
+	}
+	if period == nil {
+		return nil, errors.New("academic period not found")
+	}
+
+	template := models.ScheduleTemplate{
+		DayOfWeek:        req.DayOfWeek,
+		WeekType:         req.WeekType,
+		Number:           req.Number,
+		SubjectID:        req.SubjectID,
+		TeacherID:        req.TeacherID,
+		AudienceID:       req.AudienceID,
+		AcademicPeriodID: req.AcademicPeriodID,
+	}
+
+	err = s.scheduleRepo.Create(ctx, &template)
+	if err != nil {
+		return nil, fmt.Errorf("create schedule template: %w", err)
+	}
+
+	return s.scheduleRepo.GetByID(ctx, template.ID)
+}
+
+func (s *ScheduleService) GetScheduleTemplate(ctx context.Context, id int) (*models.ScheduleTemplate, error) {
+	return s.scheduleRepo.GetByID(ctx, id)
+}
+
+func (s *ScheduleService) GetAllScheduleTemplates(ctx context.Context, filters *dto.ScheduleFiltersRequest) ([]models.ScheduleTemplate, error) {
+	repoFilters := repository.ScheduleFilters{
+		GroupID:          filters.GroupID,
+		SubjectID:        filters.SubjectID,
+		TeacherID:        filters.TeacherID,
+		AudienceID:       filters.AudienceID,
+		DayOfWeek:        filters.DayOfWeek,
+		WeekType:         filters.WeekType,
+		AcademicPeriodID: filters.AcademicPeriodID,
+	}
+
+	return s.scheduleRepo.GetAll(ctx, repoFilters)
+}
+
+func (s *ScheduleService) UpdateScheduleTemplate(ctx context.Context, id int, req *dto.UpdateScheduleTemplateRequest) (*models.ScheduleTemplate, error) {
+	template, err := s.GetScheduleTemplate(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get schedule template: %w", err)
+	}
+	if template == nil {
+		return nil, errors.New("schedule template no found")
+	}
+
+	if req.DayOfWeek != nil {
+		template.DayOfWeek = *req.DayOfWeek
+	}
+	if req.Number != nil {
+		template.Number = *req.Number
+	}
+	if req.WeekType != nil {
+		template.WeekType = *req.WeekType
+	}
+	if req.SubjectID != nil {
+		subject, err := s.subjectRepo.GetSubjectByID(ctx, *req.SubjectID)
+		if err != nil {
+			return nil, fmt.Errorf("get subject: %w", err)
+		}
+		if subject == nil {
+			return nil, errors.New("subject not found")
+		}
+		template.SubjectID = *req.SubjectID
+	}
+	if req.TeacherID != nil {
+		teacher, err := s.teacherRepo.GetTeacherByUserID(ctx, *req.TeacherID)
+		if err != nil {
+			return nil, fmt.Errorf("get teacher: %w", err)
+		}
+		if teacher == nil {
+			return nil, errors.New("teacher not found")
+		}
+		template.TeacherID = *req.TeacherID
+	}
+	if req.AudienceID != nil {
+		audience, err := s.audienceRepo.Get(ctx, *req.AudienceID)
+		if err != nil {
+			return nil, fmt.Errorf("get audience: %w", err)
+		}
+		if audience == nil {
+			return nil, errors.New("audience not found")
+		}
+		template.AudienceID = *req.AudienceID
+	}
+	if req.AcademicPeriodID != nil {
+		period, err := s.academicPeriodRepo.GetByID(ctx, *req.AcademicPeriodID)
+		if err != nil {
+			return nil, fmt.Errorf("get academic period: %w", err)
+		}
+		if period == nil {
+			return nil, errors.New("academic period not found")
+		}
+		template.AcademicPeriodID = *req.AcademicPeriodID
+	}
+
+	err = s.scheduleRepo.Update(ctx, template)
+	if err != nil {
+		return nil, fmt.Errorf("create academic period: %w", err)
+	}
+
+	return s.scheduleRepo.GetByID(ctx, template.ID)
+}
+
+func (s *ScheduleService) DeleteScheduleTemplate(ctx context.Context, id int) error {
+	return s.scheduleRepo.Delete(ctx, id)
+}
+
+func (s *ScheduleService) GetGroupSchedule(ctx context.Context, groupID int, periodID *int) ([]models.ScheduleTemplate, error) {
+	if periodID == nil {
+		period, err := s.academicPeriodRepo.GetActive(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get active academic period: %w", err)
+		}
+
+		periodID = &period.ID
+	}
+
+	filters := repository.ScheduleFilters{
+		GroupID:          &groupID,
+		AcademicPeriodID: periodID,
+	}
+
+	return s.scheduleRepo.GetAll(ctx, filters)
+}
+
+func (s *ScheduleService) GetTeacherSchedule(ctx context.Context, teacherID int, periodID *int) ([]models.ScheduleTemplate, error) {
+	if periodID == nil {
+		period, err := s.academicPeriodRepo.GetActive(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get active academic period: %w", err)
+		}
+		periodID = &period.ID
+	}
+
+	filters := repository.ScheduleFilters{
+		TeacherID:        &teacherID,
+		AcademicPeriodID: periodID,
+	}
+
+	return s.scheduleRepo.GetAll(ctx, filters)
+}
+
+func (s *ScheduleService) GetAudienceSchedule(ctx context.Context, audienceID int, periodID *int) ([]models.ScheduleTemplate, error) {
+	if periodID == nil {
+		period, err := s.academicPeriodRepo.GetActive(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get active academic period: %w", err)
+		}
+		periodID = &period.ID
+	}
+
+	filters := repository.ScheduleFilters{
+		AudienceID:       &audienceID,
+		AcademicPeriodID: periodID,
+	}
+
+	return s.scheduleRepo.GetAll(ctx, filters)
+}
+
+func (s *ScheduleService) CreateSemesterSchedule(ctx context.Context, req *dto.CreateSemesterScheduleRequest) error {
+	period, err := s.GetAcademicPeriodByID(ctx, req.AcademicPeriodID)
+	if err != nil {
+		return fmt.Errorf("get academic period: %w", err)
+	}
+	if period == nil {
+		return errors.New("academic period not found")
+	}
+
+	group, err := s.GetGroup(ctx, req.GroupID)
+	if err != nil {
+		return fmt.Errorf("get group: %w", err)
+	}
+	if group == nil {
+		return errors.New("group not found")
+	}
+
+	tx, err := s.scheduleRepo.DB.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Проверяем, нет ли уже расписания у группы на заданный период
+	existingsFilters := repository.ScheduleFilters{
+		GroupID:          &req.GroupID,
+		AcademicPeriodID: &req.AcademicPeriodID,
+	}
+
+	existingsTemplstes, err := s.scheduleRepo.GetAll(ctx, existingsFilters)
+	if err != nil {
+		return fmt.Errorf("check existings schedule: %w", err)
+	}
+	if len(existingsTemplstes) > 0 {
+		return errors.New("schedule already exists for this group and academic period")
+	}
+
+	for _, entry := range req.ScheduleEntries {
+		subject, err := s.GetSubjectByID(ctx, entry.SubjectID)
+		if err != nil {
+			return fmt.Errorf("get subject %d: %w", entry.SubjectID, err)
+		}
+		if subject == nil {
+			return fmt.Errorf("subject with id %d not found", entry.SubjectID)
+		}
+
+		if subject.GroupID != req.GroupID {
+			return fmt.Errorf("subject %d does not belong to group %d", entry.SubjectID, req.GroupID)
+		}
+
+		if err := s.checkScheduleConflicts(ctx, &entry, req.AcademicPeriodID); err != nil {
+			return fmt.Errorf("schedule conflict: %w", err)
+		}
+
+		template := models.ScheduleTemplate{
+			DayOfWeek:        entry.DayOfWeek,
+			WeekType:         entry.WeekType,
+			Number:           entry.Number,
+			SubjectID:        entry.SubjectID,
+			TeacherID:        entry.TeacherID,
+			AudienceID:       entry.AudienceID,
+			AcademicPeriodID: req.AcademicPeriodID,
+		}
+		err = s.scheduleRepo.Create(ctx, &template)
+		if err != nil {
+			return fmt.Errorf("create schedule template: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (s *ScheduleService) checkScheduleConflicts(ctx context.Context, entry *dto.ScheduleEntryRequest, periodID int) error {
+	teacherFilter := repository.ScheduleFilters{
+		TeacherID:        &entry.TeacherID,
+		AcademicPeriodID: &periodID,
+		DayOfWeek:        &entry.DayOfWeek,
+		WeekType:         &entry.WeekType,
+	}
+
+	teacherSchedule, err := s.scheduleRepo.GetAll(ctx, teacherFilter)
+	if err != nil {
+		return fmt.Errorf("check teacher conflict: %w")
+	}
+
+	for _, tmpl := range teacherSchedule {
+		if tmpl.Number == entry.Number {
+			return fmt.Errorf("teacher %d already has a lesson at day %d, lesson %d, week type %d",
+				entry.TeacherID, entry.DayOfWeek, entry.Number, entry.WeekType)
+		}
+	}
+
+	audienceFilter := repository.ScheduleFilters{
+		AudienceID:       &entry.AudienceID,
+		AcademicPeriodID: &periodID,
+		DayOfWeek:        &entry.DayOfWeek,
+		WeekType:         &entry.WeekType,
+	}
+
+	audienceSchedule, err := s.scheduleRepo.GetAll(ctx, audienceFilter)
+	if err != nil {
+		return fmt.Errorf("check audience conflict: %w")
+	}
+
+	for _, tmpl := range audienceSchedule {
+		if tmpl.Number == entry.Number {
+			return fmt.Errorf("audience %d has lesson at day %d, lesson %d, week type %d",
+				entry.AudienceID, entry.DayOfWeek, entry.Number, entry.WeekType)
+		}
+	}
+
+	return nil
 }

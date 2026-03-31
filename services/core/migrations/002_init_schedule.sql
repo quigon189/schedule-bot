@@ -51,6 +51,7 @@ CREATE TABLE schedule.lesson_logs (
 	id SERIAL PRIMARY KEY,
 	date DATE NOT NULL,
 	number INTEGER,
+	academic_period_id INTEGER REFERENCES schedule.academic_periods(id) ON DELETE CASCADE,
 	subject_id INTEGER REFERENCES schedule.subjects(id) ON DELETE CASCADE,
 	teacher_id INTEGER REFERENCES auth.teacher_profiles(user_id) ON DELETE SET NULL,
 	audience_id INTEGER REFERENCES schedule.audiences(id) ON DELETE SET NULL,

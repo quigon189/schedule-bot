@@ -31,30 +31,34 @@ type Subject struct {
 }
 
 type ScheduleTemplate struct {
-	ID         int `json:"id"`
-	DayOfWeek  int `json:"day_of_week"`
-	Number     int `json:"number"`
-	WeekType   int `json:"week_type"`
-	SubjectID  int `json:"subject_id"`
-	TeacherID  int `json:"teacher_id"`
-	AudienceID int `json:"audience_id"`
+	ID               int `json:"id"`
+	DayOfWeek        int `json:"day_of_week"`
+	Number           int `json:"number"`
+	WeekType         int `json:"week_type"`
+	SubjectID        int `json:"subject_id"`
+	TeacherID        int `json:"teacher_id"`
+	AudienceID       int `json:"audience_id"`
+	AcademicPeriodID int `json:"academic_period_id"`
 
-	Subject  Subject  `json:"subject"`
-	Teacher  Teacher  `json:"teacher"`
-	Audience Audience `json:"audience"`
+	AcademicPeriod AcademicPeriod `json:"academic_period"`
+	Subject        Subject        `json:"subject"`
+	Teacher        Teacher        `json:"teacher"`
+	Audience       Audience       `json:"audience"`
 }
 
 type LessonLog struct {
-	ID         int       `json:"id"`
-	Date       time.Time `json:"date"`
-	Number     int       `json:"number"`
-	Status     string    `json:"status"`
-	Comment    string    `json:"comment"`
-	SubjectID  int       `json:"subject_id"`
-	TeacherID  int       `json:"teacher_id"`
-	AudienceID int       `json:"audience_id"`
+	ID               int       `json:"id"`
+	Date             time.Time `json:"date"`
+	Number           int       `json:"number"`
+	Status           string    `json:"status"`
+	Comment          string    `json:"comment"`
+	SubjectID        int       `json:"subject_id"`
+	TeacherID        int       `json:"teacher_id"`
+	AudienceID       int       `json:"audience_id"`
+	AcademicPeriodID int       `json:"academic_period_id"`
 
-	Subject  Subject  `json:"subject"`
-	Teacher  Teacher  `json:"teacher"`
-	Audience Audience `json:"audience"`
+	AcademicPeriod AcademicPeriod `json:"academic_period"`
+	Subject        Subject        `json:"subject"`
+	Teacher        Teacher        `json:"teacher"`
+	Audience       Audience       `json:"audience"`
 }
