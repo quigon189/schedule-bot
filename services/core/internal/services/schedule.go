@@ -541,11 +541,27 @@ func (s *ScheduleService) CreateScheduleTemplate(ctx context.Context, req *dto.C
 		TeacherID:        req.TeacherID,
 		AudienceID:       req.AudienceID,
 		AcademicPeriodID: req.AcademicPeriodID,
+		Subject:          *subject,
 	}
 
-	err = s.scheduleRepo.Create(ctx, &template)
+	if err := s.checkScheduleTemplateConflicts(ctx, &template); err != nil {
+		return nil, err
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	err = s.scheduleRepo.CreateWithTx(ctx, tx, &template)
 	if err != nil {
 		return nil, fmt.Errorf("create schedule template: %w", err)
+	}
+	err = s.updatePlannedSubjectLessons(ctx, tx, &template.Subject, template.AcademicPeriodID)
+	if err != nil {
+		return nil, fmt.Errorf("update planned lessons for subject %d: %w", subject.ID, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return s.scheduleRepo.GetByID(ctx, template.ID)
@@ -628,9 +644,20 @@ func (s *ScheduleService) UpdateScheduleTemplate(ctx context.Context, id int, re
 		template.AcademicPeriodID = *req.AcademicPeriodID
 	}
 
-	err = s.scheduleRepo.Update(ctx, template)
+	if err := s.checkScheduleTemplateConflicts(ctx, template); err != nil {
+		return nil, err
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	err = s.scheduleRepo.UpdateWithTx(ctx, tx, template)
 	if err != nil {
 		return nil, fmt.Errorf("create academic period: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return s.scheduleRepo.GetByID(ctx, template.ID)
@@ -729,7 +756,10 @@ func (s *ScheduleService) CreateSemesterSchedule(ctx context.Context, req *dto.C
 		return errors.New("schedule already exists for this group and academic period")
 	}
 
+	var subjects []models.Subject
+
 	for _, entry := range req.ScheduleEntries {
+
 		subject, err := s.GetSubjectByID(ctx, entry.SubjectID)
 		if err != nil {
 			return fmt.Errorf("get subject %d: %w", entry.SubjectID, err)
@@ -738,12 +768,14 @@ func (s *ScheduleService) CreateSemesterSchedule(ctx context.Context, req *dto.C
 			return fmt.Errorf("subject with id %d not found", entry.SubjectID)
 		}
 
-		if subject.GroupID != req.GroupID {
-			return fmt.Errorf("subject %d does not belong to group %d", entry.SubjectID, req.GroupID)
+		if !slices.ContainsFunc(subjects, func(s models.Subject) bool {
+			return s.ID == entry.SubjectID
+		}) {
+			subjects = append(subjects, *subject)
 		}
 
-		if err := s.checkScheduleConflicts(ctx, &entry, req.AcademicPeriodID); err != nil {
-			return fmt.Errorf("schedule conflict: %w", err)
+		if subject.GroupID != req.GroupID {
+			return fmt.Errorf("subject %d does not belong to group %d", entry.SubjectID, req.GroupID)
 		}
 
 		template := models.ScheduleTemplate{
@@ -754,106 +786,121 @@ func (s *ScheduleService) CreateSemesterSchedule(ctx context.Context, req *dto.C
 			TeacherID:        entry.TeacherID,
 			AudienceID:       entry.AudienceID,
 			AcademicPeriodID: req.AcademicPeriodID,
+			Subject:          *subject,
 		}
+
+		if err := s.checkScheduleTemplateConflicts(ctx, &template); err != nil {
+			return err
+		}
+
 		err = s.scheduleRepo.CreateWithTx(ctx, tx, &template)
 		if err != nil {
 			return fmt.Errorf("create schedule template: %w", err)
 		}
 	}
 
-	return tx.Commit(ctx)
-}
-
-func (s *ScheduleService) checkScheduleConflicts(ctx context.Context, entry *dto.ScheduleEntryRequest, periodID int) error {
-	teacherFilter := repository.ScheduleFilters{
-		TeacherID:        &entry.TeacherID,
-		AcademicPeriodID: &periodID,
-		DayOfWeek:        &entry.DayOfWeek,
-		WeekType:         &entry.WeekType,
-	}
-
-	teacherSchedule, err := s.scheduleRepo.GetAll(ctx, teacherFilter)
-	if err != nil {
-		return fmt.Errorf("check teacher conflict: %w", err)
-	}
-
-	for _, tmpl := range teacherSchedule {
-		if tmpl.Number == entry.Number {
-			return fmt.Errorf("teacher %d already has a lesson at day %d, lesson %d, week type %d",
-				entry.TeacherID, entry.DayOfWeek, entry.Number, entry.WeekType)
+	for _, subject := range subjects {
+		err = s.updatePlannedSubjectLessons(ctx, tx, &subject, req.AcademicPeriodID)
+		if err != nil {
+			return fmt.Errorf("update planned: %w", err)
 		}
 	}
 
-	audienceFilter := repository.ScheduleFilters{
-		AudienceID:       &entry.AudienceID,
-		AcademicPeriodID: &periodID,
-		DayOfWeek:        &entry.DayOfWeek,
-		WeekType:         &entry.WeekType,
-	}
+	return tx.Commit(ctx)
+}
 
-	audienceSchedule, err := s.scheduleRepo.GetAll(ctx, audienceFilter)
+func (s *ScheduleService) checkScheduleTemplateConflicts(ctx context.Context, tmpl *models.ScheduleTemplate) error {
+	// check teachers
+	templates, err := s.scheduleRepo.GetAll(ctx, repository.ScheduleFilters{
+		TeacherID:        &tmpl.TeacherID,
+		AcademicPeriodID: &tmpl.AcademicPeriodID,
+		DayOfWeek:        &tmpl.DayOfWeek,
+	})
 	if err != nil {
-		return fmt.Errorf("check audience conflict: %w", err)
+		return fmt.Errorf("check teacher conflicts: %w", err)
+	}
+	for _, t := range templates {
+		if t.Number == tmpl.Number {
+			if t.WeekType == 0 || t.WeekType == tmpl.WeekType {
+				return fmt.Errorf("teacher %d already has a lesson at day %d, lesson %d, week type %d",
+					tmpl.TeacherID, tmpl.DayOfWeek, tmpl.Number, tmpl.WeekType)
+			}
+		}
 	}
 
-	for _, tmpl := range audienceSchedule {
-		if tmpl.Number == entry.Number {
-			return fmt.Errorf("audience %d has lesson at day %d, lesson %d, week type %d",
-				entry.AudienceID, entry.DayOfWeek, entry.Number, entry.WeekType)
+	// check audiences
+	templates, err = s.scheduleRepo.GetAll(ctx, repository.ScheduleFilters{
+		AudienceID:       &tmpl.AudienceID,
+		AcademicPeriodID: &tmpl.AcademicPeriodID,
+		DayOfWeek:        &tmpl.DayOfWeek,
+	})
+	if err != nil {
+		return fmt.Errorf("check audience conflicts: %w", err)
+	}
+	for _, t := range templates {
+		if t.Number == tmpl.Number {
+			if t.WeekType == 0 || t.WeekType == tmpl.WeekType {
+				return fmt.Errorf("audience %d already has a lesson at day %d, lesson %d week type %d",
+					tmpl.TeacherID, tmpl.DayOfWeek, tmpl.Number, tmpl.WeekType)
+			}
+		}
+	}
+
+	// check group
+	templates, err = s.scheduleRepo.GetAll(ctx, repository.ScheduleFilters{
+		GroupID:          &tmpl.Subject.GroupID,
+		AcademicPeriodID: &tmpl.AcademicPeriodID,
+		DayOfWeek:        &tmpl.DayOfWeek,
+	})
+	if err != nil {
+		return fmt.Errorf("check group conflicts: %w", err)
+	}
+	for _, t := range templates {
+		if t.Number == tmpl.Number {
+			if t.WeekType == 0 || t.WeekType == tmpl.WeekType {
+				return fmt.Errorf("group %d already has a lesson at day %d, lesson %d, week type %d",
+					tmpl.TeacherID, tmpl.DayOfWeek, tmpl.Number, tmpl.WeekType)
+			}
 		}
 	}
 
 	return nil
 }
 
-func (s *ScheduleService) RecalculatePlannedLessons(ctx context.Context, periodID int) error {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
+func (s *ScheduleService) updatePlannedSubjectLessons(ctx context.Context, tx pgx.Tx, subject *models.Subject, periodID int) error {
 	templates, err := s.scheduleRepo.GetAll(ctx, repository.ScheduleFilters{
-		AcademicPeriodID: &periodID,
+		SubjectID: &subject.ID,
 	})
 	if err != nil {
-		return fmt.Errorf("get schedule templates: %w", err)
+		return fmt.Errorf("get schedule template for subject %d: %w", subject.ID, err)
 	}
 	if len(templates) == 0 {
-		err = s.deleteAllPlannedLessons(ctx, tx, periodID)
-		if err != nil {
-			return fmt.Errorf("delete all planned lessons: %w", err)
+		return s.deleteAllPlannedSubjectLessons(ctx, tx, subject.ID)
+	}
+
+	currentLogs, err := s.lessonLogRepo.GetAll(ctx, repository.LessonLogFilters{
+		SubjectID: &subject.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("get current lesson logs with subject %d: %w", subject.ID, err)
+	}
+
+	expectedLessons := s.generateExpectedSubjectLessons(templates, currentLogs, subject, periodID)
+	var plannedLessons []models.LessonLog
+	for _, curr := range currentLogs {
+		if curr.Status == models.LessonStatusPlanned {
+			plannedLessons = append(plannedLessons, curr)
 		}
-		return tx.Commit(ctx)
 	}
 
-	period, err := s.academicPeriodRepo.GetByID(ctx, periodID)
-	if err != nil {
-		return fmt.Errorf("get academic period: %w", err)
-	}
-	if period == nil {
-		return errors.New("academic period not found")
-	}
+	log.Printf("expectedLessons %+v", expectedLessons)
+	log.Printf("currentLessons %+v", currentLogs)
 
-	currentLessons, err := s.lessonLogRepo.GetAll(ctx, repository.LessonLogFilters{
-		AcademicPeriodID: &periodID,
-	})
-	if err != nil {
-		return fmt.Errorf("get current lessons: %w", err)
-	}
+	toDelete, toUpdate, toCreate := s.diffPlannedLessons(plannedLessons, expectedLessons)
 
-	expectedLessons := s.generateExpectedLessons(templates, currentLessons, period)
-
-	plannedStatus := models.LessonStatusPlanned
-	currentPlanned, err := s.lessonLogRepo.GetAll(ctx, repository.LessonLogFilters{
-		AcademicPeriodID: &periodID,
-		Status:           &plannedStatus,
-	})
-	if err != nil {
-		return fmt.Errorf("get current planned lessons: %w", err)
-	}
-
-	toDelete, toUpdate, toCreate := s.diffPlannedLessons(currentPlanned, expectedLessons)
+	log.Printf("toDelete %+v", toDelete)
+	log.Printf("toUpdate %+v", toUpdate)
+	log.Printf("toCreate %+v", toCreate)
 
 	for _, lesson := range toDelete {
 		if err := s.lessonLogRepo.DeleteWithTx(ctx, tx, lesson.ID); err != nil {
@@ -873,20 +920,14 @@ func (s *ScheduleService) RecalculatePlannedLessons(ctx context.Context, periodI
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	log.Printf("Recalculated planned lessons for period %d: deleted %d, updated %d, created %d",
-		periodID, len(toDelete), len(toUpdate), len(toCreate))
 	return nil
 }
 
-func (s *ScheduleService) deleteAllPlannedLessons(ctx context.Context, tx pgx.Tx, periodID int) error {
+func (s *ScheduleService) deleteAllPlannedSubjectLessons(ctx context.Context, tx pgx.Tx, subjectID int) error {
 	plannedStatus := models.LessonStatusPlanned
 	lessons, err := s.lessonLogRepo.GetAll(ctx, repository.LessonLogFilters{
-		AcademicPeriodID: &periodID,
-		Status:           &plannedStatus,
+		SubjectID: &subjectID,
+		Status:    &plannedStatus,
 	})
 	if err != nil {
 		return fmt.Errorf("get planned lessons for deletion: %w", err)
@@ -897,23 +938,39 @@ func (s *ScheduleService) deleteAllPlannedLessons(ctx context.Context, tx pgx.Tx
 			return fmt.Errorf("delete lesson %d: %w", lesson.ID, err)
 		}
 	}
-	log.Printf("Deleted %d planned lessons for period %d (no templates)", len(lessons), periodID)
+	log.Printf("Deleted %d planned lessons for subject %d (no templates)", len(lessons), subjectID)
 	return nil
 }
 
-func (s *ScheduleService) generateExpectedLessons(templates []models.ScheduleTemplate, current []models.LessonLog, period *models.AcademicPeriod) []models.LessonLog {
+func (s *ScheduleService) generateExpectedSubjectLessons(templates []models.ScheduleTemplate, current []models.LessonLog, subject *models.Subject, periodID int) []models.LessonLog {
 	var expected []models.LessonLog
 
-	for _, cur := range current {
-		if cur.Status != models.LessonStatusPlanned {
-			expected = append(expected, cur)
+	lessonCount := subject.HoursLoad / 2
+	if subject.HoursLoad%2 == 1 {
+		lessonCount++
+	}
+
+	scheduledLessons := 0
+	for _, curr := range current {
+		if curr.Status != models.LessonStatusPlanned && curr.Status != models.LessonStatusCanceled {
+			scheduledLessons++
 		}
 	}
 
-	for currentDate := period.StartDate; !currentDate.After(period.EndDate); currentDate = currentDate.AddDate(0, 0, 1) {
+	if scheduledLessons >= lessonCount {
+		return expected
+	}
+
+	for currentDate := subject.StartDate; !currentDate.After(subject.EndDate); currentDate = currentDate.AddDate(0, 0, 1) {
 		dayOfWeek := int(currentDate.Weekday())
 		if dayOfWeek == 0 {
 			dayOfWeek = 7
+		}
+
+		weekType := 1
+		_, week := currentDate.ISOWeek()
+		if week%2 != 1 {
+			weekType = 2
 		}
 
 		for _, tmpl := range templates {
@@ -921,15 +978,19 @@ func (s *ScheduleService) generateExpectedLessons(templates []models.ScheduleTem
 				continue
 			}
 
-			if slices.ContainsFunc(expected, func(l models.LessonLog) bool {
+			if tmpl.WeekType != 0 {
+				if tmpl.WeekType != weekType {
+					continue
+				}
+			}
+
+			if slices.ContainsFunc(current, func(l models.LessonLog) bool {
 				return l.Date.Equal(currentDate) &&
-				  l.Number == tmpl.Number &&
-				  l.SubjectID == tmpl.SubjectID
+					l.Number == tmpl.Number &&
+					l.Status != models.LessonStatusPlanned
 			}) {
 				continue
 			}
-
-			
 
 			lesson := models.LessonLog{
 				Date:             currentDate,
@@ -939,10 +1000,14 @@ func (s *ScheduleService) generateExpectedLessons(templates []models.ScheduleTem
 				SubjectID:        tmpl.SubjectID,
 				TeacherID:        tmpl.TeacherID,
 				AudienceID:       tmpl.AudienceID,
-				AcademicPeriodID: period.ID,
+				AcademicPeriodID: periodID,
 				IsFromTemplate:   true,
 			}
 			expected = append(expected, lesson)
+			scheduledLessons++
+			if scheduledLessons >= lessonCount {
+				return expected
+			}
 		}
 	}
 	return expected
@@ -979,112 +1044,6 @@ func (s *ScheduleService) diffPlannedLessons(current, expected []models.LessonLo
 	}
 
 	return
-}
-
-func (s *ScheduleService) GenerateLessonsFromTemplate(ctx context.Context, req *dto.GenerateScheduleRequest) error {
-	// Получаем все шаблоны расписания для периода
-	filters := repository.ScheduleFilters{
-		AcademicPeriodID: &req.AcademicPeriodID,
-	}
-	templates, err := s.scheduleRepo.GetAll(ctx, filters)
-	if err != nil {
-		return fmt.Errorf("get schedule templates: %w", err)
-	}
-
-	if len(templates) == 0 {
-		return errors.New("no schedule templates found for this period")
-	}
-
-	// Получаем учебный период
-	period, err := s.academicPeriodRepo.GetByID(ctx, req.AcademicPeriodID)
-	if err != nil {
-		return fmt.Errorf("get academic period: %w", err)
-	}
-	if period == nil {
-		return errors.New("academic period not found")
-	}
-
-	// Начинаем транзакцию
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	var generatedLessons []models.LessonLog
-
-	// Генерируем занятия для каждого дня в диапазоне
-	for currentDate := period.StartDate; !currentDate.After(period.EndDate); currentDate = currentDate.AddDate(0, 0, 1) {
-		dayOfWeek := int(currentDate.Weekday())
-		if dayOfWeek == 0 { // воскресенье
-			dayOfWeek = 7
-		}
-
-		// Для каждого шаблона в этот день недели
-		for _, template := range templates {
-			if template.DayOfWeek != dayOfWeek {
-				continue
-			}
-
-			// Проверяем тип недели
-			if template.WeekType != 0 {
-				// Определяем четность недели
-				_, week := currentDate.ISOWeek()
-				isOddWeek := week%2 == 1
-
-				if (template.WeekType == 1 && !isOddWeek) || (template.WeekType == 2 && isOddWeek) {
-					continue
-				}
-			}
-
-			// Проверяем, не выходит ли дата за пределы учебного периода
-			if currentDate.Before(period.StartDate) || currentDate.After(period.EndDate) {
-				continue
-			}
-
-			// Проверяем, не создано ли уже занятие на эту дату
-			existingFilters := repository.LessonLogFilters{
-				SubjectID:        &template.SubjectID,
-				AcademicPeriodID: &req.AcademicPeriodID,
-				DateFrom:         &currentDate,
-				DateTo:           &currentDate,
-				Number:           &template.Number,
-			}
-			existing, err := s.lessonLogRepo.GetAll(ctx, existingFilters)
-			if err != nil {
-				return fmt.Errorf("check existing lessons: %w", err)
-			}
-			if len(existing) > 0 {
-				continue
-			}
-
-			// Создаем занятие
-			lesson := &models.LessonLog{
-				Date:             currentDate,
-				Number:           template.Number,
-				Status:           models.LessonStatusPlanned,
-				Comment:          "Сгенерировано из шаблона расписания",
-				SubjectID:        template.SubjectID,
-				TeacherID:        template.TeacherID,
-				AudienceID:       template.AudienceID,
-				AcademicPeriodID: req.AcademicPeriodID,
-				IsFromTemplate:   true,
-			}
-
-			err = s.lessonLogRepo.CreateWithTx(ctx, tx, lesson)
-			if err != nil {
-				return fmt.Errorf("create lesson log: %w", err)
-			}
-			generatedLessons = append(generatedLessons, *lesson)
-		}
-	}
-
-	if err = tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	log.Printf("Generated %d lessons for period %d", len(generatedLessons), req.AcademicPeriodID)
-	return nil
 }
 
 func (s *ScheduleService) GetLessonLogs(ctx context.Context, filters *dto.LessonLogFiltersRequest) ([]models.LessonLog, error) {

@@ -24,19 +24,10 @@ type Router struct {
 func New(cfg *config.Config, pool *pgxpool.Pool) *Router {
 	userRepo := repository.NewUserRepo(pool)
 	sessionRepo := repository.NewSessionRepo(pool)
-	audienceRepo := repository.NewAudienceRepo(pool)
-	groupRepo := repository.NewGroupRepo(pool)
-	teacherRepo := repository.NewTeacherRepo(pool)
-	studentRepo := repository.NewStudentRepo(pool)
-	roleRepo := repository.NewRoleRepo(pool)
-	subjectRepo := repository.NewSubjectRepo(pool)
-	academicPeriodRepo := repository.NewAcademicPeriodRepo(pool)
-	scheduleRepo := repository.NewScheduleRepo(pool)
-	lessonLogRepo := repository.NewLessonLogRepo(pool)
-
+	
 	tokenService := services.NewJWTService([]byte(cfg.JWT.Secret), time.Duration(cfg.JWT.Expires)*time.Second)
 	userService := services.NewUserService(userRepo, sessionRepo, tokenService)
-	scheduleService := services.NewScheduleService(audienceRepo, groupRepo, teacherRepo, studentRepo, userRepo, roleRepo, subjectRepo, academicPeriodRepo, scheduleRepo, lessonLogRepo)
+	scheduleService := services.NewScheduleService(pool)
 
 	router := Router{
 		tokenService:    tokenService,
@@ -186,7 +177,6 @@ func (r *Router) SetupRoutes() {
 
 		r.Route("/lessons", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
-				r.Post("/generate", lessonLogHandler.GenerateLessonsFromTemplate)
 			})
 			r.Get("/", lessonLogHandler.GetLessonLogs)
 		})

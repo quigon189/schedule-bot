@@ -67,7 +67,7 @@ type LessonLog struct {
 const (
 	LessonStatusPlanned     = "planned"
 	LessonStatusCompleted   = "completed"
-	LessonStatusCancelled   = "canceled"
+	LessonStatusCanceled   = "canceled"
 	LessonStatusRescheduled = "rescheduled"
 )
 

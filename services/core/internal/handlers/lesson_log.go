@@ -4,7 +4,6 @@ import (
 	"core/internal/dto"
 	"core/internal/services"
 	"core/pkg/utils"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -18,27 +17,6 @@ type LessonLogHandler struct {
 
 func NewLessonLogHandler(scheduleService *services.ScheduleService) *LessonLogHandler {
 	return &LessonLogHandler{scheduleService: scheduleService}
-}
-
-// GenerateLessonsFromTemplate генерирует занятия из шаблона
-func (h *LessonLogHandler) GenerateLessonsFromTemplate(w http.ResponseWriter, r *http.Request) {
-	var req dto.GenerateScheduleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
-		return
-	}
-
-	if err := dto.ValidateStruct(req); err != nil {
-		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validation error: %v", err))
-		return
-	}
-
-	if err := h.scheduleService.GenerateLessonsFromTemplate(r.Context(), &req); err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to generate lessons: %v", err))
-		return
-	}
-
-	utils.SuccessResponse(w, "lessons generated successfully", nil)
 }
 
 // GetLessonLogs получает записи журнала с фильтрацией
