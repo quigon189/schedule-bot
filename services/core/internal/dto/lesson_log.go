@@ -33,12 +33,12 @@ type CancelLessonRequest struct {
 
 // ReplaceScheduleRequest - замена расписания
 type ReplaceScheduleRequest struct {
-	Date       time.Time `json:"date" validate:"required"`
-	Number     int       `json:"number" validate:"min=0,max=8"`
-	SubjectID  int       `json:"subject_id" validate:"required"`
-	TeacherID  int       `json:"teacher_id" validate:"required"`
-	AudienceID int       `json:"audience_id" validate:"required"`
-	Comment    string    `json:"comment"`
+	Date       string `json:"date" validate:"required,datetime=2006-01-02"`
+	Number     int    `json:"number" validate:"min=0,max=8"`
+	SubjectID  int    `json:"subject_id" validate:"required"`
+	TeacherID  int    `json:"teacher_id" validate:"required"`
+	AudienceID int    `json:"audience_id" validate:"required"`
+	Comment    string `json:"comment"`
 }
 
 // LessonLogFiltersRequest - фильтры для получения журнала
@@ -56,5 +56,5 @@ type LessonLogFiltersRequest struct {
 
 // GenerateScheduleRequest - генерация расписания из шаблона
 type GenerateScheduleRequest struct {
-	AcademicPeriodID int       `json:"academic_period_id" validate:"required"`
+	AcademicPeriodID int `json:"academic_period_id" validate:"required"`
 }

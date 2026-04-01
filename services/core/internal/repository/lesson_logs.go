@@ -146,10 +146,26 @@ func (r *LessonLogRepo) GetByID(ctx context.Context, id int) (*models.LessonLog,
 	return &log, nil
 }
 
-// GetAll — получение списка записей журнала с фильтрацией
 func (r *LessonLogRepo) GetAll(ctx context.Context, filters LessonLogFilters) ([]models.LessonLog, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	lessons, err := r.GetAllWithTx(ctx, tx, filters)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+	return lessons, nil
+}
+
+// GetAll — получение списка записей журнала с фильтрацией
+func (r *LessonLogRepo) GetAllWithTx(ctx context.Context, tx pgx.Tx, filters LessonLogFilters) ([]models.LessonLog, error) {
 	var conditions []string
-	var args []interface{}
+	var args []any
 	argIndex := 1
 
 	// Базовый запрос с JOIN
@@ -238,7 +254,7 @@ func (r *LessonLogRepo) GetAll(ctx context.Context, filters LessonLogFilters) ([
 	// Сортировка по умолчанию: дата и номер пары
 	query += " ORDER BY ll.date, ll.number"
 
-	rows, err := r.db.Query(ctx, query, args...)
+	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query lesson logs: %w", err)
 	}

@@ -544,14 +544,16 @@ func (s *ScheduleService) CreateScheduleTemplate(ctx context.Context, req *dto.C
 		Subject:          *subject,
 	}
 
-	if err := s.checkScheduleTemplateConflicts(ctx, &template); err != nil {
-		return nil, err
-	}
-
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
+	defer tx.Rollback(ctx)
+
+	if err := s.checkScheduleTemplateConflicts(ctx, tx, &template); err != nil {
+		return nil, err
+	}
+
 	err = s.scheduleRepo.CreateWithTx(ctx, tx, &template)
 	if err != nil {
 		return nil, fmt.Errorf("create schedule template: %w", err)
@@ -592,6 +594,14 @@ func (s *ScheduleService) UpdateScheduleTemplate(ctx context.Context, id int, re
 	}
 	if template == nil {
 		return nil, errors.New("schedule template no found")
+	}
+
+	currentSubject, err := s.subjectRepo.GetSubjectByID(ctx, template.SubjectID)
+	if err != nil {
+		return nil, fmt.Errorf("get subject: %w", err)
+	}
+	if currentSubject == nil {
+		return nil, errors.New("subject not found")
 	}
 
 	if req.DayOfWeek != nil {
@@ -644,18 +654,30 @@ func (s *ScheduleService) UpdateScheduleTemplate(ctx context.Context, id int, re
 		template.AcademicPeriodID = *req.AcademicPeriodID
 	}
 
-	if err := s.checkScheduleTemplateConflicts(ctx, template); err != nil {
-		return nil, err
-	}
-
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
-	err = s.scheduleRepo.UpdateWithTx(ctx, tx, template)
+	defer tx.Rollback(ctx)
+
+	if err := s.scheduleRepo.DeleteWithTx(ctx, tx, template.ID); err != nil {
+		return nil, fmt.Errorf("delete old template: %w", err)
+	}
+
+	if err := s.checkScheduleTemplateConflicts(ctx, tx, template); err != nil {
+		return nil, err
+	}
+
+	err = s.scheduleRepo.CreateWithTx(ctx, tx, template)
 	if err != nil {
 		return nil, fmt.Errorf("create academic period: %w", err)
 	}
+
+	err = s.updatePlannedSubjectLessons(ctx, tx, currentSubject, template.AcademicPeriodID)
+	if err != nil {
+		return nil, fmt.Errorf("update planned lessons: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
@@ -664,7 +686,25 @@ func (s *ScheduleService) UpdateScheduleTemplate(ctx context.Context, id int, re
 }
 
 func (s *ScheduleService) DeleteScheduleTemplate(ctx context.Context, id int) error {
-	return s.scheduleRepo.Delete(ctx, id)
+	tmpl, err := s.GetScheduleTemplate(ctx, id)
+	if err != nil {
+		return err
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	err = s.scheduleRepo.DeleteWithTx(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	err = s.updatePlannedSubjectLessons(ctx, tx, &tmpl.Subject, tmpl.AcademicPeriodID)
+	if err != nil {
+		return fmt.Errorf("update planned lessons: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (s *ScheduleService) GetGroupSchedule(ctx context.Context, groupID int, periodID *int) ([]models.ScheduleTemplate, error) {
@@ -789,7 +829,7 @@ func (s *ScheduleService) CreateSemesterSchedule(ctx context.Context, req *dto.C
 			Subject:          *subject,
 		}
 
-		if err := s.checkScheduleTemplateConflicts(ctx, &template); err != nil {
+		if err := s.checkScheduleTemplateConflicts(ctx, tx, &template); err != nil {
 			return err
 		}
 
@@ -809,9 +849,9 @@ func (s *ScheduleService) CreateSemesterSchedule(ctx context.Context, req *dto.C
 	return tx.Commit(ctx)
 }
 
-func (s *ScheduleService) checkScheduleTemplateConflicts(ctx context.Context, tmpl *models.ScheduleTemplate) error {
+func (s *ScheduleService) checkScheduleTemplateConflicts(ctx context.Context, tx pgx.Tx, tmpl *models.ScheduleTemplate) error {
 	// check teachers
-	templates, err := s.scheduleRepo.GetAll(ctx, repository.ScheduleFilters{
+	templates, err := s.scheduleRepo.GetAllWithTx(ctx, tx, repository.ScheduleFilters{
 		TeacherID:        &tmpl.TeacherID,
 		AcademicPeriodID: &tmpl.AcademicPeriodID,
 		DayOfWeek:        &tmpl.DayOfWeek,
@@ -829,7 +869,7 @@ func (s *ScheduleService) checkScheduleTemplateConflicts(ctx context.Context, tm
 	}
 
 	// check audiences
-	templates, err = s.scheduleRepo.GetAll(ctx, repository.ScheduleFilters{
+	templates, err = s.scheduleRepo.GetAllWithTx(ctx, tx, repository.ScheduleFilters{
 		AudienceID:       &tmpl.AudienceID,
 		AcademicPeriodID: &tmpl.AcademicPeriodID,
 		DayOfWeek:        &tmpl.DayOfWeek,
@@ -847,7 +887,7 @@ func (s *ScheduleService) checkScheduleTemplateConflicts(ctx context.Context, tm
 	}
 
 	// check group
-	templates, err = s.scheduleRepo.GetAll(ctx, repository.ScheduleFilters{
+	templates, err = s.scheduleRepo.GetAllWithTx(ctx, tx, repository.ScheduleFilters{
 		GroupID:          &tmpl.Subject.GroupID,
 		AcademicPeriodID: &tmpl.AcademicPeriodID,
 		DayOfWeek:        &tmpl.DayOfWeek,
@@ -868,7 +908,7 @@ func (s *ScheduleService) checkScheduleTemplateConflicts(ctx context.Context, tm
 }
 
 func (s *ScheduleService) updatePlannedSubjectLessons(ctx context.Context, tx pgx.Tx, subject *models.Subject, periodID int) error {
-	templates, err := s.scheduleRepo.GetAll(ctx, repository.ScheduleFilters{
+	templates, err := s.scheduleRepo.GetAllWithTx(ctx, tx, repository.ScheduleFilters{
 		SubjectID: &subject.ID,
 	})
 	if err != nil {
@@ -878,7 +918,7 @@ func (s *ScheduleService) updatePlannedSubjectLessons(ctx context.Context, tx pg
 		return s.deleteAllPlannedSubjectLessons(ctx, tx, subject.ID)
 	}
 
-	currentLogs, err := s.lessonLogRepo.GetAll(ctx, repository.LessonLogFilters{
+	currentLogs, err := s.lessonLogRepo.GetAllWithTx(ctx, tx, repository.LessonLogFilters{
 		SubjectID: &subject.ID,
 	})
 	if err != nil {
@@ -893,14 +933,7 @@ func (s *ScheduleService) updatePlannedSubjectLessons(ctx context.Context, tx pg
 		}
 	}
 
-	log.Printf("expectedLessons %+v", expectedLessons)
-	log.Printf("currentLessons %+v", currentLogs)
-
 	toDelete, toUpdate, toCreate := s.diffPlannedLessons(plannedLessons, expectedLessons)
-
-	log.Printf("toDelete %+v", toDelete)
-	log.Printf("toUpdate %+v", toUpdate)
-	log.Printf("toCreate %+v", toCreate)
 
 	for _, lesson := range toDelete {
 		if err := s.lessonLogRepo.DeleteWithTx(ctx, tx, lesson.ID); err != nil {
@@ -919,6 +952,9 @@ func (s *ScheduleService) updatePlannedSubjectLessons(ctx context.Context, tx pg
 			return fmt.Errorf("create lesson %d: %w", lesson.ID, err)
 		}
 	}
+
+	log.Printf("Updated planned lessons logs for subject %d: deleted %d, updated %d, created %d",
+		subject.ID, len(toDelete), len(toUpdate), len(toCreate))
 
 	return nil
 }
@@ -1047,35 +1083,98 @@ func (s *ScheduleService) diffPlannedLessons(current, expected []models.LessonLo
 }
 
 func (s *ScheduleService) GetLessonLogs(ctx context.Context, filters *dto.LessonLogFiltersRequest) ([]models.LessonLog, error) {
-	repoFilters := repository.LessonLogFilters{}
-
-	if filters.GroupID != nil {
-		repoFilters.GroupID = filters.GroupID
-	}
-	if filters.SubjectID != nil {
-		repoFilters.SubjectID = filters.SubjectID
-	}
-	if filters.TeacherID != nil {
-		repoFilters.TeacherID = filters.TeacherID
-	}
-	if filters.AudienceID != nil {
-		repoFilters.AudienceID = filters.AudienceID
-	}
-	if filters.AcademicPeriodID != nil {
-		repoFilters.AcademicPeriodID = filters.AcademicPeriodID
-	}
-	if filters.DateFrom != nil {
-		repoFilters.DateFrom = filters.DateFrom
-	}
-	if filters.DateTo != nil {
-		repoFilters.DateTo = filters.DateTo
-	}
-	if filters.Status != nil {
-		repoFilters.Status = filters.Status
-	}
-	if filters.Number != nil {
-		repoFilters.Number = filters.Number
+	repoFilters := repository.LessonLogFilters{
+		GroupID:          filters.GroupID,
+		SubjectID:        filters.SubjectID,
+		TeacherID:        filters.TeacherID,
+		AudienceID:       filters.AudienceID,
+		AcademicPeriodID: filters.AcademicPeriodID,
+		DateFrom:         filters.DateFrom,
+		DateTo:           filters.DateTo,
+		Status:           filters.Status,
+		Number:           filters.Number,
 	}
 
 	return s.lessonLogRepo.GetAll(ctx, repoFilters)
+}
+
+func (s *ScheduleService) CancelLesson(ctx context.Context, logID int, req *dto.CancelLessonRequest) error {
+	lesson, err := s.lessonLogRepo.GetByID(ctx, logID)
+	if err != nil {
+		return fmt.Errorf("get lesson log: %w", err)
+	}
+
+	if lesson.Status == models.LessonStatusCanceled {
+		return fmt.Errorf("lesson already is calceled")
+	}
+
+	if lesson.Status == models.LessonStatusCompleted {
+		return fmt.Errorf("lesson already is completed")
+	}
+
+	lesson.Comment = req.Comment
+	lesson.Status = models.LessonStatusCanceled
+
+	subject, err := s.subjectRepo.GetSubjectByID(ctx, lesson.SubjectID)
+	if err != nil {
+		return fmt.Errorf("get lesson subject: %w", err)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	if err := s.lessonLogRepo.UpdateWithTx(ctx, tx, lesson); err != nil {
+		return fmt.Errorf("cancel lesson: %w", err)
+	}
+	if err := s.updatePlannedSubjectLessons(ctx, tx, subject, lesson.AcademicPeriodID); err != nil {
+		return fmt.Errorf("update planned lessons: %w", err)
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (s *ScheduleService) RescheduleLesson(ctx context.Context, req *dto.ReplaceScheduleRequest) error {
+	// не видит конфликтов в занятиях
+	period, err := s.academicPeriodRepo.GetActive(ctx)
+	if err != nil {
+		return fmt.Errorf("get active academic period: %w", err)
+	}
+	subject, err := s.subjectRepo.GetSubjectByID(ctx, req.SubjectID)
+	if err != nil {
+		return fmt.Errorf("get subject: %w", err)
+	}
+
+	lessonDate, err := time.Parse("2006-01-02", req.Date)
+	if err != nil {
+		return fmt.Errorf("parse lesson date: %w", err)
+	}
+	
+	lesson := models.LessonLog{
+		Date:             lessonDate,
+		Number:           req.Number,
+		SubjectID:        req.SubjectID,
+		TeacherID:        req.TeacherID,
+		AudienceID:       req.AudienceID,
+		Comment:          req.Comment,
+		Status:           models.LessonStatusRescheduled,
+		AcademicPeriodID: period.ID,
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := s.lessonLogRepo.CreateWithTx(ctx, tx, &lesson); err != nil {
+		return fmt.Errorf("create rescheduled lesson: %w", err)
+	}
+
+	if err := s.updatePlannedSubjectLessons(ctx, tx, subject, period.ID); err != nil {
+		return fmt.Errorf("update planned lessons: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }

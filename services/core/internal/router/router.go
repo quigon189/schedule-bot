@@ -24,7 +24,7 @@ type Router struct {
 func New(cfg *config.Config, pool *pgxpool.Pool) *Router {
 	userRepo := repository.NewUserRepo(pool)
 	sessionRepo := repository.NewSessionRepo(pool)
-	
+
 	tokenService := services.NewJWTService([]byte(cfg.JWT.Secret), time.Duration(cfg.JWT.Expires)*time.Second)
 	userService := services.NewUserService(userRepo, sessionRepo, tokenService)
 	scheduleService := services.NewScheduleService(pool)
@@ -177,6 +177,8 @@ func (r *Router) SetupRoutes() {
 
 		r.Route("/lessons", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
+				r.Post("/cancel/{id}", lessonLogHandler.CancelLesson)
+				r.Post("/reschedule", lessonLogHandler.RescheduleLesson)
 			})
 			r.Get("/", lessonLogHandler.GetLessonLogs)
 		})

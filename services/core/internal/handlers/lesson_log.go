@@ -4,11 +4,13 @@ import (
 	"core/internal/dto"
 	"core/internal/services"
 	"core/pkg/utils"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 )
 
 type LessonLogHandler struct {
@@ -81,4 +83,40 @@ func (h *LessonLogHandler) GetLessonLogs(w http.ResponseWriter, r *http.Request)
 	}
 
 	utils.SuccessResponse(w, "lesson logs retrieved", logs)
+}
+
+func (h *LessonLogHandler) CancelLesson(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid id: %v", err))
+		return
+	}
+	var req dto.CancelLessonRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+
+	if err := h.scheduleService.CancelLesson(r.Context(), id, &req); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to cancel lesson: %v", err))
+		return 
+	}
+
+	utils.SuccessResponse(w, fmt.Sprintf("lesson %d canceled", id), nil)
+}
+
+func (h *LessonLogHandler) RescheduleLesson(w http.ResponseWriter, r *http.Request) {
+	var req dto.ReplaceScheduleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+
+	if err := h.scheduleService.RescheduleLesson(r.Context(), &req); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to cancel lesson: %v", err))
+		return 
+	}
+
+	utils.SuccessResponse(w, "lesson rescheduled", nil)
+
 }
