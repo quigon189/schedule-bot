@@ -24,12 +24,20 @@ func (r *StudentRepo) CreateStudent(ctx context.Context, user *models.User, grou
 	}
 	defer tx.Rollback(ctx)
 
+	if err := r.CreateStudentWithTx(ctx, tx, user, groupID); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *StudentRepo) CreateStudentWithTx(ctx context.Context, tx pgx.Tx, user *models.User, groupID int) error {
 	query := `
 	INSERT INTO auth.user_roles (user_id, role_id)
 	VALUES ($1, (SELECT id FROM auth.roles WHERE name = 'student'))
 	ON CONFLICT DO NOTHING
 	`
-	if _, err = tx.Exec(ctx, query, user.ID); err != nil {
+	if _, err := tx.Exec(ctx, query, user.ID); err != nil {
 		return err
 	}
 
@@ -37,7 +45,7 @@ func (r *StudentRepo) CreateStudent(ctx context.Context, user *models.User, grou
 	INSERT INTO auth.student_profiles (user_id, group_id)
 	VALUES ($1, $2)
 	`
-	if _, err = tx.Exec(ctx, query, user.ID, groupID); err != nil {
+	if _, err := tx.Exec(ctx, query, user.ID, groupID); err != nil {
 		return err
 	}
 
@@ -60,12 +68,12 @@ func (r *StudentRepo) CreateStudent(ctx context.Context, user *models.User, grou
 		user.Roles = append(user.Roles, role)
 	}
 
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (r *StudentRepo) GetStudentByUserID(ctx context.Context, userID int) (*models.Student, error) {
 	student := models.Student{
-		User: models.User{},
+		User:  models.User{},
 		Group: &models.Group{},
 	}
 	query := `
@@ -136,7 +144,7 @@ func (r *StudentRepo) GetAllStudents(ctx context.Context) ([]models.Student, err
 	var students []models.Student
 	for rows.Next() {
 		s := models.Student{
-			User: models.User{},
+			User:  models.User{},
 			Group: &models.Group{},
 		}
 		if err := rows.Scan(
@@ -173,7 +181,7 @@ func (r *StudentRepo) DeleteStudent(ctx context.Context, userID int) error {
 	return err
 }
 
-func ( r *StudentRepo) IsStudent(ctx context.Context, userID int) (bool, error) {
+func (r *StudentRepo) IsStudent(ctx context.Context, userID int) (bool, error) {
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM auth.student_profiles WHERE user_id = $1)`
 	err := r.db.QueryRow(ctx, query, userID).Scan(&exists)

@@ -4,10 +4,12 @@ import (
 	"context"
 	"core/internal/dto"
 	"core/internal/models"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -41,12 +43,21 @@ func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
 	}
 	defer tx.Rollback(ctx)
 
+	if err := r.CreateWithTx(ctx, tx, user); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *UserRepo) CreateWithTx(ctx context.Context, tx pgx.Tx, user *models.User) error {
+
 	query := `
 	INSERT INTO auth.users (username, full_name, email, password_hash) 
 	VALUES ($1, $2, $3, $4)
 	RETURNING id, created_at, updated_at
 	`
-	err = tx.QueryRow(ctx, query,
+	err := tx.QueryRow(ctx, query,
 		user.Name,
 		user.FullName,
 		user.Email,
@@ -92,7 +103,7 @@ func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
 	}
 	row.Close()
 
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (r *UserRepo) GetByID(ctx context.Context, id int) (*models.User, error) {
@@ -156,6 +167,9 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.
 		&user.UpdatedAt,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -244,10 +258,10 @@ func (r *UserRepo) GetUsersPaginated(ctx context.Context, page, perPage int, sor
 	totalPages := int(math.Ceil(float64(total) / float64(perPage)))
 
 	return &dto.PaginatedUsers{
-		Users: users,
-		Total: total,
-		Page: page,
-		PerPage: perPage,
+		Users:      users,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
 		TotalPages: totalPages,
 	}, nil
 }

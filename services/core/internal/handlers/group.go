@@ -105,3 +105,24 @@ func (h *GroupHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	utils.SuccessResponse(w, "group deleted", nil)
 }
+
+func (h *GroupHandler) CreateGroupWtihCurriculum(w http.ResponseWriter, r *http.Request) {
+	var req dto.CreateGroupWithCurriculumRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
+	resp, err := h.scheduleService.CreateGroupWithCurriculumAndStudents(r.Context(), &req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create group with curriculum: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "group with curriculum and students created", resp)
+}

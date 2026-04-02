@@ -133,6 +133,7 @@ func (r *Router) SetupRoutes() {
 		r.Route("/groups", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", groupHandler.CreateGroup)
+				r.Post("/with-curriculum", groupHandler.CreateGroupWtihCurriculum)
 				r.Patch("/{id}", groupHandler.UpdateGroup)
 				r.Delete("/{id}", groupHandler.DeleteGroup)
 			})

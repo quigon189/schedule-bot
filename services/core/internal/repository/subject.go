@@ -35,12 +35,26 @@ func NewSubjectRepo(db *pgxpool.Pool) *SubjectRepo {
 }
 
 func (r *SubjectRepo) CreateSubject(ctx context.Context, subject *models.Subject) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := r.CreateSubjectWithTx(ctx, tx, subject); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *SubjectRepo) CreateSubjectWithTx(ctx context.Context, tx pgx.Tx, subject *models.Subject) error {
 	query := `
 	INSERT INTO schedule.subjects (title, semester, hours_load, start_date, end_date, group_id)
 	VALUES ($1, $2, $3, $4, $5, $6)
 	RETURNING id
 	`
-	err := r.db.QueryRow(ctx, query,
+	err := tx.QueryRow(ctx, query,
 		subject.Title,
 		subject.Semester,
 		subject.HoursLoad,

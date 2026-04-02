@@ -1228,7 +1228,7 @@ func (s *ScheduleService) checkLessonConflict(ctx context.Context, l *models.Les
 func (s *ScheduleService) CompleteLessonFromDate(ctx context.Context, date time.Time, comment string) error {
 	lessons, err := s.lessonLogRepo.GetAll(ctx, repository.LessonLogFilters{
 		DateFrom: &date,
-		DateTo: &date,
+		DateTo:   &date,
 	})
 	if err != nil {
 		return fmt.Errorf("get lesson from date %s", date.Format("2006-01-02"))
@@ -1257,4 +1257,99 @@ func (s *ScheduleService) CompleteLessonFromDate(ctx context.Context, date time.
 	}
 
 	return nil
+}
+
+func (s *ScheduleService) CreateGroupWithCurriculumAndStudents(ctx context.Context, req *dto.CreateGroupWithCurriculumRequest) (*dto.CreateGroupWithCurriculumResponse, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	group := models.Group{
+		Name:          req.Group.Name,
+		Specialty:     req.Group.Specialty,
+		AdmissionYear: req.Group.AdmissionYear,
+	}
+	if err := s.groupRepo.CreateWithTx(ctx, tx, &group); err != nil {
+		return nil, fmt.Errorf("create group: %w", err)
+	}
+
+	var createdSubjects []models.Subject
+	for i, subjReq := range req.Subjects {
+		startDate, err := time.Parse("2006-01-02", subjReq.StartDate)
+		if err != nil {
+			return nil, fmt.Errorf("parse start_date for subject %d: %w", i, err)
+		}
+		endDate, err := time.Parse("2006-01-02", subjReq.EndDate)
+		if err != nil {
+			return nil, fmt.Errorf("parse end_date for subject %d: %w", i, err)
+		}
+		if startDate.After(endDate) {
+			return nil, fmt.Errorf("start_date must be before end_date for subject %d: %w", i, err)
+		}
+		subject := models.Subject{
+			Title:     subjReq.Title,
+			Semester:  subjReq.Semester,
+			HoursLoad: subjReq.HoursLoad,
+			StartDate: startDate,
+			EndDate:   endDate,
+			GroupID:   group.ID,
+		}
+
+		if err := s.subjectRepo.CreateSubjectWithTx(ctx, tx, &subject); err != nil {
+			return nil, fmt.Errorf("create subject %d: %w", i, err)
+		}
+
+		subject.Group = group
+		createdSubjects = append(createdSubjects, subject)
+	}
+
+	var studentsResult []dto.StudentCreationResult
+	for i, studReq := range req.Students {
+		baseUsername := generateUsername(studReq.FullName, group.Name)
+		username, err := ensureUniqueUsername(ctx, s.userRepo, baseUsername)
+		if err != nil {
+			return nil, fmt.Errorf("generate unique username: %w", err)
+		}
+
+		plainPassword, err := generateRandomPassword()
+		if err != nil {
+			return nil, fmt.Errorf("generate password: %w", err)
+		}
+		passwordHash, err := hashPassword(plainPassword)
+		if err != nil {
+			return nil, fmt.Errorf("hash password: %w", err)
+		}
+
+		user := models.User{
+			Name:         username,
+			FullName:     studReq.FullName,
+			Email:        studReq.Email,
+			PasswordHash: passwordHash,
+		}
+		if err := s.userRepo.CreateWithTx(ctx, tx, &user); err != nil {
+			return nil, fmt.Errorf("create user %d: %w", i, err)
+		}
+
+		if err := s.studentRepo.CreateStudentWithTx(ctx, tx, &user, group.ID); err != nil {
+			return nil, fmt.Errorf("create student %d profile: %w", i, err)
+		}
+
+		studentsResult = append(studentsResult, dto.StudentCreationResult{
+			User:     user,
+			Password: plainPassword,
+			GroupID:  group.ID,
+		})
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return &dto.CreateGroupWithCurriculumResponse{
+		Group:    group,
+		Subjects: createdSubjects,
+		Students: studentsResult,
+	}, nil
 }

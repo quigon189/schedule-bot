@@ -4,6 +4,7 @@ import (
 	"context"
 	"core/internal/models"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,12 +19,25 @@ func NewGroupRepo(db *pgxpool.Pool) *GroupRepo {
 }
 
 func (r *GroupRepo) Create(ctx context.Context, group *models.Group) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := r.CreateWithTx(ctx, tx, group); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+func (r *GroupRepo) CreateWithTx(ctx context.Context, tx pgx.Tx, group *models.Group) error {
 	query := `
 	INSERT INTO auth.groups (name, specialty, admission_year)
 	VALUES ($1, $2, $3)
 	RETURNING id
 	`
-	return r.db.QueryRow(ctx, query, group.Name, group.Specialty, group.AdmissionYear).Scan(&group.ID)
+	return tx.QueryRow(ctx, query, group.Name, group.Specialty, group.AdmissionYear).Scan(&group.ID)
 }
 
 func (r *GroupRepo) GetByID(ctx context.Context, id int) (*models.Group, error) {
