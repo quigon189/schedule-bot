@@ -41,6 +41,11 @@ type ReplaceScheduleRequest struct {
 	Comment    string `json:"comment"`
 }
 
+type CompleteScheduleRequest struct {
+	Date    string `json:"date" validate:"required,datetime=2006-01-02"`
+	Comment string `json:"comment"`
+}
+
 // LessonLogFiltersRequest - фильтры для получения журнала
 type LessonLogFiltersRequest struct {
 	GroupID          *int       `json:"group_id"`

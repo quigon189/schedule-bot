@@ -179,6 +179,7 @@ func (r *Router) SetupRoutes() {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/cancel/{id}", lessonLogHandler.CancelLesson)
 				r.Post("/reschedule", lessonLogHandler.RescheduleLesson)
+				r.Post("/complete", lessonLogHandler.CompleteLessonFromDate)
 			})
 			r.Get("/", lessonLogHandler.GetLessonLogs)
 		})

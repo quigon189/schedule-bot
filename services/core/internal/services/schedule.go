@@ -1108,10 +1108,6 @@ func (s *ScheduleService) CancelLesson(ctx context.Context, logID int, req *dto.
 		return fmt.Errorf("lesson already is calceled")
 	}
 
-	if lesson.Status == models.LessonStatusCompleted {
-		return fmt.Errorf("lesson already is completed")
-	}
-
 	lesson.Comment = req.Comment
 	lesson.Status = models.LessonStatusCanceled
 
@@ -1136,7 +1132,10 @@ func (s *ScheduleService) CancelLesson(ctx context.Context, logID int, req *dto.
 }
 
 func (s *ScheduleService) RescheduleLesson(ctx context.Context, req *dto.ReplaceScheduleRequest) error {
-	// не видит конфликтов в занятиях
+
+	// не видит конфликтов в lesson logs
+	// надо добавить проверку lesson на уже имеющиеся
+
 	period, err := s.academicPeriodRepo.GetActive(ctx)
 	if err != nil {
 		return fmt.Errorf("get active academic period: %w", err)
@@ -1150,7 +1149,7 @@ func (s *ScheduleService) RescheduleLesson(ctx context.Context, req *dto.Replace
 	if err != nil {
 		return fmt.Errorf("parse lesson date: %w", err)
 	}
-	
+
 	lesson := models.LessonLog{
 		Date:             lessonDate,
 		Number:           req.Number,
@@ -1160,6 +1159,10 @@ func (s *ScheduleService) RescheduleLesson(ctx context.Context, req *dto.Replace
 		Comment:          req.Comment,
 		Status:           models.LessonStatusRescheduled,
 		AcademicPeriodID: period.ID,
+	}
+
+	if err := s.checkLessonConflict(ctx, &lesson); err != nil {
+		return err
 	}
 
 	tx, err := s.pool.Begin(ctx)
@@ -1177,4 +1180,81 @@ func (s *ScheduleService) RescheduleLesson(ctx context.Context, req *dto.Replace
 	}
 
 	return tx.Commit(ctx)
+}
+
+func (s *ScheduleService) checkLessonConflict(ctx context.Context, l *models.LessonLog) error {
+
+	// Фильтр для поиска существующих занятий
+	filters := repository.LessonLogFilters{
+		DateFrom:         &l.Date,
+		DateTo:           &l.Date,
+		Number:           &l.Number,
+		AcademicPeriodID: &l.AcademicPeriodID,
+	}
+
+	existing, err := s.lessonLogRepo.GetAll(ctx, filters)
+	if err != nil {
+		return fmt.Errorf("failed to check lesson uniqueness: %w", err)
+	}
+
+	if len(existing) > 0 {
+
+		for _, lesson := range existing {
+			if lesson.Status == models.LessonStatusCanceled {
+				continue
+			}
+
+			if lesson.TeacherID == l.TeacherID {
+				return fmt.Errorf("teacher %d already has a lesson at %s, lesson %d",
+					l.TeacherID, l.Date.Format("2006-01-02"), l.Number)
+			}
+
+			if lesson.AudienceID == l.AudienceID {
+				return fmt.Errorf("audience %d already has a lesson at %s, lesson %d",
+					l.AudienceID, l.Date.Format("2006-01-02"), l.Number)
+			}
+
+			if lesson.Subject.GroupID == l.Subject.GroupID {
+				return fmt.Errorf("group %d already has a lesson at %s, lesson %d",
+					l.Subject.GroupID, l.Date.Format("2006-01-02"), l.Number)
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (s *ScheduleService) CompleteLessonFromDate(ctx context.Context, date time.Time, comment string) error {
+	lessons, err := s.lessonLogRepo.GetAll(ctx, repository.LessonLogFilters{
+		DateFrom: &date,
+		DateTo: &date,
+	})
+	if err != nil {
+		return fmt.Errorf("get lesson from date %s", date.Format("2006-01-02"))
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	for _, lesson := range lessons {
+		if lesson.Status == models.LessonStatusCompleted {
+			continue
+		}
+		if lesson.Status == models.LessonStatusCanceled {
+			continue
+		}
+		if err := s.lessonLogRepo.UpdateStatusWithTx(ctx, tx, lesson.ID, models.LessonStatusCanceled, comment); err != nil {
+			return fmt.Errorf("update status for lesson %d: %w", lesson.ID, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
 }

@@ -381,11 +381,24 @@ func (r *LessonLogRepo) DeleteWithTx(ctx context.Context, tx pgx.Tx, id int) err
 
 // UpdateStatus — обновление статуса занятия
 func (r *LessonLogRepo) UpdateStatus(ctx context.Context, id int, status, comment string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := r.UpdateStatusWithTx(ctx, tx, id, status, comment); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *LessonLogRepo) UpdateStatusWithTx(ctx context.Context, tx pgx.Tx, id int, status, comment string) error {
 	query := `
 	UPDATE schedule.lesson_logs
 	SET status = $1, comment = $2
 	WHERE id = $3
 	`
-	_, err := r.db.Exec(ctx, query, status, comment, id)
+	_, err := tx.Exec(ctx, query, status, comment, id)
 	return err
 }

@@ -107,7 +107,7 @@ func (r *SubjectRepo) GetAllSubjects(ctx context.Context, req *dto.PaginatedSubj
 	}
 
 	offset := (page - 1) * perPage
-	orderClause := fmt.Sprintf("%s %s", sortBy, sortOrder)
+	orderClause := fmt.Sprintf("s.%s %s", sortBy, sortOrder)
 
 	query := fmt.Sprintf(`
 	SELECT s.id, s.title, s.semester, s.hours_load, s.start_date, s.end_date, s.group_id,

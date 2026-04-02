@@ -113,10 +113,33 @@ func (h *LessonLogHandler) RescheduleLesson(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.scheduleService.RescheduleLesson(r.Context(), &req); err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to cancel lesson: %v", err))
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to reschedule lesson: %v", err))
 		return 
 	}
 
 	utils.SuccessResponse(w, "lesson rescheduled", nil)
+
+}
+
+func (h *LessonLogHandler) CompleteLessonFromDate(w http.ResponseWriter, r *http.Request) {
+	var req dto.CompleteScheduleRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+
+	date, err := time.Parse("2006-01-02", req.Date)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad date format: %v", err))
+		return
+	}
+
+	if err := h.scheduleService.CompleteLessonFromDate(r.Context(), date, req.Comment); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to reschedule lesson: %v", err))
+		return 
+	}
+
+	utils.SuccessResponse(w, "lesson status changed to completed", nil)
 
 }
