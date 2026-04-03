@@ -197,6 +197,10 @@ func (s *ScheduleService) GetAllStudents(ctx context.Context) ([]models.Student,
 	return s.studentRepo.GetAllStudents(ctx)
 }
 
+func (s *ScheduleService) GetStudentsByGroupID(ctx context.Context, id int) ([]models.Student, error) {
+	return s.studentRepo.GetStudentsByGroupID(ctx, id)
+}
+
 func (s *ScheduleService) UpdateStudentGroup(ctx context.Context, userID int, groupID int) error {
 	group, err := s.groupRepo.GetByID(ctx, groupID)
 	if err != nil {
@@ -1259,7 +1263,7 @@ func (s *ScheduleService) CompleteLessonFromDate(ctx context.Context, date time.
 	return nil
 }
 
-func (s *ScheduleService) CreateGroupWithCurriculumAndStudents(ctx context.Context, req *dto.CreateGroupWithCurriculumRequest) (*dto.CreateGroupWithCurriculumResponse, error) {
+func (s *ScheduleService) CreateGroupWithCurriculumAndStudents(ctx context.Context, req *dto.CreateGroupWithCurriculumRequest) (*dto.GroupWithCurriculumResponse, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)

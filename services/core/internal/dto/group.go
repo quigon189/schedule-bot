@@ -27,8 +27,8 @@ type CreateStudentWithCredentialsRequest struct {
 	Email    string `json:"email" validate:"required,email"`
 }
 
-// CreateGroupWithCurriculumResponse - ответ после создания
-type CreateGroupWithCurriculumResponse struct {
+// GroupWithCurriculumResponse - ответ после создания
+type GroupWithCurriculumResponse struct {
 	Group    models.Group            `json:"group"`
 	Subjects []models.Subject        `json:"subjects"`
 	Students []StudentCreationResult `json:"students"`

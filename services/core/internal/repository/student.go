@@ -126,6 +126,49 @@ func (r *StudentRepo) GetStudentByUserID(ctx context.Context, userID int) (*mode
 	return &student, nil
 }
 
+func (r *StudentRepo) GetStudentsByGroupID(ctx context.Context, id int) ([]models.Student, error) {
+	query := `
+	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at,
+	       g.id, g.name, g.specialty, g.admission_year
+	FROM auth.users u
+	JOIN auth.student_profiles sp ON u.id = sp.user_id
+	LEFT JOIN auth.groups g ON sp.group_id = g.id
+	WHERE g.id = $1
+	ORDER BY u.id
+	`
+	rows, err := r.db.Query(ctx, query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var students []models.Student
+	for rows.Next() {
+		s := models.Student{
+			User:  models.User{},
+			Group: &models.Group{},
+		}
+		if err := rows.Scan(
+			&s.User.ID,
+			&s.User.Name,
+			&s.User.FullName,
+			&s.User.Email,
+			&s.User.PasswordHash,
+			&s.User.CreatedAt,
+			&s.User.UpdatedAt,
+			&s.Group.ID,
+			&s.Group.Name,
+			&s.Group.Specialty,
+			&s.Group.AdmissionYear,
+		); err != nil {
+			return nil, err
+		}
+		students = append(students, s)
+	}
+	return students, nil
+
+}
+
 func (r *StudentRepo) GetAllStudents(ctx context.Context) ([]models.Student, error) {
 	query := `
 	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at,
