@@ -25,10 +25,16 @@ type JWTConfig struct {
 	Expires int //seconds
 }
 
+type OllamaConfig struct {
+	URL   string
+	Model string
+}
+
 type Config struct {
 	DB     DBConfig
 	Server ServerConfig
 	JWT    JWTConfig
+	Ollama OllamaConfig
 }
 
 func Load() *Config {
@@ -51,6 +57,11 @@ func Load() *Config {
 		Expires: getIntEnv("JWT_EXPIRES_SECONDS", 15*60),
 	}
 
+	ollama := OllamaConfig{
+		URL: getEnv("OLLAMA_URL", "localhost:11434"),
+		Model: getEnv("OLLAMA_MODEL", "qwen3.5:9b"),
+	}
+
 	if db.User == "" || db.Password == "" || db.Name == "" || jwt.Secret == "" {
 		log.Fatal("DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET must be set")
 	}
@@ -59,6 +70,7 @@ func Load() *Config {
 		DB:     db,
 		Server: server,
 		JWT:    jwt,
+		Ollama: ollama,
 	}
 }
 
