@@ -5,6 +5,7 @@ import (
 	"core/internal/dto"
 	"core/internal/services"
 	"fmt"
+	"log"
 	"strings"
 )
 
@@ -26,6 +27,7 @@ func initTools(svc services.ScheduleService) []Tool {
 				"period_semester": "int, опциональный (должен быть задан, если задан period_year), указывает семестр учебного года, принимает одно из двух значений: 1 или 2",
 			},
 			Handler: func(ctx context.Context, params map[string]any) (string, error) {
+				log.Printf("Параметры: %+v", params)
 				groupName, ok := params["group_name"].(string)
 				if !ok {
 					return "", fmt.Errorf("group_name обязательный параметр")
@@ -33,13 +35,13 @@ func initTools(svc services.ScheduleService) []Tool {
 
 				var periodID *int
 				periodYear, ok := params["period_year"].(string)
-				if ok {
-					semester, ok := params["period_semester"].(int)
-					if !ok {
+				if ok && periodYear != "" {
+					semester, okk := params["period_semester"].(float64)
+					if !okk {
 						return "", fmt.Errorf("period_semester обязательный, если указан period_year")
 					}
 
-					period, err := svc.GetAcademicPeriodByYear(ctx, periodYear, semester)
+					period, err := svc.GetAcademicPeriodByYear(ctx, periodYear, int(semester))
 					if err != nil {
 						return "", fmt.Errorf("get academic period: %w", err)
 					}

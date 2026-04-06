@@ -60,7 +60,7 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 	log.Printf("Системная строка: %s", systemPrompt)
 
 	// 2. Получаем решение от LLM
-	actionResp, err := a.client.Generate(ctx, systemPrompt, userMessage, Options{"temperature": 0.1})
+	actionResp, err := a.client.Generate(ctx, systemPrompt, userMessage, Options{"temperature": 0})
 	if err != nil {
 		return "", fmt.Errorf("LLM action selection failed: %w", err)
 	}
@@ -74,8 +74,8 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 	actionResp = strings.TrimSpace(actionResp)
 
 	var decision struct {
-		Action string                 `json:"action"`
-		Params map[string]interface{} `json:"params"`
+		Action string         `json:"action"`
+		Params map[string]any `json:"params"`
 	}
 	if err := json.Unmarshal([]byte(actionResp), &decision); err != nil {
 		// Если не распарсили, пробуем ответить напрямую через LLM
@@ -120,9 +120,7 @@ func (a *LLMAgent) formatResponse(ctx context.Context, userMessage string, data 
 - Не упоминай ID, JSON или технические детали
 - Если данных много, выдели самое важное
 - Если данных нет, скажи об этом вежливо
-- Форматируй ответ для удобного чтения (можно использовать переносы строк)
-
-Ответ:`, data)
+- Форматируй ответ для удобного чтения (можно использовать переносы строк)`, data)
 
 	return a.client.Generate(ctx, systemPrompt, userMessage, Options{"temperature": 0.2})
 }

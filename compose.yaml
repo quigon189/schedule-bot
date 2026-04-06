@@ -37,15 +37,15 @@ services:
   #   volumes:
   #     - ./swagger-spec:/swagger
   #
-  # ollama:
-  #   image: docker.io/ollama/ollama:latest
-  #   ports:
-  #     - "11434:11434"
-  #   volumes:
-  #     - ollama_data:/root/.ollama
-  #   environment:
-  #     - OLLAMA_HOST=0.0.0.0
-  #   restart: always
+  ollama:
+    image: docker.io/ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    restart: always
 
   core:
     build: ./services/core
@@ -60,14 +60,17 @@ services:
       DB_PASSWORD: ${DB_PASS}
       DB_NAME: core
       PORT: 8080
-      LLM_PROVIDER: gigachat
+
+      LLM_PROVIDER: ollama
+
       GIGACHAT_CLIENT_ID: ${GIGACHAT_CLIENT_ID}
       GIGACHAT_CLIENT_SECRET: ${GIGACHAT_CLIENT_SECRET}
       GIGACHAT_AUTHORIZATION_KEY: ${GIGACHAT_AUTHORIZATION_KEY}
       GIGACHAT_BASE_URL: https://ngw.devices.sberbank.ru:9443/api/v2
       GIGACHAT_MODEL: GigaChat-2
+
       OLLAMA_URL: ollama:11434
-      OLLAMA_MODEL: qwen3.5:0.8b
+      OLLAMA_MODEL: qwen3.5:2b
       OLLAMA_TIMEOUT: 6000
     volumes:
       - ./services/core/migrations:/app/migrations
