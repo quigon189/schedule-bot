@@ -53,13 +53,22 @@ services:
       - "8088:8080"
     environment:
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_SECONDS: 60
+      JWT_EXPIRES_SECONDS: 6000
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${DB_ADMIN}
       DB_PASSWORD: ${DB_PASS}
       DB_NAME: core
       PORT: 8080
+      LLM_PROVIDER: gigachat
+      GIGACHAT_CLIENT_ID: ${GIGACHAT_CLIENT_ID}
+      GIGACHAT_CLIENT_SECRET: ${GIGACHAT_CLIENT_SECRET}
+      GIGACHAT_AUTHORIZATION_KEY: ${GIGACHAT_AUTHORIZATION_KEY}
+      GIGACHAT_BASE_URL: https://ngw.devices.sberbank.ru:9443/api/v2
+      GIGACHAT_MODEL: GigaChat-2
+      OLLAMA_URL: ollama:11434
+      OLLAMA_MODEL: qwen3.5:0.8b
+      OLLAMA_TIMEOUT: 6000
     volumes:
       - ./services/core/migrations:/app/migrations
     depends_on:

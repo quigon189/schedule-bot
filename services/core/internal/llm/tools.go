@@ -1,68 +1,85 @@
 package llm
 
-type FunctionDescription struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Parameters  map[string]string `json:"parameters"`
+import (
+	"context"
+	"core/internal/dto"
+	"core/internal/services"
+	"fmt"
+	"strings"
+)
+
+type Tool struct {
+	Name        string                                                           `json:"name"`
+	Description string                                                           `json:"description"`
+	Parameters  map[string]string                                                `json:"parameters"`
+	Handler     func(ctx context.Context, params map[string]any) (string, error) `json:"-"`
 }
 
-func GetAllFunctions() []FunctionDescription {
-	return []FunctionDescription{
+func initTools(svc services.ScheduleService) []Tool {
+	return []Tool{
 		{
-			Name:        "get_group_schedule",
-			Description: "Получить расписание группы на указанный учебный период (или текущий, если period_id не указан)",
+			Name:        "get_schedule_group",
+			Description: "Получить основное расписание группы (без изменений) на неделю для указаного учебного периода. Можешь использовать его, если в запросе указаны на понедельник, на вторник и т.д. до конца недели; а так же на неделю и похожие запросы",
 			Parameters: map[string]string{
-				"group_id":  "int, обязательный, ID учебной группы",
-				"period_id": "int, опциональный, ID учебного периода (если не указан, то берется текущий активный)",
+				"group_name":      "string, обязательный, трехзначиное число (например 501)",
+				"period_year":     "string, опциональный, учебный период указывающий года обучения в формате YYYY/YYYY (например 2025/2026); если не указан, то подставляется текущий активный период",
+				"period_semester": "int, опциональный (должен быть задан, если задан period_year), указывает семестр учебного года, принимает одно из двух значений: 1 или 2",
 			},
-		},
-		{
-			Name:        "get_teacher_schedule",
-			Description: "Получить расписание преподавателя",
-			Parameters: map[string]string{
-				"teacher_id": "int, обязательный",
-				"period_id":  "int, опциональный",
+			Handler: func(ctx context.Context, params map[string]any) (string, error) {
+				groupName, ok := params["group_name"].(string)
+				if !ok {
+					return "", fmt.Errorf("group_name обязательный параметр")
+				}
+
+				var periodID *int
+				periodYear, ok := params["period_year"].(string)
+				if ok {
+					semester, ok := params["period_semester"].(int)
+					if !ok {
+						return "", fmt.Errorf("period_semester обязательный, если указан period_year")
+					}
+
+					period, err := svc.GetAcademicPeriodByYear(ctx, periodYear, semester)
+					if err != nil {
+						return "", fmt.Errorf("get academic period: %w", err)
+					}
+
+					periodID = &period.ID
+				}
+
+				group, err := svc.GetGroupByName(ctx, groupName)
+				if err != nil {
+					return "", fmt.Errorf("get group by name: %w", err)
+				}
+
+				schedule, err := svc.GetAllScheduleTemplates(ctx, &dto.ScheduleFiltersRequest{
+					GroupID:          &group.ID,
+					AcademicPeriodID: periodID,
+				})
+
+				var builder strings.Builder
+				builder.WriteString("### Основное распиание занятий для группы " + group.Name + ":\n\n")
+
+				dayOfWeek := map[int]string{
+					1: "Понедельник",
+					2: "Вторник",
+					3: "Среда",
+					4: "Четверг",
+					5: "Пятница",
+					6: "Суббота",
+					7: "Воскресенье",
+				}
+
+				for _, s := range schedule {
+					fmt.Fprintf(&builder, "[%s] Пара №%d\n", dayOfWeek[s.DayOfWeek], s.Number)
+					fmt.Fprintf(&builder, "- Предмет: %s\n", s.Subject.Title)
+					fmt.Fprintf(&builder, "- Аудитория: %s\n", s.Audience.Number)
+					fmt.Fprintf(&builder, "- Преподаватель: %s\n", s.Teacher.User.FullName)
+					builder.WriteString("\n")
+				}
+
+				return builder.String(), nil
 			},
-		},
-		{
-			Name:        "get_audience_schedule",
-			Description: "Получить расписание аудитории",
-			Parameters: map[string]string{
-				"audience_id": "int, обязательный",
-				"period_id":   "int, опциональный",
-			},
-		},
-		{
-			Name:        "get_lesson_logs",
-			Description: "Получить журнал занятий с фильтрацией",
-			Parameters: map[string]string{
-				"group_id":   "int, опциональный",
-				"subject_id": "int, опциональный",
-				"teacher_id": "int, опциональный",
-				"date_from":  "string, опциональный, формат YYYY-MM-DD",
-				"date_to":    "string, опциональный",
-				"status":     "string, опциональный (planned, completed, canceled, rescheduled)",
-			},
-		},
-		{
-			Name:        "get_subjects",
-			Description: "Получить список предметов с пагинацией",
-			Parameters: map[string]string{
-				"page":       "int, опциональный",
-				"per_page":   "int, опциональный",
-				"sort_by":    "string, опциональный",
-				"sort_order": "string, опциональный",
-			},
-		},
-		{
-			Name:        "get_groups",
-			Description: "Получить список всех групп",
-			Parameters:  map[string]string{},
-		},
-		{
-			Name:        "get_teachers",
-			Description: "Получить список всех преподавателей",
-			Parameters:  map[string]string{},
 		},
 	}
 }

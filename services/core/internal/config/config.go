@@ -26,15 +26,31 @@ type JWTConfig struct {
 }
 
 type OllamaConfig struct {
-	URL   string
-	Model string
+	URL     string
+	Model   string
+	Timeout int
+}
+
+type GigaChatConfig struct {
+	ClientID         string
+	ClientSecret     string
+	AuthorizationKey string
+	BaseURL          string // https://gigachat.devices.sberbank.ru/api/v1
+	Model            string // GigaChat, GigaChat-Pro, GigaChat-Lite
+	Timeout          int
+}
+
+type LLMConfig struct {
+	Provider string
+	Ollama   OllamaConfig
+	GigaChat GigaChatConfig
 }
 
 type Config struct {
 	DB     DBConfig
 	Server ServerConfig
 	JWT    JWTConfig
-	Ollama OllamaConfig
+	LLM    LLMConfig
 }
 
 func Load() *Config {
@@ -58,8 +74,23 @@ func Load() *Config {
 	}
 
 	ollama := OllamaConfig{
-		URL: getEnv("OLLAMA_URL", "localhost:11434"),
-		Model: getEnv("OLLAMA_MODEL", "qwen3.5:9b"),
+		URL:     getEnv("OLLAMA_URL", "localhost:11434"),
+		Model:   getEnv("OLLAMA_MODEL", "qwen3.5:9b"),
+		Timeout: getIntEnv("OLLAMA_TIMEOUT", 600),
+	}
+
+	gigaChat := GigaChatConfig{
+		ClientID:         getEnv("GIGACHAT_CLIENT_ID", ""),
+		ClientSecret:     getEnv("GIGACHAT_CLIENT_SECRET", ""),
+		AuthorizationKey: getEnv("GIGACHAT_AUTHORIZATION_KEY", ""),
+		BaseURL:          getEnv("GIGACHAT_BASE_URL", "https://gigachat.devices.sberbank.ru/api/v1"),
+		Model:            getEnv("GIGACHAT_MODEL", "GigaChat-2-Lite"),
+	}
+
+	llm := LLMConfig{
+		Provider: getEnv("LLM_PROVIDER", "ollama"), //ollama или gigachat
+		Ollama:   ollama,
+		GigaChat: gigaChat,
 	}
 
 	if db.User == "" || db.Password == "" || db.Name == "" || jwt.Secret == "" {
@@ -70,7 +101,7 @@ func Load() *Config {
 		DB:     db,
 		Server: server,
 		JWT:    jwt,
-		Ollama: ollama,
+		LLM:    llm,
 	}
 }
 

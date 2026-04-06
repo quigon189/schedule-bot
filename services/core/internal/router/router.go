@@ -3,6 +3,7 @@ package router
 import (
 	"core/internal/config"
 	"core/internal/handlers"
+	"core/internal/llm"
 	"core/internal/middlewares"
 	"core/internal/repository"
 	"core/internal/services"
@@ -18,10 +19,11 @@ type Router struct {
 	tokenService    *services.JWTService
 	authService     *services.UserService
 	scheduleService *services.ScheduleService
+	llmAgent        *llm.LLMAgent
 	router          *chi.Mux
 }
 
-func New(cfg *config.Config, pool *pgxpool.Pool) *Router {
+func New(cfg *config.Config, pool *pgxpool.Pool) (*Router, error) {
 	userRepo := repository.NewUserRepo(pool)
 	sessionRepo := repository.NewSessionRepo(pool)
 
@@ -29,16 +31,23 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *Router {
 	userService := services.NewUserService(userRepo, sessionRepo, tokenService)
 	scheduleService := services.NewScheduleService(pool)
 
+	llmClient, err := llm.NewLLMClient(&cfg.LLM)
+	if err != nil {
+		return nil, err
+	}
+	agent := llm.NewAgent(llmClient, *scheduleService)
+
 	router := Router{
 		tokenService:    tokenService,
 		authService:     userService,
 		scheduleService: scheduleService,
+		llmAgent:        agent,
 		router:          chi.NewRouter(),
 	}
 
 	router.SetupRoutes()
 
-	return &router
+	return &router, nil
 }
 
 func (r *Router) SetupRoutes() {
@@ -55,6 +64,8 @@ func (r *Router) SetupRoutes() {
 	academicPeriodHandler := handlers.NewAcademicPeriodHandler(r.scheduleService)
 	scheduleHandler := handlers.NewScheduleHandler(r.scheduleService)
 	lessonLogHandler := handlers.NewLessonLogHandler(r.scheduleService)
+
+	chatHandler := handlers.NewChatHandler(r.llmAgent)
 
 	r.router.Use(middleware.Logger)
 	r.router.Use(middleware.Recoverer)
@@ -183,6 +194,10 @@ func (r *Router) SetupRoutes() {
 				r.Post("/complete", lessonLogHandler.CompleteLessonFromDate)
 			})
 			r.Get("/", lessonLogHandler.GetLessonLogs)
+		})
+
+		r.Route("/chat", func(r chi.Router) {
+			r.Post("/", chatHandler.Handle)
 		})
 	})
 }

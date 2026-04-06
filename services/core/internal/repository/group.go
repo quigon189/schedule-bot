@@ -62,6 +62,29 @@ func (r *GroupRepo) GetByID(ctx context.Context, id int) (*models.Group, error) 
 	return &group, nil
 }
 
+func (r *GroupRepo) GetByName(ctx context.Context, name string) (*models.Group, error) {
+	var group models.Group
+	query := `
+	SELECT id, name, specialty, admission_year
+	FROM auth.groups
+	WHERE name LIKE '%' || $1 || '%'
+	`
+	err := r.db.QueryRow(ctx, query, name).Scan(
+		&group.ID,
+		&group.Name,
+		&group.Specialty,
+		&group.AdmissionYear,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &group, nil
+
+}
+
 func (r *GroupRepo) GetAll(ctx context.Context) ([]models.Group, error) {
 	groups := []models.Group{}
 	query := `

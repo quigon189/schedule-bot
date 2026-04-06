@@ -99,6 +99,10 @@ func (s *ScheduleService) GetGroup(ctx context.Context, id int) (*models.Group, 
 	return s.groupRepo.GetByID(ctx, id)
 }
 
+func (s *ScheduleService) GetGroupByName(ctx context.Context, name string) (*models.Group, error) {
+	return s.groupRepo.GetByName(ctx, name)
+}
+
 func (s *ScheduleService) GetAllGroups(ctx context.Context) ([]models.Group, error) {
 	return s.groupRepo.GetAll(ctx)
 }
@@ -455,6 +459,10 @@ func (s *ScheduleService) CreateAcademicPeriod(ctx context.Context, req *dto.Cre
 
 func (s *ScheduleService) GetAcademicPeriodByID(ctx context.Context, id int) (*models.AcademicPeriod, error) {
 	return s.academicPeriodRepo.GetByID(ctx, id)
+}
+
+func (s *ScheduleService) GetAcademicPeriodByYear(ctx context.Context, year string, semester int) (*models.AcademicPeriod, error) {
+	return s.academicPeriodRepo.GetByYear(ctx, year, semester)
 }
 
 func (s *ScheduleService) GetAllAcademicPeriods(ctx context.Context) ([]models.AcademicPeriod, error) {
@@ -1351,7 +1359,7 @@ func (s *ScheduleService) CreateGroupWithCurriculumAndStudents(ctx context.Conte
 		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
-	return &dto.CreateGroupWithCurriculumResponse{
+	return &dto.GroupWithCurriculumResponse{
 		Group:    group,
 		Subjects: createdSubjects,
 		Students: studentsResult,

@@ -42,7 +42,10 @@ func main() {
 		log.Fatalf("Failed to apply migrations: %v", err)
 	}
 
-	r := router.New(cfg, pgPool)
+	r, err := router.New(cfg, pgPool)
+	if err != nil {
+		log.Fatalf("Failed to create router: %v", err)
+	}
 
 	server := http.Server{
 		Addr:    ":" + cfg.Server.Port,

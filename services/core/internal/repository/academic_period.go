@@ -59,6 +59,32 @@ func (r *AcademicPeriodRepo) GetByID(ctx context.Context, id int) (*models.Acade
 	return &period, nil
 }
 
+func (r *AcademicPeriodRepo) GetByYear(ctx context.Context, year string, semester int) (*models.AcademicPeriod, error) {
+	var period models.AcademicPeriod
+	query := `
+	SELECT id, year, semester, start_date, end_date, created_at, updated_at
+	FROM schedule.academic_periods
+	WHERE year = $1 AND semester = $2
+	`
+	err := r.db.QueryRow(ctx, query, year, semester).Scan(
+		&period.ID,
+		&period.Year,
+		&period.Semester,
+		&period.StartDate,
+		&period.EndDate,
+		&period.CreatedAt,
+		&period.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get academic period: %w", err)
+	}
+	return &period, nil
+
+}
+
 // GetActive — получение активного учебного периода
 func (r *AcademicPeriodRepo) GetActive(ctx context.Context) (*models.AcademicPeriod, error) {
 	var period models.AcademicPeriod
