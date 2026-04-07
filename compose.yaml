@@ -37,15 +37,15 @@ services:
   #   volumes:
   #     - ./swagger-spec:/swagger
   #
-  ollama:
-    image: docker.io/ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    restart: always
+  # ollama:
+  #   image: docker.io/ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   environment:
+  #     - OLLAMA_HOST=0.0.0.0
+  #   restart: always
 
   core:
     build: ./services/core
@@ -61,7 +61,7 @@ services:
       DB_NAME: core
       PORT: 8080
 
-      LLM_PROVIDER: ollama
+      LLM_PROVIDER: gigachat
 
       GIGACHAT_CLIENT_ID: ${GIGACHAT_CLIENT_ID}
       GIGACHAT_CLIENT_SECRET: ${GIGACHAT_CLIENT_SECRET}

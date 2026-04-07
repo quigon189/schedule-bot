@@ -23,6 +23,7 @@
 |   |   ├── academic_year.go
 |   |   ├── audience.go
 |   |   ├── auth.go
+|   |   ├── chat.go
 |   |   ├── group.go
 |   |   ├── lesson_log.go
 |   |   ├── role.go
@@ -31,6 +32,12 @@
 |   |   ├── subject.go
 |   |   ├── teacher.go
 |   |   └── user.go
+|   ├── llm
+|   |   ├── agent.go
+|   |   ├── factory.go
+|   |   ├── giga.go
+|   |   ├── ollama.go
+|   |   └── tools.go
 |   ├── middlewares
 |   |   └── tokens.go
 |   ├── models
@@ -52,6 +59,7 @@
 |   ├── router
 |   |   └── router.go
 |   └── services
+|       ├── generate_user.go
 |       ├── schedule.go
 |       ├── tokens.go
 |       ├── user.go
@@ -70,50 +78,63 @@
 
 ## Введение
 
-Сервис предоставляет REST API для управления пользователями, ролями (администратор, менеджер, преподаватель, студент, пользователь), группами, аудиториями и учебными предметами. Аутентификация осуществляется с помощью JWT токенов. Все эндпоинты, кроме `/login` и `/refresh`, требуют передачи JWT токена в заголовке `Authorization: Bearer <token>`.
+Сервис предоставляет REST API для управления пользователями, ролями, группами, аудиториями, предметами, расписанием и журналом занятий. Аутентификация осуществляется с помощью JWT токенов.
 
-## Общая информация
+**Базовый URL**: `http://<host>:<port>` (по умолчанию порт `8080`)
 
-- **Базовый URL**: `http://<host>:<port>` (по умолчанию порт `8080`)
-- **Формат ответов**: JSON
-- **Структура ответа**:
-  - Успешный ответ:
-    ```json
-    {
-      "success": true,
-      "message": "string",
-      "data": { ... } // может отсутствовать
-    }
-    ```
-  - Ответ с ошибкой:
-    ```json
-    {
-      "success": false,
-      "error": "string"
-    }
-    ```
-- **Аутентификация**: JWT токен передается в заголовке `Authorization: Bearer <access_token>`
-- **Роли**:
-  - `admin` – полный доступ ко всем админским операциям
-  - `manager` – управление ролями (назначает/удаляет роли `admin`, `manager`)
-  - `teacher` – преподаватель (профиль)
-  - `student` – студент (профиль с привязкой к группе)
-  - `user` – базовая роль, присваивается при регистрации
+**Формат ответов**: JSON
 
-## Эндпоинты
+**Структура ответа**:
+- Успешный ответ:
+  ```json
+  {
+    "success": true,
+    "message": "строка",
+    "data": { ... } // может отсутствовать
+  }
+  ```
+- Ошибочный ответ:
+  ```json
+  {
+    "success": false,
+    "error": "строка ошибки"
+  }
+  ```
 
-### Аутентификация
+**Аутентификация**:  
+Для доступа к защищённым эндпоинтам требуется передавать JWT access-токен в заголовке:  
+`Authorization: Bearer <access_token>`
 
-#### POST `/login`
-Вход в систему, получение токенов доступа и обновления.
+**Роли**:
+- `admin` – полный доступ ко всем административным операциям.
+- `manager` – управление ролями (назначение/удаление ролей `admin`, `manager`).
+- `teacher` – преподаватель.
+- `student` – студент с привязкой к группе.
+- `user` – базовая роль, присваивается при регистрации.
+
+**Коды ответов**:
+- `200 OK` – успешное выполнение.
+- `201 Created` – ресурс создан.
+- `400 Bad Request` – ошибка валидации или неверный формат.
+- `401 Unauthorized` – отсутствует или невалидный JWT токен.
+- `403 Forbidden` – недостаточно прав.
+- `404 Not Found` – ресурс не найден.
+- `500 Internal Server Error` – внутренняя ошибка сервера.
+
+---
+
+## Эндпоинты аутентификации
+
+### POST `/login`
+Вход в систему. Получение access и refresh токенов, создание сессии.
 
 **Тело запроса**:
 ```json
 {
-  "username": "string",  // обязательное, от 3 до 20 символов, только буквы, цифры, _
-  "password": "string",  // обязательное
-  "user_agent": "string", // опционально, будет заполнено из заголовка User-Agent
-  "client_ip": "string"   // опционально, будет заполнено из X-Forwarded-For или RemoteAddr
+  "username": "string",   // обязательное, 3–20 символов (буквы, цифры, _)
+  "password": "string",   // обязательное
+  "user_agent": "string", // опционально (заполнится из заголовка User-Agent)
+  "client_ip": "string"   // опционально (заполнится из X-Forwarded-For или RemoteAddr)
 }
 ```
 
@@ -126,16 +147,18 @@
     "access_token": "string",
     "refresh_token": "string",
     "session_id": "string",
-	"roles": ["string"]  // список ролей
+    "roles": ["admin", "user"]
   }
 }
 ```
 
-**Ошибки**:
-- 400 – неверный формат запроса или ошибка валидации
-- 400 – неверное имя пользователя или пароль
+**Ошибки**:  
+- `400` – ошибка валидации или неверные учётные данные.  
+- `500` – внутренняя ошибка.
 
-#### POST `/refresh`
+---
+
+### POST `/refresh`
 Обновление access-токена с использованием refresh-токена.
 
 **Тело запроса**:
@@ -158,12 +181,14 @@
 }
 ```
 
-**Ошибки**:
-- 400 – неверный формат запроса или ошибка валидации
-- 500 – внутренняя ошибка сервера
+**Ошибки**:  
+- `400` – неверный формат.  
+- `500` – внутренняя ошибка.
 
-#### GET `/logout`
-Выход из системы (удаление сессии). Требует валидный access-токен.
+---
+
+### GET `/logout`
+Завершение текущей сессии. Требует валидный access-токен.
 
 **Успешный ответ (200 OK)**:
 ```json
@@ -174,13 +199,15 @@
 }
 ```
 
-**Ошибки**:
-- 401 – невалидный токен
-- 500 – внутренняя ошибка сервера
+**Ошибки**:  
+- `401` – невалидный токен.  
+- `500` – внутренняя ошибка.
 
-### Администрирование (требуется роль `admin`)
+---
 
-#### GET `/admin/sessions`
+## Административные эндпоинты (требуется роль `admin`)
+
+### GET `/admin/sessions`
 Получить список всех активных сессий.
 
 **Успешный ответ (200 OK)**:
@@ -188,24 +215,26 @@
 {
   "success": true,
   "message": "success get sessions",
-  "data": [ ... ] // массив объектов Session (см. модель)
+  "data": [ ... ] // массив Session
 }
 ```
 
-**Ошибки**:
-- 403 – доступ запрещен (не admin)
-- 500 – внутренняя ошибка сервера
+**Ошибки**:  
+- `403` – недостаточно прав.  
+- `500` – внутренняя ошибка.
 
-#### Управление пользователями
+---
 
-##### GET `/admin/users`
+### Управление пользователями
+
+#### GET `/admin/users`
 Получить список пользователей с пагинацией.
 
-**Параметры запроса (query)**:
-- `page` (int, опционально, по умолчанию 1) – номер страницы
-- `per_page` (int, опционально, по умолчанию 20) – количество записей на странице
-- `sort_by` (string, опционально, по умолчанию `id`) – поле для сортировки: `id`, `username`, `full_name`, `email`, `created_at`
-- `sort_order` (string, опционально, по умолчанию `ASC`) – порядок сортировки: `ASC` или `DESC`
+**Параметры query**:
+- `page` (int, опционально, по умолчанию 1) – номер страницы.
+- `per_page` (int, опционально, по умолчанию 20) – записей на странице.
+- `sort_by` (string, опционально, `id`, `username`, `full_name`, `email`, `created_at`).
+- `sort_order` (string, опционально, `ASC` или `DESC`).
 
 **Успешный ответ (200 OK)**:
 ```json
@@ -213,7 +242,7 @@
   "success": true,
   "message": "paginated users",
   "data": {
-    "users": [ ... ],      // массив объектов User (см. модель)
+    "users": [ ... ],
     "total": 100,
     "page": 1,
     "per_page": 20,
@@ -222,60 +251,36 @@
 }
 ```
 
-##### GET `/admin/users/{id}`
-Получить информацию о пользователе по его ID.
+#### GET `/admin/users/{id}`
+Получить информацию о пользователе по ID.
 
-**Параметры пути**:
-- `id` (int) – идентификатор пользователя
+**Параметры пути**: `id` (int)
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "get user success",
-  "data": { ... } // объект User
-}
-```
+**Успешный ответ (200 OK)** – объект `User`.
 
-**Ошибки**:
-- 400 – неверный ID
-- 404 – пользователь не найден
-- 500 – внутренняя ошибка сервера
-
-##### POST `/admin/users`
-Создание нового пользователя (без профиля студента/преподавателя). Пользователю автоматически присваивается роль `user`.
+#### POST `/admin/users`
+Создать нового пользователя (базовая роль `user`).
 
 **Тело запроса**:
 ```json
 {
-  "username": "string",   // обязательное, 3-20 символов, буквы/цифры/_
-  "full_name": "string",  // обязательное, минимум 3 символа
-  "email": "string",      // обязательное, валидный email
-  "password": "string"    // обязательное, минимум 6 символов
+  "username": "string",  // 3–20, буквы/цифры/_
+  "full_name": "string", // мин. 3 символа
+  "email": "string",     // валидный email
+  "password": "string"   // мин. 6 символов
 }
 ```
 
-**Успешный ответ (201 Created)**:
-```json
-{
-  "success": true,
-  "message": "user created",
-  "data": { ... } // объект User
-}
-```
+**Успешный ответ (201 Created)** – объект `User`.
 
-**Ошибки**:
-- 400 – ошибка валидации или конфликт (уже существует)
-- 500 – внутренняя ошибка сервера
-
-##### PATCH `/admin/users/password`
-Смена пароля пользователя (администратором). Администратор может сменить пароль любому пользователю, указав `user_id`. Если `user_id` не указан, считается, что смена пароля для текущего пользователя (но в этом случае используется эндпоинт `/user/password`).
+#### PATCH `/admin/users/password`
+Сменить пароль пользователя (администратором).
 
 **Тело запроса**:
 ```json
 {
-  "user_id": 123,          // обязательное, если администратор меняет пароль другому пользователю
-  "new_password": "string" // обязательное, минимум 6 символов
+  "user_id": 123,        // обязательное
+  "new_password": "string" // мин. 6 символов
 }
 ```
 
@@ -288,21 +293,18 @@
 }
 ```
 
-**Ошибки**:
-- 400 – неверные данные
-- 403 – доступ запрещен (не admin или попытка смены чужого пароля без прав)
-- 500 – внутренняя ошибка сервера
+---
 
-#### Управление ролями
+### Управление ролями
 
-##### POST `/admin/roles/assign`
-Назначить роль `admin` или `manager` пользователю.
+#### POST `/admin/roles/assign`
+Назначить роль `admin` или `manager`.
 
 **Тело запроса**:
 ```json
 {
-  "user_id": 123,          // обязательное
-  "role_name": "admin"     // обязательное, одно из: admin, manager
+  "user_id": 123,
+  "role_name": "admin"   // admin или manager
 }
 ```
 
@@ -315,198 +317,80 @@
 }
 ```
 
-**Ошибки**:
-- 400 – неверные данные (неверная роль, пользователь не найден)
-- 500 – внутренняя ошибка сервера
-
-##### DELETE `/admin/roles/remove`
+#### DELETE `/admin/roles/remove`
 Удалить роль у пользователя.
 
 **Тело запроса**:
 ```json
 {
-  "user_id": 123,          // обязательное
-  "role_name": "student"   // обязательное, одно из: admin, manager, student, teacher
+  "user_id": 123,
+  "role_name": "student" // admin, manager, student, teacher
 }
 ```
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "role removed",
-  "data": null
-}
-```
+**Успешный ответ (200 OK)** – аналогично.
 
-**Ошибки**:
-- 400 – неверные данные
-- 500 – внутренняя ошибка сервера
+---
 
-### Текущий пользователь (требуется аутентификация)
+## Эндпоинты текущего пользователя (требуется аутентификация)
 
-#### GET `/user`
+### GET `/user`
 Получить информацию о текущем авторизованном пользователе.
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "get user success",
-  "data": { ... } // объект User
-}
-```
+**Успешный ответ (200 OK)** – объект `User`.
 
-**Ошибки**:
-- 401 – невалидный токен
-- 500 – внутренняя ошибка сервера
+### GET `/user/{id}`
+Получить информацию о любом пользователе по ID.
 
-#### GET `/user/{id}`
-Получить информацию о пользователе по ID. Доступен для любого авторизованного пользователя.
-
-**Параметры пути**:
-- `id` (int) – идентификатор пользователя
-
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "get user success",
-  "data": { ... } // объект User
-}
-```
-
-**Ошибки**:
-- 401 – невалидный токен
-- 404 – пользователь не найден
-- 500 – внутренняя ошибка сервера
-
-#### PATCH `/user/password`
-Смена пароля текущего пользователя.
+### PATCH `/user/password`
+Сменить пароль текущего пользователя.
 
 **Тело запроса**:
 ```json
 {
-  "old_password": "string", // обязательное, минимум 6 символов
-  "new_password": "string"  // обязательное, минимум 6 символов
+  "old_password": "string", // мин. 6 символов
+  "new_password": "string"  // мин. 6 символов
 }
 ```
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "password changed",
-  "data": null
-}
-```
+**Успешный ответ (200 OK)** – `{ "success": true, "message": "password changed", "data": null }`
 
-**Ошибки**:
-- 400 – неверные данные (несовпадение старого пароля)
-- 401 – невалидный токен
-- 500 – внутренняя ошибка сервера
+---
 
-### Преподаватели (требуется аутентификация)
+## Преподаватели
 
-#### POST `/teachers` (требуется `admin`)
-Создание нового преподавателя. Создается пользователь с ролью `teacher` и профиль преподавателя.
+### POST `/teachers` (требуется `admin`)
+Создать нового преподавателя (пользователь + профиль teacher).
+
+**Тело запроса**: такое же как `CreateUserRequest` (username, full_name, email, password).
+
+**Успешный ответ (200 OK)** – объект `Teacher`.
+
+### POST `/teachers/assign` (требуется `admin`)
+Назначить существующего пользователя преподавателем.
 
 **Тело запроса**:
 ```json
 {
-  "username": "string",
-  "full_name": "string",
-  "email": "string",
-  "password": "string"
+  "user_id": 123
 }
 ```
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "teacher created",
-  "data": { ... } // объект Teacher (см. модель)
-}
-```
+### DELETE `/teachers/{id}` (требуется `admin`)
+Удалить профиль преподавателя (пользователь остаётся с ролью `user`).
 
-**Ошибки**:
-- 400 – ошибка валидации
-- 500 – внутренняя ошибка сервера
-
-#### POST `/teachers/assign` (требуется `admin`)
-Назначить существующему пользователю роль `teacher` и создать профиль преподавателя.
-
-**Тело запроса**:
-```json
-{
-  "user_id": 123 // обязательное
-}
-```
-
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "teacher assigned",
-  "data": null
-}
-```
-
-**Ошибки**:
-- 400 – пользователь не найден или уже является студентом
-- 500 – внутренняя ошибка сервера
-
-#### DELETE `/teachers/{id}` (требуется `admin`)
-Удалить профиль преподавателя (удаляется только связь, пользователь остается с ролью `user`).
-
-**Параметры пути**:
-- `id` (int) – идентификатор пользователя
-
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "teacher deleted",
-  "data": null
-}
-```
-
-**Ошибки**:
-- 400 – неверный ID
-- 500 – внутренняя ошибка сервера
-
-#### GET `/teachers`
+### GET `/teachers`
 Получить список всех преподавателей.
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "teachers retrieved",
-  "data": [ ... ] // массив объектов Teacher
-}
-```
-
-#### GET `/teachers/{id}`
+### GET `/teachers/{id}`
 Получить информацию о преподавателе по ID пользователя.
 
-**Параметры пути**:
-- `id` (int) – идентификатор пользователя
+---
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "teacher retrieved",
-  "data": { ... } // объект Teacher
-}
-```
+## Студенты
 
-### Студенты (требуется аутентификация)
-
-#### POST `/students` (требуется `admin`)
-Создание нового студента. Создается пользователь с ролью `student` и профиль студента с привязкой к группе.
+### POST `/students` (требуется `admin`)
+Создать нового студента с привязкой к группе.
 
 **Тело запроса**:
 ```json
@@ -515,300 +399,112 @@
   "full_name": "string",
   "email": "string",
   "password": "string",
-  "group_id": 123 // обязательное
+  "group_id": 123
 }
 ```
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "student created",
-  "data": { ... } // объект Student (см. модель)
-}
-```
+**Успешный ответ (200 OK)** – объект `Student`.
 
-**Ошибки**:
-- 400 – ошибка валидации или группа не найдена
-- 500 – внутренняя ошибка сервера
-
-#### POST `/students/assign` (требуется `admin`)
-Назначить существующему пользователю роль `student` и привязать к группе.
+### POST `/students/assign` (требуется `admin`)
+Назначить существующего пользователя студентом и привязать к группе.
 
 **Тело запроса**:
 ```json
 {
   "user_id": 123,
-  "group_id": 456 // обязательное
+  "group_id": 456
 }
 ```
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "student assigned",
-  "data": null
-}
-```
-
-**Ошибки**:
-- 400 – пользователь не найден, уже является преподавателем или группа не найдена
-- 500 – внутренняя ошибка сервера
-
-#### PATCH `/students/{id}/group` (требуется `admin`)
+### PATCH `/students/{id}/group` (требуется `admin`)
 Изменить группу студента.
 
-**Параметры пути**:
-- `id` (int) – идентификатор пользователя
-
 **Тело запроса**:
 ```json
 {
-  "group_id": 456 // обязательное
+  "group_id": 456
 }
 ```
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "student group updated",
-  "data": null
-}
-```
-
-**Ошибки**:
-- 400 – неверный ID или группа не найдена
-- 500 – внутренняя ошибка сервера
-
-#### DELETE `/students/{id}` (требуется `admin`)
+### DELETE `/students/{id}` (требуется `admin`)
 Удалить профиль студента.
 
-**Параметры пути**:
-- `id` (int) – идентификатор пользователя
-
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "student deleted",
-  "data": null
-}
-```
-
-**Ошибки**:
-- 400 – неверный ID
-- 500 – внутренняя ошибка сервера
-
-#### GET `/students`
+### GET `/students`
 Получить список всех студентов.
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "students retrieved",
-  "data": [ ... ] // массив объектов Student
-}
-```
-
-#### GET `/students/{id}`
+### GET `/students/{id}`
 Получить информацию о студенте по ID пользователя.
 
-**Параметры пути**:
-- `id` (int) – идентификатор пользователя
+---
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "student retrieved",
-  "data": { ... } // объект Student
-}
-```
+## Группы
 
-### Группы (требуется аутентификация)
-
-#### POST `/groups` (требуется `admin`)
-Создание новой учебной группы.
+### POST `/groups` (требуется `admin`)
+Создать учебную группу.
 
 **Тело запроса**:
 ```json
 {
-  "name": "string",
-  "specialty": "string",
+  "name": "ИС-41",
+  "specialty": "Информатика",
   "admission_year": 2024
 }
 ```
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "group created",
-  "data": { ... } // объект Group
-}
-```
+**Успешный ответ (200 OK)** – объект `Group`.
 
-#### PATCH `/groups` (требуется `admin`)
-Обновление информации о группе. В теле запроса передается объект `Group` с полем `id`.
+### PATCH `/groups/{id}` (требуется `admin`)
+Обновить информацию о группе.
 
-**Тело запроса**:
-```json
-{
-  "id": 123,
-  "name": "string",
-  "specialty": "string",
-  "admission_year": 2024
-}
-```
+**Тело запроса**: поля `name`, `specialty`, `admission_year` (все опциональны).
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "group updated",
-  "data": { ... } // обновленный объект Group
-}
-```
+### DELETE `/groups/{id}` (требуется `admin`)
+Удалить группу.
 
-#### DELETE `/groups/{id}` (требуется `admin`)
-Удаление группы.
-
-**Параметры пути**:
-- `id` (int) – идентификатор группы
-
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "group deleted",
-  "data": null
-}
-```
-
-#### GET `/groups`
+### GET `/groups`
 Получить список всех групп.
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "groups retrieved",
-  "data": [ ... ] // массив объектов Group
-}
-```
+### GET `/groups/{id}`
+Получить группу по ID.
 
-#### GET `/groups/{id}`
-Получить информацию о группе.
+---
 
-**Параметры пути**:
-- `id` (int) – идентификатор группы
+## Аудитории
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "group retrieved",
-  "data": { ... } // объект Group
-}
-```
-
-### Аудитории (требуется аутентификация)
-
-#### POST `/audiences` (требуется `admin`)
-Создание новой аудитории.
+### POST `/audiences` (требуется `admin`)
+Создать аудиторию.
 
 **Тело запроса**:
 ```json
 {
-  "name": "string",
-  "number": "string"
+  "name": "Аудитория 101",
+  "number": "101"
 }
 ```
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "audience created",
-  "data": { ... } // объект Audience
-}
-```
+### PATCH `/audiences/{id}` (требуется `admin`)
+Обновить аудиторию.
 
-#### PATCH `/audiences` (требуется `admin`)
-Обновление информации об аудитории. В теле запроса передается объект `Audience` с полем `id`.
+### DELETE `/audiences/{id}` (требуется `admin`)
+Удалить аудиторию.
 
-**Тело запроса**:
-```json
-{
-  "id": 123,
-  "name": "string",
-  "number": "string"
-}
-```
-
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "audience updated",
-  "data": { ... } // обновленный объект Audience
-}
-```
-
-#### DELETE `/audiences/{id}` (требуется `admin`)
-Удаление аудитории.
-
-**Параметры пути**:
-- `id` (int) – идентификатор аудитории
-
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "audience deleted",
-  "data": null
-}
-```
-
-#### GET `/audiences`
+### GET `/audiences`
 Получить список всех аудиторий.
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "audiences getted",
-  "data": [ ... ] // массив объектов Audience
-}
-```
+### GET `/audiences/{id}`
+Получить аудиторию по ID.
 
-#### GET `/audiences/{id}`
-Получить информацию об аудитории.
+---
 
-**Параметры пути**:
-- `id` (int) – идентификатор аудитории
+## Предметы
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "audience getted",
-  "data": { ... } // объект Audience
-}
-```
-
-### Предметы (требуется аутентификация)
-
-#### POST `/subjects` (требуется `admin`)
-Создание нового предмета.
+### POST `/subjects` (требуется `admin`)
+Создать предмет.
 
 **Тело запроса**:
 ```json
 {
-  "title": "string",
+  "title": "Математика",
   "semester": 1,
   "hours_load": 72,
   "start_date": "2024-09-01",
@@ -817,77 +513,26 @@
 }
 ```
 
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "subject created",
-  "data": { ... } // объект Subject
-}
-```
+### PATCH `/subjects/{id}` (требуется `admin`)
+Обновить предмет.
 
-**Ошибки**:
-- 400 – неверный формат даты или start_date > end_date
-- 500 – внутренняя ошибка сервера
+**Тело запроса**: любые поля из `CreateSubjectRequest` (кроме `group_id`).
 
-#### PATCH `/subjects/{id}` (требуется `admin`)
-Обновление предмета.
+### DELETE `/subjects/{id}` (требуется `admin`)
+Удалить предмет.
 
-**Параметры пути**:
-- `id` (int) – идентификатор предмета
-
-**Тело запроса**:
-```json
-{
-  "title": "string",
-  "semester": 1,
-  "hours_load": 72,
-  "start_date": "2024-09-01",
-  "end_date": "2024-12-31",
-  "group_id": 123
-}
-```
-
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "subject updated",
-  "data": { ... } // обновленный объект Subject
-}
-```
-
-#### DELETE `/subjects/{id}` (требуется `admin`)
-Удаление предмета.
-
-**Параметры пути**:
-- `id` (int) – идентификатор предмета
-
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "subject deleted",
-  "data": null
-}
-```
-
-#### GET `/subjects`
+### GET `/subjects`
 Получить список предметов с пагинацией.
 
-**Параметры запроса (query)**:
-- `page` (int, опционально, по умолчанию 1) – номер страницы
-- `per_page` (int, опционально, по умолчанию 10, макс. 100) – количество записей на странице
-- `sort_by` (string, опционально, по умолчанию `id`) – поле для сортировки: `id`, `title`, `semester`, `hours_load`, `start_date`, `end_date`, `group_id`
-- `sort_order` (string, опционально, по умолчанию `ASC`) – порядок сортировки: `ASC` или `DESC`
+**Параметры query**: `page`, `per_page`, `sort_by`, `sort_order` (поля: `id`, `title`, `semester`, `hours_load`, `start_date`, `end_date`, `group_id`).
 
-**Успешный ответ (200 OK)**:
+**Успешный ответ**:
 ```json
 {
   "success": true,
   "message": "subjects retrieved",
   "data": {
-    "subjects": [ ... ], // массив объектов Subject
+    "subjects": [ ... ],
     "total": 100,
     "page": 1,
     "per_page": 10,
@@ -896,47 +541,180 @@
 }
 ```
 
-#### GET `/subjects/group/{group_id}`
-Получить список предметов для конкретной группы с пагинацией.
+### GET `/subjects/group/{group_id}`
+Получить предметы конкретной группы (с пагинацией).
 
-**Параметры пути**:
-- `group_id` (int) – идентификатор группы
-
-**Параметры запроса (query)**:
-- `page` (int, опционально)
-- `per_page` (int, опционально)
-- `sort_by` (string, опционально)
-- `sort_order` (string, опционально)
-
-**Успешный ответ (200 OK)**:
-```json
-{
-  "success": true,
-  "message": "subjects retrieved",
-  "data": {
-    "subjects": [ ... ],
-    "total": 50,
-    "page": 1,
-    "per_page": 10,
-    "total_pages": 5
-  }
-}
-```
-
-#### GET `/subjects/{id}`
+### GET `/subjects/{id}`
 Получить предмет по ID.
 
-**Параметры пути**:
-- `id` (int) – идентификатор предмета
+---
 
-**Успешный ответ (200 OK)**:
+## Учебные периоды (Academic periods)
+
+### POST `/academic-periods` (требуется `admin`)
+Создать учебный период (семестр).
+
+**Тело запроса**:
 ```json
 {
-  "success": true,
-  "message": "subject retrieved",
-  "data": { ... } // объект Subject
+  "year": "2024-2025",
+  "semester": 1,
+  "start_date": "2024-09-01",
+  "end_date": "2024-12-31"
 }
 ```
+
+### PATCH `/academic-periods/{id}` (требуется `admin`)
+Обновить учебный период.
+
+### DELETE `/academic-periods/{id}` (требуется `admin`)
+Удалить учебный период.
+
+### GET `/academic-periods/{id}`
+Получить период по ID.
+
+### GET `/academic-periods`
+Получить список всех периодов.
+
+---
+
+## Расписание (шаблоны)
+
+Шаблоны расписания привязаны к учебному периоду, группе (через предмет), преподавателю, аудитории.
+
+### POST `/schedule` (требуется `admin`)
+Создать шаблон занятия.
+
+**Тело запроса**:
+```json
+{
+  "day_of_week": 1,        // 1-7 (пн-вс)
+  "number": 1,             // номер пары (1..8)
+  "week_type": 0,          // 0 – обе недели, 1 – числитель, 2 – знаменатель
+  "subject_id": 123,
+  "teacher_id": 456,
+  "audience_id": 789,
+  "academic_period_id": 10
+}
+```
+
+**Успешный ответ (200 OK)** – объект `ScheduleTemplate`.
+
+### PATCH `/schedule/{id}` (требуется `admin`)
+Обновить шаблон.
+
+**Тело запроса**: любые поля из `CreateScheduleTemplateRequest` (все опциональны).
+
+### DELETE `/schedule/{id}` (требуется `admin`)
+Удалить шаблон.
+
+### POST `/schedule/semester` (требуется `admin`)
+Массовое создание расписания на семестр для группы. Проверяет отсутствие конфликтов и автоматически генерирует planned занятия в журнале.
+
+**Тело запроса**:
+```json
+{
+  "group_id": 123,
+  "academic_period_id": 10,
+  "schedule_entries": [
+    {
+      "day_of_week": 1,
+      "number": 1,
+      "week_type": 0,
+      "subject_id": 100,
+      "teacher_id": 200,
+      "audience_id": 300
+    },
+    ...
+  ]
+}
+```
+
+### GET `/schedule`
+Получить список шаблонов с фильтрацией.
+
+**Параметры query**:
+- `group_id` (int)
+- `subject_id` (int)
+- `teacher_id` (int)
+- `audience_id` (int)
+- `day_of_week` (int)
+- `week_type` (int)
+- `academic_period_id` (int)
+
+**Успешный ответ (200 OK)** – массив `ScheduleTemplate`.
+
+### GET `/schedule/{id}`
+Получить шаблон по ID.
+
+### GET `/schedule/group/{group_id}`
+Получить расписание группы (активный период или указанный `?period_id=...`).
+
+### GET `/schedule/teacher/{teacher_id}`
+Получить расписание преподавателя.
+
+### GET `/schedule/audience/{audience_id}`
+Получить расписание аудитории.
+
+---
+
+## Журнал занятий (Lesson logs)
+
+Журнал содержит фактические занятия (planned, conducted, cancelled, rescheduled). Planned занятия автоматически генерируются из шаблонов расписания с учётом нагрузки предмета.
+
+### GET `/lessons`
+Получить записи журнала с фильтрацией.
+
+**Параметры query**:
+- `group_id` (int)
+- `subject_id` (int)
+- `teacher_id` (int)
+- `audience_id` (int)
+- `academic_period_id` (int)
+- `date_from` (string, YYYY-MM-DD)
+- `date_to` (string, YYYY-MM-DD)
+- `status` (string: `planned`, `completed`, `canceled`, `rescheduled`)
+- `number` (int, номер пары)
+
+**Успешный ответ (200 OK)** – массив `LessonLog`.
+
+### POST `/lessons/cancel/{id}` (требуется `admin`)
+Отменить занятие по ID (меняет статус на `canceled` и пересчитывает planned занятия предмета).
+
+**Тело запроса**:
+```json
+{
+  "comment": "Причина отмены"
+}
+```
+
+### POST `/lessons/reschedule` (требуется `admin`)
+Создать перенесённое занятие (статус `rescheduled`). Проверяет конфликты с другими занятиями.
+
+**Тело запроса**:
+```json
+{
+  "date": "2024-10-10",
+  "number": 2,
+  "subject_id": 123,
+  "teacher_id": 456,
+  "audience_id": 789,
+  "comment": "Перенос по болезни"
+}
+```
+
+### POST `/lessons/complete` (требуется `admin`)
+Отметить все занятия за указанную дату как проведённые (`completed`). Занятия со статусами `canceled` или `completed` не изменяются.
+
+**Тело запроса**:
+```json
+{
+  "date": "2024-10-10",
+  "comment": "Все занятия проведены"
+}
+```
+
+---
 
 ## Модели данных
 
@@ -950,11 +728,7 @@
   "created_at": "2024-01-01T00:00:00Z",
   "updated_at": "2024-01-01T00:00:00Z",
   "roles": [
-    {
-      "id": 1,
-      "name": "user",
-      "description": "Обычный пользователь"
-    }
+    { "id": 1, "name": "user", "description": "Обычный пользователь" }
   ]
 }
 ```
@@ -972,15 +746,15 @@
 ### Student
 ```json
 {
-  "user": { ... }, // объект User
-  "group": { ... } // объект Group или null
+  "user": { ... },
+  "group": { ... }  // может быть null
 }
 ```
 
 ### Teacher
 ```json
 {
-  "user": { ... } // объект User
+  "user": { ... }
 }
 ```
 
@@ -1003,7 +777,58 @@
   "start_date": "2024-09-01T00:00:00Z",
   "end_date": "2024-12-31T00:00:00Z",
   "group_id": 1,
-  "group": { ... } // объект Group
+  "group": { ... }
+}
+```
+
+### AcademicPeriod
+```json
+{
+  "id": 1,
+  "year": "2024-2025",
+  "semester": 1,
+  "start_date": "2024-09-01T00:00:00Z",
+  "end_date": "2024-12-31T00:00:00Z",
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+### ScheduleTemplate
+```json
+{
+  "id": 1,
+  "day_of_week": 1,
+  "number": 1,
+  "week_type": 0,
+  "subject_id": 123,
+  "teacher_id": 456,
+  "audience_id": 789,
+  "academic_period_id": 10,
+  "academic_period": { ... },
+  "subject": { ... },
+  "teacher": { ... },
+  "audience": { ... }
+}
+```
+
+### LessonLog
+```json
+{
+  "id": 1,
+  "date": "2024-09-02T00:00:00Z",
+  "number": 1,
+  "status": "planned",
+  "comment": "Сгенерировано автоматически",
+  "subject_id": 123,
+  "teacher_id": 456,
+  "audience_id": 789,
+  "academic_period_id": 10,
+  "is_from_template": true,
+  "academic_period": { ... },
+  "subject": { ... },
+  "teacher": { ... },
+  "audience": { ... }
 }
 ```
 
@@ -1015,7 +840,7 @@
   "user_agent": "Mozilla/5.0 ...",
   "client_ip": "192.168.1.1",
   "created_at": "2024-01-01T00:00:00Z",
-  "user": { ... } // объект User
+  "user": { ... }
 }
 ```
 
@@ -1028,15 +853,18 @@
 }
 ```
 
-## Коды ответов
+---
 
-- `200 OK` – успешное выполнение запроса
-- `201 Created` – ресурс создан (используется для создания пользователя)
-- `400 Bad Request` – неверный запрос (ошибка валидации, неправильный формат)
-- `401 Unauthorized` – отсутствует или невалидный JWT токен
-- `403 Forbidden` – доступ запрещен (недостаточно прав)
-- `404 Not Found` – ресурс не найден
-- `500 Internal Server Error` – внутренняя ошибка сервера
+## Примечания по реализации
+
+- При создании/изменении шаблонов расписания автоматически обновляются planned занятия в журнале (`lesson_logs`) с учётом нагрузки предмета (`hours_load`). Занятия распределяются по датам в пределах `start_date`–`end_date` предмета в соответствии с днями недели и типом недели.
+- Отмена занятия (`cancel`) также пересчитывает planned занятия, чтобы сохранить необходимое количество пар.
+- При массовом создании расписания на семестр проверяется отсутствие конфликтов (преподаватель, аудитория, группа в одно время).
+- Пагинация для списков пользователей и предметов реализована стандартными параметрами `page`, `per_page`, `sort_by`, `sort_order`.
+
+--- 
+
+*Документация актуальна на основе исходного кода сервиса `core`.*
 --------------------------
 Файл: /home/admin/schedule-bot/services/core/cmd/main.go
 package main
@@ -1083,7 +911,10 @@ func main() {
 		log.Fatalf("Failed to apply migrations: %v", err)
 	}
 
-	r := router.New(cfg, pgPool)
+	r, err := router.New(cfg, pgPool)
+	if err != nil {
+		log.Fatalf("Failed to create router: %v", err)
+	}
 
 	server := http.Server{
 		Addr:    ":" + cfg.Server.Port,
@@ -1139,6 +970,7 @@ require (
 	github.com/go-chi/cors v1.2.2
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/pressly/goose/v3 v3.27.0
 	golang.org/x/crypto v0.49.0
@@ -1189,10 +1021,32 @@ type JWTConfig struct {
 	Expires int //seconds
 }
 
+type OllamaConfig struct {
+	URL     string
+	Model   string
+	Timeout int
+}
+
+type GigaChatConfig struct {
+	ClientID         string
+	ClientSecret     string
+	AuthorizationKey string
+	BaseURL          string // https://gigachat.devices.sberbank.ru/api/v1
+	Model            string // GigaChat, GigaChat-Pro, GigaChat-Lite
+	Timeout          int
+}
+
+type LLMConfig struct {
+	Provider string
+	Ollama   OllamaConfig
+	GigaChat GigaChatConfig
+}
+
 type Config struct {
 	DB     DBConfig
 	Server ServerConfig
 	JWT    JWTConfig
+	LLM    LLMConfig
 }
 
 func Load() *Config {
@@ -1215,6 +1069,26 @@ func Load() *Config {
 		Expires: getIntEnv("JWT_EXPIRES_SECONDS", 15*60),
 	}
 
+	ollama := OllamaConfig{
+		URL:     getEnv("OLLAMA_URL", "localhost:11434"),
+		Model:   getEnv("OLLAMA_MODEL", "qwen3.5:9b"),
+		Timeout: getIntEnv("OLLAMA_TIMEOUT", 600),
+	}
+
+	gigaChat := GigaChatConfig{
+		ClientID:         getEnv("GIGACHAT_CLIENT_ID", ""),
+		ClientSecret:     getEnv("GIGACHAT_CLIENT_SECRET", ""),
+		AuthorizationKey: getEnv("GIGACHAT_AUTHORIZATION_KEY", ""),
+		BaseURL:          getEnv("GIGACHAT_BASE_URL", "https://gigachat.devices.sberbank.ru/api/v1"),
+		Model:            getEnv("GIGACHAT_MODEL", "GigaChat-2-Lite"),
+	}
+
+	llm := LLMConfig{
+		Provider: getEnv("LLM_PROVIDER", "ollama"), //ollama или gigachat
+		Ollama:   ollama,
+		GigaChat: gigaChat,
+	}
+
 	if db.User == "" || db.Password == "" || db.Name == "" || jwt.Secret == "" {
 		log.Fatal("DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET must be set")
 	}
@@ -1223,6 +1097,7 @@ func Load() *Config {
 		DB:     db,
 		Server: server,
 		JWT:    jwt,
+		LLM:    llm,
 	}
 }
 
@@ -1301,6 +1176,8 @@ type RefreshTokenRequest struct {
 Файл: /home/admin/schedule-bot/services/core/internal/dto/group.go
 package dto
 
+import "core/internal/models"
+
 type CreateGroupRequest struct {
 	Name          string `json:"name" validate:"required"`
 	Specialty     string `json:"specialty" validate:"required"`
@@ -1311,6 +1188,32 @@ type UpdateGroupRequest struct {
 	Name          string `json:"name"`
 	Specialty     string `json:"specialty"`
 	AdmissionYear int    `json:"admission_year"`
+}
+
+// CreateGroupWithCurriculumRequest - запрос на создание группы с дисциплинами и студентами
+type CreateGroupWithCurriculumRequest struct {
+	Group    CreateGroupRequest                    `json:"group" validate:"required"`
+	Subjects []CreateSubjectRequest                `json:"subjects" validate:"required,min=1,dive"`
+	Students []CreateStudentWithCredentialsRequest `json:"students" validate:"required,min=1,dive"`
+}
+
+// CreateStudentWithCredentialsRequest - данные студента без указания пароля (генерируется)
+type CreateStudentWithCredentialsRequest struct {
+	FullName string `json:"full_name" validate:"required,min=3"`
+	Email    string `json:"email" validate:"required,email"`
+}
+
+// GroupWithCurriculumResponse - ответ после создания
+type GroupWithCurriculumResponse struct {
+	Group    models.Group            `json:"group"`
+	Subjects []models.Subject        `json:"subjects"`
+	Students []StudentCreationResult `json:"students"`
+}
+
+type StudentCreationResult struct {
+	User     models.User `json:"user"`
+	Password string      `json:"password"`
+	GroupID  int         `json:"group_id"`
 }
 
 --------------------------
@@ -1889,6 +1792,55 @@ func (h *AuthHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/chat.go
+package handlers
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"core/internal/llm"
+	"core/pkg/utils"
+)
+
+type ChatHandler struct {
+	agent *llm.LLMAgent
+}
+
+func NewChatHandler(agent *llm.LLMAgent) *ChatHandler {
+	return &ChatHandler{agent: agent}
+}
+
+type ChatRequest struct {
+	Message string `json:"message"`
+}
+
+type ChatResponse struct {
+	Reply string `json:"reply"`
+}
+
+func (h *ChatHandler) Handle(w http.ResponseWriter, r *http.Request) {
+	var req ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid request: "+err.Error())
+		return
+	}
+	
+	if req.Message == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "message is required")
+		return
+	}
+	
+	reply, err := h.agent.ProcessMessage(r.Context(), req.Message)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "processing failed: "+err.Error())
+		return
+	}
+	
+	utils.SuccessResponse(w, "ok", ChatResponse{Reply: reply})
+}
+
+--------------------------
 Файл: /home/admin/schedule-bot/services/core/internal/handlers/group.go
 package handlers
 
@@ -1996,6 +1948,27 @@ func (h *GroupHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	utils.SuccessResponse(w, "group deleted", nil)
+}
+
+func (h *GroupHandler) CreateGroupWtihCurriculum(w http.ResponseWriter, r *http.Request) {
+	var req dto.CreateGroupWithCurriculumRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("bad request: %v", err))
+		return
+	}
+
+	if err := dto.ValidateStruct(req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
+	}
+
+	resp, err := h.scheduleService.CreateGroupWithCurriculumAndStudents(r.Context(), &req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to create group with curriculum: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "group with curriculum and students created", resp)
 }
 
 --------------------------
@@ -2974,6 +2947,546 @@ func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request)
 }
 
 --------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/llm/agent.go
+package llm
+
+import (
+	"context"
+	"core/internal/services"
+	"encoding/json"
+	"fmt"
+	"log"
+	"strings"
+)
+
+type Options map[string]any
+
+type Client interface {
+	Generate(ctx context.Context, systemPrompt, userMessage string, opts Options) (string, error)
+}
+
+type LLMAgent struct {
+	client      Client
+	tools       []Tool
+	toolsByName map[string]Tool
+}
+
+func NewAgent(client Client, svc services.ScheduleService) *LLMAgent {
+	tools := initTools(svc)
+	toolsByName := make(map[string]Tool)
+	for _, t := range tools {
+		toolsByName[t.Name] = t
+	}
+	return &LLMAgent{
+		client:      client,
+		tools:       tools,
+		toolsByName: toolsByName,
+	}
+}
+
+func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (string, error) {
+	// 1. Формируем системный промпт с описанием инструментов
+
+	toolsJSON, _ := json.MarshalIndent(a.tools, "", "  ")
+
+	systemPrompt := fmt.Sprintf(`Ты — ассистент по расписанию занятий. Твоя задача — понять, какую информацию хочет получить пользователь, и выбрать подходящий инструмент из списка ниже.
+
+## Доступные инструменты:
+%s
+
+## Правила:
+1. Если пользователь спрашивает о расписании (сегодня, завтра, на неделю), используй get_group_schedule
+2. Если вопрос не связан с расписанием, ответь: {"action": "none", "params": {}}
+
+## Важно:
+- Извлекай параметры из вопроса пользователя
+- Если параметр не указан, оставь его пустым или попроси отправить новое сообщение, но с конкретными уточнениями
+- Для дат используй формат YYYY-MM-DD
+
+Ответь ТОЛЬКО JSON-объектом в формате:
+{"action": "имя_инструмента", "params": {"параметр": "значение"}}`, string(toolsJSON))
+
+	log.Printf("Запрос пользователя: %s", userMessage)
+	log.Printf("Системная строка: %s", systemPrompt)
+
+	// 2. Получаем решение от LLM
+	actionResp, err := a.client.Generate(ctx, systemPrompt, userMessage, Options{"temperature": 0})
+	if err != nil {
+		return "", fmt.Errorf("LLM action selection failed: %w", err)
+	}
+
+	log.Printf("Полученые действия от LLM: %v", actionResp)
+
+	// Очищаем ответ
+	actionResp = strings.TrimSpace(actionResp)
+	actionResp = strings.TrimPrefix(actionResp, "```json")
+	actionResp = strings.TrimSuffix(actionResp, "```")
+	actionResp = strings.TrimSpace(actionResp)
+
+	var decision struct {
+		Action string         `json:"action"`
+		Params map[string]any `json:"params"`
+	}
+	if err := json.Unmarshal([]byte(actionResp), &decision); err != nil {
+		// Если не распарсили, пробуем ответить напрямую через LLM
+		return a.directAnswer(ctx, userMessage)
+	}
+
+	// 3. Если инструмент не выбран, отвечаем напрямую
+	if decision.Action == "none" {
+		return a.directAnswer(ctx, userMessage)
+	}
+
+	// 4. Находим и выполняем инструмент
+	tool, exists := a.toolsByName[decision.Action]
+	if !exists {
+		return a.directAnswer(ctx, userMessage)
+	}
+
+	// Выполняем инструмент
+	result, err := tool.Handler(ctx, decision.Params)
+	if err != nil {
+		// Если ошибка, дадим понятный ответ
+		return fmt.Sprintf("Извините, не удалось получить информацию: %v", err), nil
+	}
+
+	// 5. Формируем финальный ответ на основе полученных данных
+	return a.formatResponse(ctx, userMessage, result)
+}
+
+// directAnswer - прямой ответ от LLM без вызова инструментов
+func (a *LLMAgent) directAnswer(ctx context.Context, userMessage string) (string, error) {
+	systemPrompt := `Ты — дружелюбный ассистент. Ответь пользователю на его вопрос, но только если он связан с учёбой, расписанием или учебным процессом. Если вопрос не по теме, вежливо скажи, что ты помогаешь только с расписанием.`
+	return a.client.Generate(ctx, systemPrompt, userMessage, Options{"temperature": 0.2})
+}
+
+// formatResponse - форматирует результат работы инструмента в понятный ответ
+func (a *LLMAgent) formatResponse(ctx context.Context, userMessage string, data string) (string, error) {
+	systemPrompt := fmt.Sprintf(`Ты — ассистент по расписанию.
+На запрос пользователя система предоставила следующие данные:
+%s
+
+Задача: сформулируй краткий, понятный и дружелюбный ответ для пользователя на русском языке.
+- Не упоминай ID, JSON или технические детали
+- Если данных много, выдели самое важное
+- Если данных нет, скажи об этом вежливо
+- Форматируй ответ для удобного чтения (можно использовать переносы строк)`, data)
+
+	return a.client.Generate(ctx, systemPrompt, userMessage, Options{"temperature": 0.2})
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/llm/factory.go
+package llm
+
+import (
+	"core/internal/config"
+	"fmt"
+)
+
+func NewLLMClient(cfg *config.LLMConfig) (Client, error) {
+	switch cfg.Provider {
+	case "ollama":
+		if cfg.Ollama.URL == "" {
+			return nil, fmt.Errorf("ollama URL is required")
+		}
+		return NewOllamaClient(&cfg.Ollama), nil
+
+	case "gigachat":
+		if cfg.GigaChat.AuthorizationKey == "" {
+			if cfg.GigaChat.ClientID == "" || cfg.GigaChat.ClientSecret == "" {
+				return nil, fmt.Errorf("gigachat client credentials are required")
+			}
+		}
+		return NewGigaChatClient(&cfg.GigaChat), nil
+
+	default:
+		return nil, fmt.Errorf("unknown LLM provider: %s", cfg.Provider)
+	}
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/llm/giga.go
+package llm
+
+import (
+	"bytes"
+	"context"
+	"core/internal/config"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type GigaChatClient struct {
+	clientID         string
+	clientSecret     string
+	authorizationKey string
+	baseURL          string
+	model            string
+	http             *http.Client
+	token            string
+	tokenExpiry      time.Time
+	tokenMu          sync.RWMutex
+}
+
+func NewGigaChatClient(cfg *config.GigaChatConfig) *GigaChatClient {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	return &GigaChatClient{
+		clientID:         cfg.ClientID,
+		clientSecret:     cfg.ClientSecret,
+		authorizationKey: cfg.AuthorizationKey,
+		baseURL:          cfg.BaseURL,
+		model:            cfg.Model,
+		http: &http.Client{
+			Timeout:   time.Duration(cfg.Timeout) * time.Second,
+			Transport: tr,
+		},
+	}
+}
+
+// getToken получает или обновляет access token
+func (c *GigaChatClient) getToken(ctx context.Context) (string, error) {
+	c.tokenMu.RLock()
+	if c.token != "" && time.Now().Before(c.tokenExpiry) {
+		token := c.token
+		c.tokenMu.RUnlock()
+		return token, nil
+	}
+	c.tokenMu.RUnlock()
+
+	c.tokenMu.Lock()
+	defer c.tokenMu.Unlock()
+
+	// Double-check после получения блокировки
+	if c.token != "" && time.Now().Before(c.tokenExpiry) {
+		return c.token, nil
+	}
+
+	// Запрос токена
+	url := c.baseURL + "/oauth"
+	body := bytes.NewBufferString("scope=GIGACHAT_API_PERS")
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
+	if err != nil {
+		return "", fmt.Errorf("create token request: %w", err)
+	}
+	if c.authorizationKey != "" {
+		req.Header.Set("Authorization", "Basic "+c.authorizationKey)
+	} else {
+		req.SetBasicAuth(c.clientID, c.clientSecret)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("RqUID", generateUUID())
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("token request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("response status %d", resp.StatusCode)
+	}
+
+	var tokenResp struct {
+		AccessToken string `json:"access_token"`
+		ExpiresAt   int64 `json:"expires_at"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", fmt.Errorf("decode token response: %w", err)
+	}
+
+	c.token = tokenResp.AccessToken
+	c.tokenExpiry = time.Unix(tokenResp.ExpiresAt, 0)
+
+	return c.token, nil
+}
+
+// generateUUID генерирует простой UUID для RqUID
+func generateUUID() string {
+	id := uuid.New()
+	return id.String()
+}
+
+type gigachatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type gigachatRequest struct {
+	Model    string            `json:"model"`
+	Messages []gigachatMessage `json:"messages"`
+	Stream   bool              `json:"stream"`
+	Temp     float64           `json:"temperature,omitempty"`
+}
+
+type gigachatResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+	Error *struct {
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
+}
+
+func (c *GigaChatClient) Generate(ctx context.Context, systemPrompt, userPrompt string, opts Options) (string, error) {
+	token, err := c.getToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get token: %w", err)
+	}
+
+	messages := []gigachatMessage{}
+	if systemPrompt != "" {
+		messages = append(messages, gigachatMessage{Role: "system", Content: systemPrompt})
+	}
+	messages = append(messages, gigachatMessage{Role: "user", Content: userPrompt})
+
+	var temp float64
+	temp, ok := opts["temperature"].(float64)
+	if !ok {
+		temp = 0.1
+	}
+
+	reqBody := gigachatRequest{
+		Model:    c.model,
+		Messages: messages,
+		Stream:   false,
+		Temp:     temp,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal request: %w", err)
+	}
+
+	log.Printf("Запрос к GigaChat: %s", string(jsonData))
+
+	// другой url для запросов
+	url := "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("response status: %d body: %s", resp.StatusCode, string(body))
+	}
+
+	var chatResp gigachatResponse
+	if err := json.Unmarshal(body, &chatResp); err != nil {
+		return "", fmt.Errorf("decode response: %w", err)
+	}
+
+	if chatResp.Error != nil {
+		return "", fmt.Errorf("gigachat error: %s", chatResp.Error.Message)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return "", fmt.Errorf("no response from gigachat")
+	}
+
+	return chatResp.Choices[0].Message.Content, nil
+}
+
+func (c *GigaChatClient) GetModelName() string {
+	return c.model
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/llm/ollama.go
+package llm
+
+import (
+	"bytes"
+	"context"
+	"core/internal/config"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+)
+
+type OllamaClient struct {
+	url   string
+	model string
+	http  *http.Client
+}
+
+type GenerateRequest struct {
+	Model   string         `json:"model"`
+	Prompt  string         `json:"prompt"`
+	Stream  bool           `json:"stream"`
+	System  string         `json:"system,omitempty"`
+	Options map[string]any `json:"options,omitempty"`
+}
+
+type GenerateResponse struct {
+	Response string `json:"response"`
+}
+
+func NewOllamaClient(cfg *config.OllamaConfig) *OllamaClient {
+	return &OllamaClient{
+		url:   "http://" + cfg.URL,
+		model: cfg.Model,
+		http:  &http.Client{Timeout: time.Duration(cfg.Timeout) * time.Second},
+	}
+}
+
+func (c *OllamaClient) Generate(ctx context.Context, systemPrompt, userMessage string, opts Options) (string, error) {
+	reqBody := GenerateRequest{
+		Model:   c.model,
+		Prompt:  userMessage,
+		System:  systemPrompt,
+		Stream:  false,
+		Options: opts,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal request: %w", err)
+	}
+
+	log.Printf("Запрос для Ollama: %s", string(jsonData))
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.url+"/api/generate", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("post request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var genResp GenerateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&genResp); err != nil {
+		return "", err
+	}
+
+	return genResp.Response, nil
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/llm/tools.go
+package llm
+
+import (
+	"context"
+	"core/internal/dto"
+	"core/internal/services"
+	"fmt"
+	"log"
+	"strings"
+)
+
+type Tool struct {
+	Name        string                                                           `json:"name"`
+	Description string                                                           `json:"description"`
+	Parameters  map[string]string                                                `json:"parameters"`
+	Handler     func(ctx context.Context, params map[string]any) (string, error) `json:"-"`
+}
+
+func initTools(svc services.ScheduleService) []Tool {
+	return []Tool{
+		{
+			Name:        "get_schedule_group",
+			Description: "Получить основное расписание группы (без изменений) на неделю для указаного учебного периода. Можешь использовать его, если в запросе указаны на понедельник, на вторник и т.д. до конца недели; а так же на неделю и похожие запросы",
+			Parameters: map[string]string{
+				"group_name":      "string, обязательный, трехзначиное число (например 501)",
+				"period_year":     "string, опциональный, учебный период указывающий года обучения в формате YYYY/YYYY (например 2025/2026); если не указан, то подставляется текущий активный период",
+				"period_semester": "int, опциональный (должен быть задан, если задан period_year), указывает семестр учебного года, принимает одно из двух значений: 1 или 2",
+			},
+			Handler: func(ctx context.Context, params map[string]any) (string, error) {
+				log.Printf("Параметры: %+v", params)
+				groupName, ok := params["group_name"].(string)
+				if !ok {
+					return "", fmt.Errorf("group_name обязательный параметр")
+				}
+
+				var periodID *int
+				periodYear, ok := params["period_year"].(string)
+				if ok && periodYear != "" {
+					semester, okk := params["period_semester"].(float64)
+					if !okk {
+						return "", fmt.Errorf("period_semester обязательный, если указан period_year")
+					}
+
+					period, err := svc.GetAcademicPeriodByYear(ctx, periodYear, int(semester))
+					if err != nil {
+						return "", fmt.Errorf("get academic period: %w", err)
+					}
+
+					periodID = &period.ID
+				}
+
+				group, err := svc.GetGroupByName(ctx, groupName)
+				if err != nil {
+					return "", fmt.Errorf("get group by name: %w", err)
+				}
+
+				schedule, err := svc.GetAllScheduleTemplates(ctx, &dto.ScheduleFiltersRequest{
+					GroupID:          &group.ID,
+					AcademicPeriodID: periodID,
+				})
+
+				var builder strings.Builder
+				builder.WriteString("### Основное распиание занятий для группы " + group.Name + ":\n\n")
+
+				dayOfWeek := map[int]string{
+					1: "Понедельник",
+					2: "Вторник",
+					3: "Среда",
+					4: "Четверг",
+					5: "Пятница",
+					6: "Суббота",
+					7: "Воскресенье",
+				}
+
+				for _, s := range schedule {
+					fmt.Fprintf(&builder, "[%s] Пара №%d\n", dayOfWeek[s.DayOfWeek], s.Number)
+					fmt.Fprintf(&builder, "- Предмет: %s\n", s.Subject.Title)
+					fmt.Fprintf(&builder, "- Аудитория: %s\n", s.Audience.Number)
+					fmt.Fprintf(&builder, "- Преподаватель: %s\n", s.Teacher.User.FullName)
+					builder.WriteString("\n")
+				}
+
+				return builder.String(), nil
+			},
+		},
+	}
+}
+
+--------------------------
 Файл: /home/admin/schedule-bot/services/core/internal/middlewares/tokens.go
 package middlewares
 
@@ -3249,6 +3762,32 @@ func (r *AcademicPeriodRepo) GetByID(ctx context.Context, id int) (*models.Acade
 	return &period, nil
 }
 
+func (r *AcademicPeriodRepo) GetByYear(ctx context.Context, year string, semester int) (*models.AcademicPeriod, error) {
+	var period models.AcademicPeriod
+	query := `
+	SELECT id, year, semester, start_date, end_date, created_at, updated_at
+	FROM schedule.academic_periods
+	WHERE year = $1 AND semester = $2
+	`
+	err := r.db.QueryRow(ctx, query, year, semester).Scan(
+		&period.ID,
+		&period.Year,
+		&period.Semester,
+		&period.StartDate,
+		&period.EndDate,
+		&period.CreatedAt,
+		&period.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get academic period: %w", err)
+	}
+	return &period, nil
+
+}
+
 // GetActive — получение активного учебного периода
 func (r *AcademicPeriodRepo) GetActive(ctx context.Context) (*models.AcademicPeriod, error) {
 	var period models.AcademicPeriod
@@ -3438,6 +3977,7 @@ import (
 	"context"
 	"core/internal/models"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -3452,12 +3992,25 @@ func NewGroupRepo(db *pgxpool.Pool) *GroupRepo {
 }
 
 func (r *GroupRepo) Create(ctx context.Context, group *models.Group) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := r.CreateWithTx(ctx, tx, group); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+func (r *GroupRepo) CreateWithTx(ctx context.Context, tx pgx.Tx, group *models.Group) error {
 	query := `
 	INSERT INTO auth.groups (name, specialty, admission_year)
 	VALUES ($1, $2, $3)
 	RETURNING id
 	`
-	return r.db.QueryRow(ctx, query, group.Name, group.Specialty, group.AdmissionYear).Scan(&group.ID)
+	return tx.QueryRow(ctx, query, group.Name, group.Specialty, group.AdmissionYear).Scan(&group.ID)
 }
 
 func (r *GroupRepo) GetByID(ctx context.Context, id int) (*models.Group, error) {
@@ -3480,6 +4033,29 @@ func (r *GroupRepo) GetByID(ctx context.Context, id int) (*models.Group, error) 
 		return nil, err
 	}
 	return &group, nil
+}
+
+func (r *GroupRepo) GetByName(ctx context.Context, name string) (*models.Group, error) {
+	var group models.Group
+	query := `
+	SELECT id, name, specialty, admission_year
+	FROM auth.groups
+	WHERE name LIKE '%' || $1 || '%'
+	`
+	err := r.db.QueryRow(ctx, query, name).Scan(
+		&group.ID,
+		&group.Name,
+		&group.Specialty,
+		&group.AdmissionYear,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &group, nil
+
 }
 
 func (r *GroupRepo) GetAll(ctx context.Context) ([]models.Group, error) {
@@ -4600,12 +5176,20 @@ func (r *StudentRepo) CreateStudent(ctx context.Context, user *models.User, grou
 	}
 	defer tx.Rollback(ctx)
 
+	if err := r.CreateStudentWithTx(ctx, tx, user, groupID); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *StudentRepo) CreateStudentWithTx(ctx context.Context, tx pgx.Tx, user *models.User, groupID int) error {
 	query := `
 	INSERT INTO auth.user_roles (user_id, role_id)
 	VALUES ($1, (SELECT id FROM auth.roles WHERE name = 'student'))
 	ON CONFLICT DO NOTHING
 	`
-	if _, err = tx.Exec(ctx, query, user.ID); err != nil {
+	if _, err := tx.Exec(ctx, query, user.ID); err != nil {
 		return err
 	}
 
@@ -4613,7 +5197,7 @@ func (r *StudentRepo) CreateStudent(ctx context.Context, user *models.User, grou
 	INSERT INTO auth.student_profiles (user_id, group_id)
 	VALUES ($1, $2)
 	`
-	if _, err = tx.Exec(ctx, query, user.ID, groupID); err != nil {
+	if _, err := tx.Exec(ctx, query, user.ID, groupID); err != nil {
 		return err
 	}
 
@@ -4636,12 +5220,12 @@ func (r *StudentRepo) CreateStudent(ctx context.Context, user *models.User, grou
 		user.Roles = append(user.Roles, role)
 	}
 
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (r *StudentRepo) GetStudentByUserID(ctx context.Context, userID int) (*models.Student, error) {
 	student := models.Student{
-		User: models.User{},
+		User:  models.User{},
 		Group: &models.Group{},
 	}
 	query := `
@@ -4694,6 +5278,49 @@ func (r *StudentRepo) GetStudentByUserID(ctx context.Context, userID int) (*mode
 	return &student, nil
 }
 
+func (r *StudentRepo) GetStudentsByGroupID(ctx context.Context, id int) ([]models.Student, error) {
+	query := `
+	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at,
+	       g.id, g.name, g.specialty, g.admission_year
+	FROM auth.users u
+	JOIN auth.student_profiles sp ON u.id = sp.user_id
+	LEFT JOIN auth.groups g ON sp.group_id = g.id
+	WHERE g.id = $1
+	ORDER BY u.id
+	`
+	rows, err := r.db.Query(ctx, query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var students []models.Student
+	for rows.Next() {
+		s := models.Student{
+			User:  models.User{},
+			Group: &models.Group{},
+		}
+		if err := rows.Scan(
+			&s.User.ID,
+			&s.User.Name,
+			&s.User.FullName,
+			&s.User.Email,
+			&s.User.PasswordHash,
+			&s.User.CreatedAt,
+			&s.User.UpdatedAt,
+			&s.Group.ID,
+			&s.Group.Name,
+			&s.Group.Specialty,
+			&s.Group.AdmissionYear,
+		); err != nil {
+			return nil, err
+		}
+		students = append(students, s)
+	}
+	return students, nil
+
+}
+
 func (r *StudentRepo) GetAllStudents(ctx context.Context) ([]models.Student, error) {
 	query := `
 	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at,
@@ -4712,7 +5339,7 @@ func (r *StudentRepo) GetAllStudents(ctx context.Context) ([]models.Student, err
 	var students []models.Student
 	for rows.Next() {
 		s := models.Student{
-			User: models.User{},
+			User:  models.User{},
 			Group: &models.Group{},
 		}
 		if err := rows.Scan(
@@ -4749,7 +5376,7 @@ func (r *StudentRepo) DeleteStudent(ctx context.Context, userID int) error {
 	return err
 }
 
-func ( r *StudentRepo) IsStudent(ctx context.Context, userID int) (bool, error) {
+func (r *StudentRepo) IsStudent(ctx context.Context, userID int) (bool, error) {
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM auth.student_profiles WHERE user_id = $1)`
 	err := r.db.QueryRow(ctx, query, userID).Scan(&exists)
@@ -4795,12 +5422,26 @@ func NewSubjectRepo(db *pgxpool.Pool) *SubjectRepo {
 }
 
 func (r *SubjectRepo) CreateSubject(ctx context.Context, subject *models.Subject) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := r.CreateSubjectWithTx(ctx, tx, subject); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *SubjectRepo) CreateSubjectWithTx(ctx context.Context, tx pgx.Tx, subject *models.Subject) error {
 	query := `
 	INSERT INTO schedule.subjects (title, semester, hours_load, start_date, end_date, group_id)
 	VALUES ($1, $2, $3, $4, $5, $6)
 	RETURNING id
 	`
-	err := r.db.QueryRow(ctx, query,
+	err := tx.QueryRow(ctx, query,
 		subject.Title,
 		subject.Semester,
 		subject.HoursLoad,
@@ -5192,10 +5833,12 @@ import (
 	"context"
 	"core/internal/dto"
 	"core/internal/models"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -5229,12 +5872,21 @@ func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
 	}
 	defer tx.Rollback(ctx)
 
+	if err := r.CreateWithTx(ctx, tx, user); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *UserRepo) CreateWithTx(ctx context.Context, tx pgx.Tx, user *models.User) error {
+
 	query := `
 	INSERT INTO auth.users (username, full_name, email, password_hash) 
 	VALUES ($1, $2, $3, $4)
 	RETURNING id, created_at, updated_at
 	`
-	err = tx.QueryRow(ctx, query,
+	err := tx.QueryRow(ctx, query,
 		user.Name,
 		user.FullName,
 		user.Email,
@@ -5280,7 +5932,7 @@ func (r *UserRepo) Create(ctx context.Context, user *models.User) error {
 	}
 	row.Close()
 
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (r *UserRepo) GetByID(ctx context.Context, id int) (*models.User, error) {
@@ -5344,6 +5996,9 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.
 		&user.UpdatedAt,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -5432,10 +6087,10 @@ func (r *UserRepo) GetUsersPaginated(ctx context.Context, page, perPage int, sor
 	totalPages := int(math.Ceil(float64(total) / float64(perPage)))
 
 	return &dto.PaginatedUsers{
-		Users: users,
-		Total: total,
-		Page: page,
-		PerPage: perPage,
+		Users:      users,
+		Total:      total,
+		Page:       page,
+		PerPage:    perPage,
 		TotalPages: totalPages,
 	}, nil
 }
@@ -5509,6 +6164,7 @@ package router
 import (
 	"core/internal/config"
 	"core/internal/handlers"
+	"core/internal/llm"
 	"core/internal/middlewares"
 	"core/internal/repository"
 	"core/internal/services"
@@ -5524,10 +6180,11 @@ type Router struct {
 	tokenService    *services.JWTService
 	authService     *services.UserService
 	scheduleService *services.ScheduleService
+	llmAgent        *llm.LLMAgent
 	router          *chi.Mux
 }
 
-func New(cfg *config.Config, pool *pgxpool.Pool) *Router {
+func New(cfg *config.Config, pool *pgxpool.Pool) (*Router, error) {
 	userRepo := repository.NewUserRepo(pool)
 	sessionRepo := repository.NewSessionRepo(pool)
 
@@ -5535,16 +6192,23 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *Router {
 	userService := services.NewUserService(userRepo, sessionRepo, tokenService)
 	scheduleService := services.NewScheduleService(pool)
 
+	llmClient, err := llm.NewLLMClient(&cfg.LLM)
+	if err != nil {
+		return nil, err
+	}
+	agent := llm.NewAgent(llmClient, *scheduleService)
+
 	router := Router{
 		tokenService:    tokenService,
 		authService:     userService,
 		scheduleService: scheduleService,
+		llmAgent:        agent,
 		router:          chi.NewRouter(),
 	}
 
 	router.SetupRoutes()
 
-	return &router
+	return &router, nil
 }
 
 func (r *Router) SetupRoutes() {
@@ -5561,6 +6225,8 @@ func (r *Router) SetupRoutes() {
 	academicPeriodHandler := handlers.NewAcademicPeriodHandler(r.scheduleService)
 	scheduleHandler := handlers.NewScheduleHandler(r.scheduleService)
 	lessonLogHandler := handlers.NewLessonLogHandler(r.scheduleService)
+
+	chatHandler := handlers.NewChatHandler(r.llmAgent)
 
 	r.router.Use(middleware.Logger)
 	r.router.Use(middleware.Recoverer)
@@ -5639,6 +6305,7 @@ func (r *Router) SetupRoutes() {
 		r.Route("/groups", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", groupHandler.CreateGroup)
+				r.Post("/with-curriculum", groupHandler.CreateGroupWtihCurriculum)
 				r.Patch("/{id}", groupHandler.UpdateGroup)
 				r.Delete("/{id}", groupHandler.DeleteGroup)
 			})
@@ -5689,11 +6356,106 @@ func (r *Router) SetupRoutes() {
 			})
 			r.Get("/", lessonLogHandler.GetLessonLogs)
 		})
+
+		r.Route("/chat", func(r chi.Router) {
+			r.Post("/", chatHandler.Handle)
+		})
 	})
 }
 
 func (r *Router) Router() *chi.Mux {
 	return r.router
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/services/generate_user.go
+package services
+
+import (
+	"context"
+	"core/internal/repository"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"strings"
+	"unicode"
+)
+
+// GenerateUsername генерирует username на основе ФИО и названия группы
+func generateUsername(fullName, groupName string) string {
+	parts := strings.Fields(fullName)
+	if len(parts) == 0 {
+		return "user"
+	}
+	lastName := parts[0]
+
+	// Транслитерация простейшая (можно расширить, но для демо так)
+	translit := func(s string) string {
+		// Простейшая замена русских букв на латиницу (только для демо)
+		// В реальном проекте лучше использовать готовую библиотеку
+		replacer := strings.NewReplacer(
+			"а", "a", "б", "b", "в", "v", "г", "g", "д", "d", "е", "e", "ё", "e",
+			"ж", "zh", "з", "z", "и", "i", "й", "y", "к", "k", "л", "l", "м", "m",
+			"н", "n", "о", "o", "п", "p", "р", "r", "с", "s", "т", "t", "у", "u",
+			"ф", "f", "х", "kh", "ц", "ts", "ч", "ch", "ш", "sh", "щ", "shch",
+			"ы", "y", "э", "e", "ю", "yu", "я", "ya",
+		)
+		lower := strings.ToLower(s)
+		return replacer.Replace(lower)
+	}
+	lastNameLat := translit(lastName)
+
+	clean := func(s string) string {
+		var res strings.Builder
+		for _, r := range s {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				res.WriteRune(r)
+			}
+		}
+		return res.String()
+	}
+	digits := func(s string) string {
+		var res strings.Builder
+		for _, r := range s {
+			if unicode.IsDigit(r) {
+				res.WriteRune(r)
+			}
+		}
+		return res.String()
+	}
+	username := digits(groupName)
+	username += clean(lastNameLat)
+	if len(username) > 30 {
+		username = username[:30]
+	}
+	return username
+}
+
+// generateRandomPassword генерирует случайный пароль длиной 10 символов
+func generateRandomPassword() (string, error) {
+	bytes := make([]byte, 5) // 5 байт -> 10 hex символов
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+// ensureUniqueUsername пытается сделать username уникальным, добавляя числовой суффикс
+func ensureUniqueUsername(ctx context.Context, userRepo *repository.UserRepo, baseUsername string) (string, error) {
+	username := baseUsername
+	counter := 1
+	for {
+		existing, err := userRepo.GetByUsername(ctx, username)
+		if err != nil {
+			return "", err
+		}
+		if existing == nil {
+			break
+		}
+		username = fmt.Sprintf("%s%d", baseUsername, counter)
+		counter++
+	}
+	return username, nil
 }
 
 --------------------------
@@ -5799,6 +6561,10 @@ func (s *ScheduleService) GetGroup(ctx context.Context, id int) (*models.Group, 
 	return s.groupRepo.GetByID(ctx, id)
 }
 
+func (s *ScheduleService) GetGroupByName(ctx context.Context, name string) (*models.Group, error) {
+	return s.groupRepo.GetByName(ctx, name)
+}
+
 func (s *ScheduleService) GetAllGroups(ctx context.Context) ([]models.Group, error) {
 	return s.groupRepo.GetAll(ctx)
 }
@@ -5895,6 +6661,10 @@ func (s *ScheduleService) GetStudent(ctx context.Context, userID int) (*models.S
 
 func (s *ScheduleService) GetAllStudents(ctx context.Context) ([]models.Student, error) {
 	return s.studentRepo.GetAllStudents(ctx)
+}
+
+func (s *ScheduleService) GetStudentsByGroupID(ctx context.Context, id int) ([]models.Student, error) {
+	return s.studentRepo.GetStudentsByGroupID(ctx, id)
 }
 
 func (s *ScheduleService) UpdateStudentGroup(ctx context.Context, userID int, groupID int) error {
@@ -6151,6 +6921,10 @@ func (s *ScheduleService) CreateAcademicPeriod(ctx context.Context, req *dto.Cre
 
 func (s *ScheduleService) GetAcademicPeriodByID(ctx context.Context, id int) (*models.AcademicPeriod, error) {
 	return s.academicPeriodRepo.GetByID(ctx, id)
+}
+
+func (s *ScheduleService) GetAcademicPeriodByYear(ctx context.Context, year string, semester int) (*models.AcademicPeriod, error) {
+	return s.academicPeriodRepo.GetByYear(ctx, year, semester)
 }
 
 func (s *ScheduleService) GetAllAcademicPeriods(ctx context.Context) ([]models.AcademicPeriod, error) {
@@ -6928,7 +7702,7 @@ func (s *ScheduleService) checkLessonConflict(ctx context.Context, l *models.Les
 func (s *ScheduleService) CompleteLessonFromDate(ctx context.Context, date time.Time, comment string) error {
 	lessons, err := s.lessonLogRepo.GetAll(ctx, repository.LessonLogFilters{
 		DateFrom: &date,
-		DateTo: &date,
+		DateTo:   &date,
 	})
 	if err != nil {
 		return fmt.Errorf("get lesson from date %s", date.Format("2006-01-02"))
@@ -6957,6 +7731,101 @@ func (s *ScheduleService) CompleteLessonFromDate(ctx context.Context, date time.
 	}
 
 	return nil
+}
+
+func (s *ScheduleService) CreateGroupWithCurriculumAndStudents(ctx context.Context, req *dto.CreateGroupWithCurriculumRequest) (*dto.GroupWithCurriculumResponse, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	group := models.Group{
+		Name:          req.Group.Name,
+		Specialty:     req.Group.Specialty,
+		AdmissionYear: req.Group.AdmissionYear,
+	}
+	if err := s.groupRepo.CreateWithTx(ctx, tx, &group); err != nil {
+		return nil, fmt.Errorf("create group: %w", err)
+	}
+
+	var createdSubjects []models.Subject
+	for i, subjReq := range req.Subjects {
+		startDate, err := time.Parse("2006-01-02", subjReq.StartDate)
+		if err != nil {
+			return nil, fmt.Errorf("parse start_date for subject %d: %w", i, err)
+		}
+		endDate, err := time.Parse("2006-01-02", subjReq.EndDate)
+		if err != nil {
+			return nil, fmt.Errorf("parse end_date for subject %d: %w", i, err)
+		}
+		if startDate.After(endDate) {
+			return nil, fmt.Errorf("start_date must be before end_date for subject %d: %w", i, err)
+		}
+		subject := models.Subject{
+			Title:     subjReq.Title,
+			Semester:  subjReq.Semester,
+			HoursLoad: subjReq.HoursLoad,
+			StartDate: startDate,
+			EndDate:   endDate,
+			GroupID:   group.ID,
+		}
+
+		if err := s.subjectRepo.CreateSubjectWithTx(ctx, tx, &subject); err != nil {
+			return nil, fmt.Errorf("create subject %d: %w", i, err)
+		}
+
+		subject.Group = group
+		createdSubjects = append(createdSubjects, subject)
+	}
+
+	var studentsResult []dto.StudentCreationResult
+	for i, studReq := range req.Students {
+		baseUsername := generateUsername(studReq.FullName, group.Name)
+		username, err := ensureUniqueUsername(ctx, s.userRepo, baseUsername)
+		if err != nil {
+			return nil, fmt.Errorf("generate unique username: %w", err)
+		}
+
+		plainPassword, err := generateRandomPassword()
+		if err != nil {
+			return nil, fmt.Errorf("generate password: %w", err)
+		}
+		passwordHash, err := hashPassword(plainPassword)
+		if err != nil {
+			return nil, fmt.Errorf("hash password: %w", err)
+		}
+
+		user := models.User{
+			Name:         username,
+			FullName:     studReq.FullName,
+			Email:        studReq.Email,
+			PasswordHash: passwordHash,
+		}
+		if err := s.userRepo.CreateWithTx(ctx, tx, &user); err != nil {
+			return nil, fmt.Errorf("create user %d: %w", i, err)
+		}
+
+		if err := s.studentRepo.CreateStudentWithTx(ctx, tx, &user, group.ID); err != nil {
+			return nil, fmt.Errorf("create student %d profile: %w", i, err)
+		}
+
+		studentsResult = append(studentsResult, dto.StudentCreationResult{
+			User:     user,
+			Password: plainPassword,
+			GroupID:  group.ID,
+		})
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return &dto.GroupWithCurriculumResponse{
+		Group:    group,
+		Subjects: createdSubjects,
+		Students: studentsResult,
+	}, nil
 }
 
 --------------------------
