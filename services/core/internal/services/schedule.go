@@ -59,6 +59,10 @@ func (s *ScheduleService) GetAudience(ctx context.Context, id int) (*models.Audi
 	return s.audienceRepo.Get(ctx, id)
 }
 
+func (s *ScheduleService) GetAudienceByNumber(ctx context.Context, number string) (*models.Audience, error) {
+	return s.audienceRepo.GetByNumber(ctx, number)
+}
+
 func (s *ScheduleService) GetAllAudience(ctx context.Context) ([]models.Audience, error) {
 	return s.audienceRepo.GetAll(ctx)
 }

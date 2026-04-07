@@ -45,6 +45,26 @@ func (r *AudienceRepo) Get(ctx context.Context, id int) (*models.Audience, error
 	return &audience, nil
 }
 
+func (r *AudienceRepo) GetByNumber(ctx context.Context, number string) (*models.Audience, error) {
+	var audience models.Audience
+	query := `
+	SELECT id, name, number
+	FROM schedule.audiences
+	WHERE number = $1
+	`
+	err := r.db.QueryRow(ctx, query, number).Scan(
+		&audience.ID,
+		&audience.Name,
+		&audience.Number,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &audience, nil
+
+}
+
 func (r *AudienceRepo) GetAll(ctx context.Context) ([]models.Audience, error) {
 	audiences := []models.Audience{}
 	query := `
