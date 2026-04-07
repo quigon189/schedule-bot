@@ -4,6 +4,7 @@ import (
 	"context"
 	"core/internal/models"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -109,6 +110,53 @@ func (r *TeacherRepo) GetTeacherByUserID(ctx context.Context, userID int) (*mode
 	return &teacher, nil
 }
 
+func (r *TeacherRepo) GetTeacherByName(ctx context.Context, name string) (*models.Teacher, error) {
+	var teacher models.Teacher
+	query := `
+	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at
+	FROM auth.users u
+	JOIN auth.teacher_profiles tp ON u.id = tp.user_id
+	WHERE u.full_name ILIKE '%' || $1 || '%'
+	`
+	err := r.db.QueryRow(ctx, query, strings.ToLower(name)).Scan(
+		&teacher.User.ID,
+		&teacher.User.Name,
+		&teacher.User.FullName,
+		&teacher.User.Email,
+		&teacher.User.PasswordHash,
+		&teacher.User.CreatedAt,
+		&teacher.User.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	query = `
+	SELECT r.id, r.name, r.description
+	FROM auth.roles r
+	JOIN auth.user_roles ur ON r.id = ur.role_id
+	WHERE ur.user_id = $1
+	`
+	rows, err := r.db.Query(ctx, query, teacher.User.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var role models.Role
+		if err := rows.Scan(&role.ID, &role.Name, &role.Description); err != nil {
+			return nil, err
+		}
+		teacher.User.Roles = append(teacher.User.Roles, role)
+	}
+
+	return &teacher, nil
+
+}
+
 func (r *TeacherRepo) GetAllTeachers(ctx context.Context) ([]models.Teacher, error) {
 	query := `
 	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at
@@ -146,7 +194,7 @@ func (r *TeacherRepo) DeleteTeacher(ctx context.Context, userID int) error {
 	return err
 }
 
-func ( r *TeacherRepo) IsTeacher(ctx context.Context, userID int) (bool, error) {
+func (r *TeacherRepo) IsTeacher(ctx context.Context, userID int) (bool, error) {
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM auth.teacher_profiles WHERE user_id = $1)`
 	err := r.db.QueryRow(ctx, query, userID).Scan(&exists)

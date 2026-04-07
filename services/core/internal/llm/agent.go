@@ -2,11 +2,13 @@ package llm
 
 import (
 	"context"
+	"core/internal/models"
 	"core/internal/services"
 	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
+	"time"
 )
 
 type Options map[string]any
@@ -39,9 +41,22 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 
 	toolsJSON, _ := json.MarshalIndent(a.tools, "", "  ")
 
+	now := time.Now()
+	userInfo := fmt.Sprintf("Текущая дата: %s", now.Format("02.01.2006"))
+	user, ok := ctx.Value("user").(models.User)
+	if ok {
+		jsonUser, err := json.MarshalIndent(user, "", "  ")
+		if err == nil {
+			userInfo += fmt.Sprintf("\n%s\n", jsonUser)
+		}
+	}
+
 	systemPrompt := fmt.Sprintf(`Ты — ассистент по расписанию занятий. Твоя задача — понять, какую информацию хочет получить пользователь, и выбрать подходящий инструмент из списка ниже.
 
 ## Доступные инструменты:
+%s
+
+## Информация о пользователе:
 %s
 
 ## Правила:
@@ -54,7 +69,7 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 - Для дат используй формат YYYY-MM-DD
 
 Ответь ТОЛЬКО JSON-объектом в формате:
-{"action": "имя_инструмента", "params": {"параметр": "значение"}}`, string(toolsJSON))
+{"action": "имя_инструмента", "params": {"параметр": "значение"}}`, string(toolsJSON), userInfo)
 
 	log.Printf("Запрос пользователя: %s", userMessage)
 	log.Printf("Системная строка: %s", systemPrompt)
@@ -101,7 +116,9 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 	}
 
 	// 5. Формируем финальный ответ на основе полученных данных
-	return a.formatResponse(ctx, userMessage, result)
+	// return a.formatResponse(ctx, userMessage, result)
+	// Тестово пробуем вернуть ответ пользователю
+	return result, nil
 }
 
 // directAnswer - прямой ответ от LLM без вызова инструментов

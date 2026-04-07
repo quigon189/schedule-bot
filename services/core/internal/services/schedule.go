@@ -157,6 +157,10 @@ func (s *ScheduleService) GetTeacher(ctx context.Context, userID int) (*models.T
 	return s.teacherRepo.GetTeacherByUserID(ctx, userID)
 }
 
+func (s *ScheduleService) GetTeacherByName(ctx context.Context, name string) (*models.Teacher, error) {
+	return s.teacherRepo.GetTeacherByName(ctx, name)
+}
+
 func (s *ScheduleService) GetAllTeachers(ctx context.Context) ([]models.Teacher, error) {
 	return s.teacherRepo.GetAllTeachers(ctx)
 }
@@ -1259,7 +1263,7 @@ func (s *ScheduleService) CompleteLessonFromDate(ctx context.Context, date time.
 		if lesson.Status == models.LessonStatusCanceled {
 			continue
 		}
-		if err := s.lessonLogRepo.UpdateStatusWithTx(ctx, tx, lesson.ID, models.LessonStatusCanceled, comment); err != nil {
+		if err := s.lessonLogRepo.UpdateStatusWithTx(ctx, tx, lesson.ID, models.LessonStatusCompleted, comment); err != nil {
 			return fmt.Errorf("update status for lesson %d: %w", lesson.ID, err)
 		}
 	}

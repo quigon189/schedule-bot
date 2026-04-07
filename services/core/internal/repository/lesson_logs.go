@@ -314,8 +314,8 @@ func (r *LessonLogRepo) GetAllWithTx(ctx context.Context, tx pgx.Tx, filters Les
 
 		subject.Group = group
 		log.Subject = subject
-		log.Teacher = teacher
 		teacher.User = user
+		log.Teacher = teacher
 		log.Audience = audience
 		log.AcademicPeriod = period
 
