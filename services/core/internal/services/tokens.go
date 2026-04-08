@@ -28,18 +28,20 @@ func NewJWTService(secretKey []byte, expires time.Duration) *JWTService {
 	}
 }
 
-func (s *JWTService) GenerateToken(user *models.User, sessionID string) (string, error) {
+func (s *JWTService) GenerateToken(user *models.User, sessionID string) (string, time.Time, error) {
+	exiresAt := time.Now().Add(s.expires)
 	claims := CustomClaims{
 		User:  *user,
 		SessionID: sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.expires)),
+			ExpiresAt: jwt.NewNumericDate(exiresAt),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(s.secretKey)
+	accessToke, err := token.SignedString(s.secretKey)
+	return accessToke, exiresAt, err
 }
 
 func (s *JWTService) ValidateToken(tokenString string) (*CustomClaims, error) {

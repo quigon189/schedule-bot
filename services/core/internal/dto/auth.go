@@ -11,6 +11,7 @@ type LoginResponse struct {
 	AccessToken  string   `json:"access_token"`
 	SessionID    string   `json:"session_id"`
 	RefreshToken string   `json:"refresh_token"`
+	ExiresAt     int64    `json:"exires_at"`
 	Roles        []string `json:"roles"`
 }
 

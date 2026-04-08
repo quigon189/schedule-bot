@@ -1,4 +1,4 @@
-Текущий каталог: /home/admin/schedule-bot/services/core
+Текущий каталог: /home/quigon/schedule-bot/services/core
 ├── Dockerfile
 ├── README.md
 ├── cmd
@@ -73,7 +73,7 @@
     └── utils
         └── response.go
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/README.md
+Файл: /home/quigon/schedule-bot/services/core/README.md
 # API Документация сервиса управления расписанием и пользователями
 
 ## Введение
@@ -974,7 +974,7 @@
 
 *Документация актуальна на основе исходного кода сервиса `core`.*
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/cmd/main.go
+Файл: /home/quigon/schedule-bot/services/core/cmd/main.go
 package main
 
 import (
@@ -1068,7 +1068,7 @@ func Migrations(pool *pgxpool.Pool, path string) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/go.mod
+Файл: /home/quigon/schedule-bot/services/core/go.mod
 module core
 
 go 1.25.0
@@ -1101,7 +1101,7 @@ require (
 )
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/config/config.go
+Файл: /home/quigon/schedule-bot/services/core/internal/config/config.go
 package config
 
 import (
@@ -1226,7 +1226,7 @@ func getIntEnv(key string, defaultValue int) int {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/academic_year.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/academic_year.go
 package dto
 
 type CreateAcademicPeriodRequest struct {
@@ -1244,7 +1244,7 @@ type UpdateAcademicPeriodRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/audience.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/audience.go
 package dto
 
 type CreateAudienceRequest struct {
@@ -1258,7 +1258,7 @@ type UpdateAudienceRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/auth.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/auth.go
 package dto
 
 type LoginRequest struct {
@@ -1272,6 +1272,7 @@ type LoginResponse struct {
 	AccessToken  string   `json:"access_token"`
 	SessionID    string   `json:"session_id"`
 	RefreshToken string   `json:"refresh_token"`
+	ExiresAt     int64    `json:"exires_at"`
 	Roles        []string `json:"roles"`
 }
 
@@ -1281,7 +1282,7 @@ type RefreshTokenRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/group.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/group.go
 package dto
 
 import "core/internal/models"
@@ -1325,7 +1326,7 @@ type StudentCreationResult struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/lesson_log.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/lesson_log.go
 package dto
 
 import "time"
@@ -1392,8 +1393,43 @@ type GenerateScheduleRequest struct {
 	AcademicPeriodID int `json:"academic_period_id" validate:"required"`
 }
 
+// StatisticsRequest - фильтры для получения статистики занятий
+type StatisticsRequest struct {
+	GroupID          *int       `json:"group_id"`
+	TeacherID        *int       `json:"teacher_id"`
+	SubjectID        *int       `json:"subject_id"`
+	AcademicPeriodID *int       `json:"academic_period_id"`
+}
+
+// SubjectStatistics - статистика по одному предмету
+type SubjectStatistics struct {
+	SubjectID          int     `json:"subject_id"`
+	SubjectTitle       string  `json:"subject_title"`
+	GroupID            int     `json:"group_id"`
+	GroupName          string  `json:"group_name"`
+	TotalHours         int     `json:"total_hours"`          // общее количество часов
+	TotalLessons       int     `json:"total_lessons"`        // всего пар (1 пара = 2 часа)
+	CompletedLessons   int     `json:"completed_lessons"`    // проведено пар
+	RescheduledLessons int     `json:"rescheduled_lessons"`  // перенесено пар
+	CancelledLessons   int     `json:"cancelled_lessons"`    // отменено пар
+	PlannedLessons     int     `json:"planned_lessons"`      // запланировано на будущее
+	RemainingLessons   int     `json:"remaining_lessons"`    // осталось провести (всего - проведено - отменено)
+	CompletionPercent  float64 `json:"completion_percent"`   // процент выполнения (проведено / всего)
+	IsOnSchedule       bool    `json:"is_on_schedule"`       // идём ли по графику
+}
+
+// StatisticsResponse - ответ со статистикой
+type StatisticsResponse struct {
+	TotalSubjects       int                 `json:"total_subjects"`
+	OverallProgress     float64             `json:"overall_progress"`       // общий процент выполнения
+	TotalLessonsAll     int                 `json:"total_lessons_all"`      // всего пар по всем предметам
+	CompletedLessonsAll int                 `json:"completed_lessons_all"`  // проведено всего
+	RemainingLessonsAll int                 `json:"remaining_lessons_all"`  // осталось провести всего
+	Subjects            []SubjectStatistics `json:"subjects"`
+}
+
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/role.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/role.go
 package dto
 
 type AssignStudentRequest struct {
@@ -1416,7 +1452,7 @@ type RemoveRoleRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/schedule.go
 package dto
 
 type CreateStudentRequest struct {
@@ -1478,7 +1514,7 @@ type BulkDeleteScheduleRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/subject.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/subject.go
 package dto
 
 import "core/internal/models"
@@ -1516,7 +1552,7 @@ type PaginatedSubjectsResponse struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/user.go
 package dto
 
 import (
@@ -1552,7 +1588,7 @@ type UpdateUserPasswordRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/validator.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/validator.go
 package dto
 
 import (
@@ -1578,7 +1614,7 @@ func ValidateStruct(s any) error {
 
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/academic_year.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/academic_year.go
 package handlers
 
 import (
@@ -1694,7 +1730,7 @@ func (h *AcademicPeriodHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/audience.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/audience.go
 package handlers
 
 import (
@@ -1802,7 +1838,7 @@ func (h *AudienceHandler) DeleteAudience(w http.ResponseWriter, r *http.Request)
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/auth.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/auth.go
 package handlers
 
 import (
@@ -1900,7 +1936,7 @@ func (h *AuthHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/chat.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/chat.go
 package handlers
 
 import (
@@ -1949,7 +1985,7 @@ func (h *ChatHandler) Handle(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/group.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/group.go
 package handlers
 
 import (
@@ -2080,7 +2116,7 @@ func (h *GroupHandler) CreateGroupWtihCurriculum(w http.ResponseWriter, r *http.
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/lesson_log.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/lesson_log.go
 package handlers
 
 import (
@@ -2227,8 +2263,47 @@ func (h *LessonLogHandler) CompleteLessonFromDate(w http.ResponseWriter, r *http
 
 }
 
+// GetLessonStatistics возвращает статистику занятий
+func (h *LessonLogHandler) GetLessonStatistics(w http.ResponseWriter, r *http.Request) {
+	var filters dto.StatisticsRequest
+
+	// Парсим query параметры
+	if groupID := r.URL.Query().Get("group_id"); groupID != "" {
+		id, err := strconv.Atoi(groupID)
+		if err == nil {
+			filters.GroupID = &id
+		}
+	}
+	if teacherID := r.URL.Query().Get("teacher_id"); teacherID != "" {
+		id, err := strconv.Atoi(teacherID)
+		if err == nil {
+			filters.TeacherID = &id
+		}
+	}
+	if subjectID := r.URL.Query().Get("subject_id"); subjectID != "" {
+		id, err := strconv.Atoi(subjectID)
+		if err == nil {
+			filters.SubjectID = &id
+		}
+	}
+	if periodID := r.URL.Query().Get("academic_period_id"); periodID != "" {
+		id, err := strconv.Atoi(periodID)
+		if err == nil {
+			filters.AcademicPeriodID = &id
+		}
+	}
+
+	stats, err := h.scheduleService.GetLessonStatistics(r.Context(), &filters)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get lesson statistics: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "lesson statistics retrieved", stats)
+}
+
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/role.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/role.go
 package handlers
 
 import (
@@ -2314,7 +2389,7 @@ func (h *RoleHandler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/schedule.go
 package handlers
 
 import (
@@ -2574,7 +2649,7 @@ func (h *ScheduleHandler) CreateSemesterSchedule(w http.ResponseWriter, r *http.
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/student.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/student.go
 package handlers
 
 import (
@@ -2680,7 +2755,7 @@ func (h *StudentHandler) DeleteStudent(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/subject.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/subject.go
 package handlers
 
 import (
@@ -2826,7 +2901,7 @@ func (h *SubjectHandler) DeleteSubject(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/teacher.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/teacher.go
 package handlers
 
 import (
@@ -2909,7 +2984,7 @@ func (h *TeacherHandler) DeleteTeacher(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/user.go
 package handlers
 
 import (
@@ -3055,7 +3130,7 @@ func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request)
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/agent.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/agent.go
 package llm
 
 import (
@@ -3125,6 +3200,7 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 
 ## Дополниетльная информация:
 - Текущая дата: %s
+- Подставляй фамилию преподавателя из информации о пользователе, только если тебя явно попросили (например в сообщении указано покажи мое расписание)
 
 ## Правила:
 1. Если пользователь спрашивает о расписании (сегодня, завтра, на неделю), используй get_group_schedule
@@ -3132,12 +3208,11 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 
 ## Важно:
 - Извлекай параметры из вопроса пользователя
-- Если параметр не указан, оставь его пустым или попроси отправить новое сообщение, но с конкретными уточнениями
+- Если параметр не указан, оставь его пустым
 - Для дат используй формат YYYY-MM-DD
 
 Ответь ТОЛЬКО JSON-объектом в формате:
 {"action": "имя_инструмента", "params": {"параметр": "значение"}}`, string(toolsJSON), now.Format("2006-01-02"))
-
 
 	userPrompt := fmt.Sprintf(`Информация о пользователе:
 %s
@@ -3189,9 +3264,9 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 	}
 
 	// 5. Формируем финальный ответ на основе полученных данных
-	// return a.formatResponse(ctx, userMessage, result)
+	return a.formatResponse(ctx, userPrompt, result)
 	// Тестово пробуем вернуть ответ пользователю
-	return result, nil
+	//return result, nil
 }
 
 // directAnswer - прямой ответ от LLM без вызова инструментов
@@ -3212,11 +3287,12 @@ func (a *LLMAgent) formatResponse(ctx context.Context, userMessage string, data 
 - Если данных нет, скажи об этом вежливо
 - Форматируй ответ для удобного чтения (можно использовать переносы строк)`, data)
 
+	log.Printf("Системное сообщение для ответа пользователю:\n%s", systemPrompt)
 	return a.client.Generate(ctx, systemPrompt, userMessage, Options{"temperature": 0.2})
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/factory.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/factory.go
 package llm
 
 import (
@@ -3246,7 +3322,7 @@ func NewLLMClient(cfg *config.LLMConfig) (Client, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/giga.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/giga.go
 package llm
 
 import (
@@ -3457,7 +3533,7 @@ func (c *GigaChatClient) GetModelName() string {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/ollama.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/ollama.go
 package llm
 
 import (
@@ -3534,7 +3610,7 @@ func (c *OllamaClient) Generate(ctx context.Context, systemPrompt, userMessage s
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/tools.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/tools.go
 package llm
 
 import (
@@ -3574,7 +3650,9 @@ func initTools(svc services.ScheduleService) []Tool {
 					if err != nil {
 						return "", fmt.Errorf("get group with name %s: %w", groupName, err)
 					}
-					filter.GroupID = &group.ID
+					if group != nil {
+						filter.GroupID = &group.ID
+					}
 				}
 				if teacherName, ok := params["teacher_name"].(string); ok && teacherName != "" {
 					parts := strings.Fields(teacherName)
@@ -3586,14 +3664,18 @@ func initTools(svc services.ScheduleService) []Tool {
 					if err != nil {
 						return "", fmt.Errorf("get teacher with name %s: %w", teacherName, err)
 					}
-					filter.TeacherID = &teacher.User.ID
+					if teacher != nil {
+						filter.TeacherID = &teacher.User.ID
+					}
 				}
 				if audienceNumber, ok := params["audience_number"].(string); ok && audienceNumber != "" {
 					audience, err := svc.GetAudienceByNumber(ctx, audienceNumber)
 					if err != nil {
 						return "", fmt.Errorf("get audience with number %s: %w", audienceNumber, err)
 					}
-					filter.AudienceID = &audience.ID
+					if audience != nil {
+						filter.AudienceID = &audience.ID
+					}
 				}
 				if dayOfWeek, ok := params["day_of_week"].(float64); ok && int(dayOfWeek) != 0 {
 					intDay := int(dayOfWeek)
@@ -3627,19 +3709,13 @@ func initTools(svc services.ScheduleService) []Tool {
 				}
 
 				if len(schedule) > 0 {
-					for day := range 7 {
-						fmt.Fprintf(&builder, "%s: ", dayOfWeek[day])
-						for _, s := range schedule {
-							if s.DayOfWeek == day {
-								fmt.Fprintf(&builder, "Пара №%d: ", s.Number)
-								fmt.Fprintf(&builder, "%s ", s.Subject.Title)
-								fmt.Fprintf(&builder, "| %s ", s.Audience.Number)
-								fmt.Fprintf(&builder, "| %s ", s.Teacher.User.FullName)
-								fmt.Fprintf(&builder, "| %s\n", s.Subject.Group.Name)
-
-							}
-						}
-						builder.WriteString("\n")
+					for _, s := range schedule {
+						fmt.Fprintf(&builder, "%s: ", dayOfWeek[s.DayOfWeek])
+						fmt.Fprintf(&builder, "Пара №%d: ", s.Number)
+						fmt.Fprintf(&builder, "Предмет: %s ", s.Subject.Title)
+						fmt.Fprintf(&builder, "| Аудитория: %s ", s.Audience.Number)
+						fmt.Fprintf(&builder, "| Преподаватель: %s ", s.Teacher.User.FullName)
+						fmt.Fprintf(&builder, "| Группа: %s\n", s.Subject.Group.Name)
 					}
 				} else {
 					fmt.Fprintf(&builder, "Расписание отсутствует")
@@ -3701,7 +3777,9 @@ func initTools(svc services.ScheduleService) []Tool {
 					if err != nil {
 						return "", fmt.Errorf("get group with name %s: %w", groupName, err)
 					}
-					filter.GroupID = &group.ID
+					if group != nil {
+						filter.GroupID = &group.ID
+					}
 				}
 				if teacherName, ok := params["teacher_name"].(string); ok && teacherName != "" {
 					parts := strings.Fields(teacherName)
@@ -3710,17 +3788,21 @@ func initTools(svc services.ScheduleService) []Tool {
 					// 	name += string([]rune(parts[1])[0])
 					// }
 					teacher, err := svc.GetTeacherByName(ctx, name)
-					if err != nil || teacher == nil {
+					if err != nil {
 						return "", fmt.Errorf("get teacher with name %s: %w", teacherName, err)
 					}
-					filter.TeacherID = &teacher.User.ID
+					if teacher != nil {
+						filter.TeacherID = &teacher.User.ID
+					}
 				}
 				if audienceNumber, ok := params["audience_number"].(string); ok && audienceNumber != "" {
 					audience, err := svc.GetAudienceByNumber(ctx, audienceNumber)
 					if err != nil {
 						return "", fmt.Errorf("get audience with number %s: %w", audienceNumber, err)
 					}
-					filter.AudienceID = &audience.ID
+					if audience != nil {
+						filter.AudienceID = &audience.ID
+					}
 				}
 
 				periodYear, _ := params["period_year"].(string)
@@ -3759,13 +3841,13 @@ func initTools(svc services.ScheduleService) []Tool {
 
 				if len(lessons) > 0 {
 					for _, l := range lessons {
-						fmt.Fprintf(&builder, "Дата: %s | %s\n", l.Date.Format("02.01.2006"), dayOfWeek[int(l.Date.Weekday())])
+						fmt.Fprintf(&builder, "Дата: %s | %s | ", l.Date.Format("02.01.2006"), dayOfWeek[int(l.Date.Weekday())])
 						fmt.Fprintf(&builder, "Пара №%d: ", l.Number)
-						fmt.Fprintf(&builder, "%s ", l.Subject.Title)
-						fmt.Fprintf(&builder, "| %s ", l.Audience.Number)
-						fmt.Fprintf(&builder, "| %s ", l.Teacher.User.FullName)
-						fmt.Fprintf(&builder, "| %s ", l.Subject.Group.Name)
-						fmt.Fprintf(&builder, "| %s\n", lessonStatus[l.Status])
+						fmt.Fprintf(&builder, "Предмет: %s ", l.Subject.Title)
+						fmt.Fprintf(&builder, "| Аудитория: %s ", l.Audience.Number)
+						fmt.Fprintf(&builder, "| Преподаватель: %s ", l.Teacher.User.FullName)
+						fmt.Fprintf(&builder, "| Группа: %s ", l.Subject.Group.Name)
+						fmt.Fprintf(&builder, "| Стутус занятия: %s\n", lessonStatus[l.Status])
 					}
 					builder.WriteString("\n")
 				} else {
@@ -3780,7 +3862,7 @@ func initTools(svc services.ScheduleService) []Tool {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/middlewares/tokens.go
+Файл: /home/quigon/schedule-bot/services/core/internal/middlewares/tokens.go
 package middlewares
 
 import (
@@ -3835,7 +3917,7 @@ func (m *AuthMiddleware) AdminRequire(next http.Handler) http.Handler {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/models/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/models/schedule.go
 package models
 
 import "time"
@@ -3925,7 +4007,7 @@ type SubjectProgress struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/models/session.go
+Файл: /home/quigon/schedule-bot/services/core/internal/models/session.go
 package models
 
 import (
@@ -3944,7 +4026,7 @@ type Session struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/models/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/models/user.go
 package models
 
 import (
@@ -3993,7 +4075,7 @@ func (u *User) RequireRole(role string) bool {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/academic_period.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/academic_period.go
 package repository
 
 import (
@@ -4166,7 +4248,7 @@ func (r *AcademicPeriodRepo) Delete(ctx context.Context, id int) error {
 
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/audience.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/audience.go
 package repository
 
 import (
@@ -4283,7 +4365,7 @@ func (r *AudienceRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/group.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/group.go
 package repository
 
 import (
@@ -4410,7 +4492,7 @@ func (r *GroupRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/lesson_logs.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/lesson_logs.go
 package repository
 
 import (
@@ -4817,7 +4899,7 @@ func (r *LessonLogRepo) UpdateStatusWithTx(ctx context.Context, tx pgx.Tx, id in
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/role.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/role.go
 package repository
 
 import (
@@ -4927,7 +5009,7 @@ func (r *RoleRepo) GetRoles(ctx context.Context) ([]models.Role, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/schedule.go
 package repository
 
 import (
@@ -5299,7 +5381,7 @@ func (r *ScheduleRepo) DeleteWithTx(ctx context.Context, tx pgx.Tx, id int) erro
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/session.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/session.go
 package repository
 
 import (
@@ -5462,7 +5544,7 @@ func (r *SessionRepo) Delete(ctx context.Context, id pgtype.UUID) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/student.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/student.go
 package repository
 
 import (
@@ -5697,7 +5779,7 @@ func (r *StudentRepo) IsStudent(ctx context.Context, userID int) (bool, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/subject.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/subject.go
 package repository
 
 import (
@@ -5982,7 +6064,7 @@ func (r *SubjectRepo) DeleteSubject(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/teacher.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/teacher.go
 package repository
 
 import (
@@ -6187,7 +6269,7 @@ func (r *TeacherRepo) IsTeacher(ctx context.Context, userID int) (bool, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/user.go
 package repository
 
 import (
@@ -6519,7 +6601,7 @@ func (r *UserRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/router/router.go
+Файл: /home/quigon/schedule-bot/services/core/internal/router/router.go
 package router
 
 import (
@@ -6714,6 +6796,7 @@ func (r *Router) SetupRoutes() {
 				r.Post("/cancel/{id}", lessonLogHandler.CancelLesson)
 				r.Post("/reschedule", lessonLogHandler.RescheduleLesson)
 				r.Post("/complete", lessonLogHandler.CompleteLessonFromDate)
+				r.Get("/statistics", lessonLogHandler.GetLessonStatistics)
 			})
 			r.Get("/", lessonLogHandler.GetLessonLogs)
 		})
@@ -6729,7 +6812,7 @@ func (r *Router) Router() *chi.Mux {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/generate_user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/generate_user.go
 package services
 
 import (
@@ -6820,7 +6903,7 @@ func ensureUniqueUsername(ctx context.Context, userRepo *repository.UserRepo, ba
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/schedule.go
 package services
 
 import (
@@ -8214,8 +8297,104 @@ func (s *ScheduleService) CreateGroupWithCurriculumAndStudents(ctx context.Conte
 	}, nil
 }
 
+// GetLessonStatistics возвращает статистику занятий с учётом фильтров
+func (s *ScheduleService) GetLessonStatistics(ctx context.Context, req *dto.StatisticsRequest) (*dto.StatisticsResponse, error) {
+	filters := repository.LessonLogFilters{
+		GroupID:          req.GroupID,
+		TeacherID:        req.TeacherID,
+		SubjectID:        req.SubjectID,
+		AcademicPeriodID: req.AcademicPeriodID,
+	}
+	if filters.AcademicPeriodID == nil {
+		period, err := s.academicPeriodRepo.GetActive(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get active academic period: %w", err)
+		}
+		filters.AcademicPeriodID = &period.ID
+	}
+	logs, err := s.lessonLogRepo.GetAll(ctx, filters)
+	if err != nil {
+		return nil, fmt.Errorf("get lesson logs: %w", err)
+	}
+
+	// Группируем логи по предметам
+	statsMap := make(map[int]*dto.SubjectStatistics)
+	for _, log := range logs {
+		stat, ok := statsMap[log.SubjectID]
+		if !ok {
+			subj, err := s.subjectRepo.GetSubjectByID(ctx, log.SubjectID)
+			if err != nil || subj == nil {
+				continue
+			}
+			totalLessons := (subj.HoursLoad + 1) / 2
+			stat = &dto.SubjectStatistics{
+				SubjectID:    subj.ID,
+				SubjectTitle: subj.Title,
+				GroupID:      subj.GroupID,
+				GroupName:    subj.Group.Name,
+				TotalHours:   subj.HoursLoad,
+				TotalLessons: totalLessons,
+			}
+			statsMap[log.SubjectID] = stat
+		}
+		switch log.Status {
+		case models.LessonStatusCompleted:
+			stat.CompletedLessons++
+		case models.LessonStatusRescheduled:
+			stat.RescheduledLessons++
+		case models.LessonStatusCanceled:
+			stat.CancelledLessons++
+		case models.LessonStatusPlanned:
+			stat.PlannedLessons++
+		}
+	}
+
+	// Рассчитываем RemainingLessons, CompletionPercent, IsOnSchedule
+	totalCompletedAll := 0
+	totalLessonsAll := 0
+	totalRemainingAll := 0
+
+	for _, stat := range statsMap {
+		// Оставшиеся пары = всего - проведено
+		stat.RemainingLessons = stat.TotalLessons - stat.CompletedLessons
+		if stat.RemainingLessons < 0 {
+			stat.RemainingLessons = 0
+		}
+		if stat.TotalLessons > 0 {
+			stat.CompletionPercent = float64(stat.CompletedLessons) / float64(stat.TotalLessons) * 100
+		}
+		// Определяем, успеваем ли по графику: если к текущей дате проведено не меньше, чем ожидалось по равномерному распределению
+		// Для этого нужно знать дату начала предмета и окончания
+		if stat.PlannedLessons >= stat.RemainingLessons {
+			stat.IsOnSchedule = true
+		}
+		totalCompletedAll += stat.CompletedLessons
+		totalLessonsAll += stat.TotalLessons
+		totalRemainingAll += stat.RemainingLessons
+	}
+
+	// Общая статистика
+	overallProgress := 0.0
+	if totalLessonsAll > 0 {
+		overallProgress = float64(totalCompletedAll) / float64(totalLessonsAll) * 100
+	}
+
+	resp := &dto.StatisticsResponse{
+		TotalSubjects:       len(statsMap),
+		OverallProgress:     overallProgress,
+		TotalLessonsAll:     totalLessonsAll,
+		CompletedLessonsAll: totalCompletedAll,
+		RemainingLessonsAll: totalRemainingAll,
+		Subjects:            make([]dto.SubjectStatistics, 0, len(statsMap)),
+	}
+	for _, stat := range statsMap {
+		resp.Subjects = append(resp.Subjects, *stat)
+	}
+	return resp, nil
+}
+
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/tokens.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/tokens.go
 package services
 
 import (
@@ -8246,18 +8425,20 @@ func NewJWTService(secretKey []byte, expires time.Duration) *JWTService {
 	}
 }
 
-func (s *JWTService) GenerateToken(user *models.User, sessionID string) (string, error) {
+func (s *JWTService) GenerateToken(user *models.User, sessionID string) (string, time.Time, error) {
+	exiresAt := time.Now().Add(s.expires)
 	claims := CustomClaims{
 		User:  *user,
 		SessionID: sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.expires)),
+			ExpiresAt: jwt.NewNumericDate(exiresAt),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(s.secretKey)
+	accessToke, err := token.SignedString(s.secretKey)
+	return accessToke, exiresAt, err
 }
 
 func (s *JWTService) ValidateToken(tokenString string) (*CustomClaims, error) {
@@ -8288,7 +8469,7 @@ func (s *JWTService) GenerateRefreshToken() (string, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/user.go
 package services
 
 import (
@@ -8341,7 +8522,7 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 		return nil, err
 	}
 
-	accessToken, err := s.jwtService.GenerateToken(user, session.ID.String())
+	accessToken, exiresAt, err := s.jwtService.GenerateToken(user, session.ID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -8355,6 +8536,7 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 	return &dto.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
+		ExiresAt:     exiresAt.Unix(),
 		SessionID:    session.ID.String(),
 		Roles:        roles,
 	}, nil
@@ -8409,7 +8591,7 @@ func (s *UserService) RefreshToken(ctx context.Context, req *dto.RefreshTokenReq
 		return nil, err
 	}
 
-	accessToken, err := s.jwtService.GenerateToken(user, session.ID.String())
+	accessToken, exiresAt, err := s.jwtService.GenerateToken(user, session.ID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -8417,6 +8599,7 @@ func (s *UserService) RefreshToken(ctx context.Context, req *dto.RefreshTokenReq
 	return &dto.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
+		ExiresAt:     exiresAt.Unix(),
 	}, nil
 
 }
@@ -8518,7 +8701,7 @@ func (s *UserService) GetSessions(ctx context.Context) ([]models.Session, error)
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/utils.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/utils.go
 package services
 
 import "golang.org/x/crypto/bcrypt"
@@ -8534,7 +8717,7 @@ func checkPasswordHash(password, hash string) bool {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/pkg/postgres/postgres.go
+Файл: /home/quigon/schedule-bot/services/core/pkg/postgres/postgres.go
 package postgres
 
 import (
@@ -8576,7 +8759,7 @@ func NewPostgresPool(dsn string) (*pgxpool.Pool, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/pkg/utils/response.go
+Файл: /home/quigon/schedule-bot/services/core/pkg/utils/response.go
 package utils
 
 import (

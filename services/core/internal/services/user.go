@@ -50,7 +50,7 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 		return nil, err
 	}
 
-	accessToken, err := s.jwtService.GenerateToken(user, session.ID.String())
+	accessToken, exiresAt, err := s.jwtService.GenerateToken(user, session.ID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -64,6 +64,7 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 	return &dto.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
+		ExiresAt:     exiresAt.Unix(),
 		SessionID:    session.ID.String(),
 		Roles:        roles,
 	}, nil
@@ -118,7 +119,7 @@ func (s *UserService) RefreshToken(ctx context.Context, req *dto.RefreshTokenReq
 		return nil, err
 	}
 
-	accessToken, err := s.jwtService.GenerateToken(user, session.ID.String())
+	accessToken, exiresAt, err := s.jwtService.GenerateToken(user, session.ID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +127,7 @@ func (s *UserService) RefreshToken(ctx context.Context, req *dto.RefreshTokenReq
 	return &dto.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
+		ExiresAt:     exiresAt.Unix(),
 	}, nil
 
 }
