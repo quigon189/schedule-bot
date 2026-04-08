@@ -604,6 +604,14 @@ func (s *ScheduleService) GetAllScheduleTemplates(ctx context.Context, filters *
 		AcademicPeriodID: filters.AcademicPeriodID,
 	}
 
+	if repoFilters.AcademicPeriodID == nil {
+		period, err := s.academicPeriodRepo.GetActive(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get active academic period: %w", err)
+		}
+		repoFilters.AcademicPeriodID = &period.ID
+	}
+
 	return s.scheduleRepo.GetAll(ctx, repoFilters)
 }
 
@@ -1115,6 +1123,15 @@ func (s *ScheduleService) GetLessonLogs(ctx context.Context, filters *dto.Lesson
 		Number:           filters.Number,
 	}
 
+	if repoFilters.AcademicPeriodID == nil {
+		period, err := s.academicPeriodRepo.GetActive(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get active academic period: %w", err)
+		}
+
+		repoFilters.AcademicPeriodID = &period.ID
+	}
+
 	return s.lessonLogRepo.GetAll(ctx, repoFilters)
 }
 
@@ -1372,4 +1389,100 @@ func (s *ScheduleService) CreateGroupWithCurriculumAndStudents(ctx context.Conte
 		Subjects: createdSubjects,
 		Students: studentsResult,
 	}, nil
+}
+
+// GetLessonStatistics возвращает статистику занятий с учётом фильтров
+func (s *ScheduleService) GetLessonStatistics(ctx context.Context, req *dto.StatisticsRequest) (*dto.StatisticsResponse, error) {
+	filters := repository.LessonLogFilters{
+		GroupID:          req.GroupID,
+		TeacherID:        req.TeacherID,
+		SubjectID:        req.SubjectID,
+		AcademicPeriodID: req.AcademicPeriodID,
+	}
+	if filters.AcademicPeriodID == nil {
+		period, err := s.academicPeriodRepo.GetActive(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get active academic period: %w", err)
+		}
+		filters.AcademicPeriodID = &period.ID
+	}
+	logs, err := s.lessonLogRepo.GetAll(ctx, filters)
+	if err != nil {
+		return nil, fmt.Errorf("get lesson logs: %w", err)
+	}
+
+	// Группируем логи по предметам
+	statsMap := make(map[int]*dto.SubjectStatistics)
+	for _, log := range logs {
+		stat, ok := statsMap[log.SubjectID]
+		if !ok {
+			subj, err := s.subjectRepo.GetSubjectByID(ctx, log.SubjectID)
+			if err != nil || subj == nil {
+				continue
+			}
+			totalLessons := (subj.HoursLoad + 1) / 2
+			stat = &dto.SubjectStatistics{
+				SubjectID:    subj.ID,
+				SubjectTitle: subj.Title,
+				GroupID:      subj.GroupID,
+				GroupName:    subj.Group.Name,
+				TotalHours:   subj.HoursLoad,
+				TotalLessons: totalLessons,
+			}
+			statsMap[log.SubjectID] = stat
+		}
+		switch log.Status {
+		case models.LessonStatusCompleted:
+			stat.CompletedLessons++
+		case models.LessonStatusRescheduled:
+			stat.RescheduledLessons++
+		case models.LessonStatusCanceled:
+			stat.CancelledLessons++
+		case models.LessonStatusPlanned:
+			stat.PlannedLessons++
+		}
+	}
+
+	// Рассчитываем RemainingLessons, CompletionPercent, IsOnSchedule
+	totalCompletedAll := 0
+	totalLessonsAll := 0
+	totalRemainingAll := 0
+
+	for _, stat := range statsMap {
+		// Оставшиеся пары = всего - проведено
+		stat.RemainingLessons = stat.TotalLessons - stat.CompletedLessons
+		if stat.RemainingLessons < 0 {
+			stat.RemainingLessons = 0
+		}
+		if stat.TotalLessons > 0 {
+			stat.CompletionPercent = float64(stat.CompletedLessons) / float64(stat.TotalLessons) * 100
+		}
+		// Определяем, успеваем ли по графику: если к текущей дате проведено не меньше, чем ожидалось по равномерному распределению
+		// Для этого нужно знать дату начала предмета и окончания
+		if stat.PlannedLessons >= stat.RemainingLessons {
+			stat.IsOnSchedule = true
+		}
+		totalCompletedAll += stat.CompletedLessons
+		totalLessonsAll += stat.TotalLessons
+		totalRemainingAll += stat.RemainingLessons
+	}
+
+	// Общая статистика
+	overallProgress := 0.0
+	if totalLessonsAll > 0 {
+		overallProgress = float64(totalCompletedAll) / float64(totalLessonsAll) * 100
+	}
+
+	resp := &dto.StatisticsResponse{
+		TotalSubjects:       len(statsMap),
+		OverallProgress:     overallProgress,
+		TotalLessonsAll:     totalLessonsAll,
+		CompletedLessonsAll: totalCompletedAll,
+		RemainingLessonsAll: totalRemainingAll,
+		Subjects:            make([]dto.SubjectStatistics, 0, len(statsMap)),
+	}
+	for _, stat := range statsMap {
+		resp.Subjects = append(resp.Subjects, *stat)
+	}
+	return resp, nil
 }

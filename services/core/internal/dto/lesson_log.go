@@ -63,3 +63,38 @@ type LessonLogFiltersRequest struct {
 type GenerateScheduleRequest struct {
 	AcademicPeriodID int `json:"academic_period_id" validate:"required"`
 }
+
+// StatisticsRequest - фильтры для получения статистики занятий
+type StatisticsRequest struct {
+	GroupID          *int       `json:"group_id"`
+	TeacherID        *int       `json:"teacher_id"`
+	SubjectID        *int       `json:"subject_id"`
+	AcademicPeriodID *int       `json:"academic_period_id"`
+}
+
+// SubjectStatistics - статистика по одному предмету
+type SubjectStatistics struct {
+	SubjectID          int     `json:"subject_id"`
+	SubjectTitle       string  `json:"subject_title"`
+	GroupID            int     `json:"group_id"`
+	GroupName          string  `json:"group_name"`
+	TotalHours         int     `json:"total_hours"`          // общее количество часов
+	TotalLessons       int     `json:"total_lessons"`        // всего пар (1 пара = 2 часа)
+	CompletedLessons   int     `json:"completed_lessons"`    // проведено пар
+	RescheduledLessons int     `json:"rescheduled_lessons"`  // перенесено пар
+	CancelledLessons   int     `json:"cancelled_lessons"`    // отменено пар
+	PlannedLessons     int     `json:"planned_lessons"`      // запланировано на будущее
+	RemainingLessons   int     `json:"remaining_lessons"`    // осталось провести (всего - проведено - отменено)
+	CompletionPercent  float64 `json:"completion_percent"`   // процент выполнения (проведено / всего)
+	IsOnSchedule       bool    `json:"is_on_schedule"`       // идём ли по графику
+}
+
+// StatisticsResponse - ответ со статистикой
+type StatisticsResponse struct {
+	TotalSubjects       int                 `json:"total_subjects"`
+	OverallProgress     float64             `json:"overall_progress"`       // общий процент выполнения
+	TotalLessonsAll     int                 `json:"total_lessons_all"`      // всего пар по всем предметам
+	CompletedLessonsAll int                 `json:"completed_lessons_all"`  // проведено всего
+	RemainingLessonsAll int                 `json:"remaining_lessons_all"`  // осталось провести всего
+	Subjects            []SubjectStatistics `json:"subjects"`
+}

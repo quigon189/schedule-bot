@@ -192,6 +192,7 @@ func (r *Router) SetupRoutes() {
 				r.Post("/cancel/{id}", lessonLogHandler.CancelLesson)
 				r.Post("/reschedule", lessonLogHandler.RescheduleLesson)
 				r.Post("/complete", lessonLogHandler.CompleteLessonFromDate)
+				r.Get("/statistics", lessonLogHandler.GetLessonStatistics)
 			})
 			r.Get("/", lessonLogHandler.GetLessonLogs)
 		})

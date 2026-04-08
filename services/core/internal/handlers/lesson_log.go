@@ -143,3 +143,42 @@ func (h *LessonLogHandler) CompleteLessonFromDate(w http.ResponseWriter, r *http
 	utils.SuccessResponse(w, "lesson status changed to completed", nil)
 
 }
+
+// GetLessonStatistics возвращает статистику занятий
+func (h *LessonLogHandler) GetLessonStatistics(w http.ResponseWriter, r *http.Request) {
+	var filters dto.StatisticsRequest
+
+	// Парсим query параметры
+	if groupID := r.URL.Query().Get("group_id"); groupID != "" {
+		id, err := strconv.Atoi(groupID)
+		if err == nil {
+			filters.GroupID = &id
+		}
+	}
+	if teacherID := r.URL.Query().Get("teacher_id"); teacherID != "" {
+		id, err := strconv.Atoi(teacherID)
+		if err == nil {
+			filters.TeacherID = &id
+		}
+	}
+	if subjectID := r.URL.Query().Get("subject_id"); subjectID != "" {
+		id, err := strconv.Atoi(subjectID)
+		if err == nil {
+			filters.SubjectID = &id
+		}
+	}
+	if periodID := r.URL.Query().Get("academic_period_id"); periodID != "" {
+		id, err := strconv.Atoi(periodID)
+		if err == nil {
+			filters.AcademicPeriodID = &id
+		}
+	}
+
+	stats, err := h.scheduleService.GetLessonStatistics(r.Context(), &filters)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get lesson statistics: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "lesson statistics retrieved", stats)
+}

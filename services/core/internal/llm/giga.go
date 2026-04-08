@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -162,8 +161,6 @@ func (c *GigaChatClient) Generate(ctx context.Context, systemPrompt, userPrompt 
 	if err != nil {
 		return "", fmt.Errorf("marshal request: %w", err)
 	}
-
-	log.Printf("Запрос к GigaChat: %s", string(jsonData))
 
 	// другой url для запросов
 	url := "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"

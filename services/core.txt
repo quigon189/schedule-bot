@@ -862,6 +862,114 @@
 - При массовом создании расписания на семестр проверяется отсутствие конфликтов (преподаватель, аудитория, группа в одно время).
 - Пагинация для списков пользователей и предметов реализована стандартными параметрами `page`, `per_page`, `sort_by`, `sort_order`.
 
+## Дополнения к API документации
+
+### 1. Эндпоинт создания группы с учебным планом и студентами
+
+**POST `/groups/with-curriculum`** (требуется роль `admin`)  
+Создаёт учебную группу, список предметов (учебный план) и список студентов с автоматической генерацией логинов и паролей.
+
+**Тело запроса**:
+```json
+{
+  "group": {
+    "name": "ИС-51",
+    "specialty": "Информационные системы",
+    "admission_year": 2025
+  },
+  "subjects": [
+    {
+      "title": "Математика",
+      "semester": 1,
+      "hours_load": 72,
+      "start_date": "2025-09-01",
+      "end_date": "2025-12-31"
+    }
+  ],
+  "students": [
+    {
+      "full_name": "Иванов Иван Иванович",
+      "email": "ivanov@example.com"
+    }
+  ]
+}
+```
+
+**Поля**:
+- `group` (object, обязательное) – данные группы (поля `name`, `specialty`, `admission_year`).
+- `subjects` (array, обязательное, минимум 1 элемент) – массив предметов, каждый с полями:
+  - `title` – название предмета
+  - `semester` – номер семестра (1-10)
+  - `hours_load` – общее количество часов
+  - `start_date` – дата начала изучения (YYYY-MM-DD)
+  - `end_date` – дата окончания (YYYY-MM-DD)
+- `students` (array, обязательное, минимум 1 элемент) – массив студентов, каждый с полями:
+  - `full_name` – ФИО
+  - `email` – email (должен быть валидным)
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "group with curriculum and students created",
+  "data": {
+    "group": { ... },
+    "subjects": [ ... ],
+    "students": [
+      {
+        "user": { ... },
+        "password": "сгенерированный_пароль",
+        "group_id": 123
+      }
+    ]
+  }
+}
+```
+
+**Примечания**:
+- Логин студента генерируется автоматически на основе ФИО и номера группы (например, `501ivanov`).
+- Пароль генерируется случайным образом (10 символов) и возвращается в ответе.
+- Предметы привязываются к созданной группе.
+- Студентам автоматически назначается роль `student` и привязка к группе.
+
+---
+
+### 2. Эндпоинт чат-бота (LLM ассистент)
+
+**POST `/chat`** (требуется аутентификация)  
+Отправляет сообщение ассистенту, который умеет отвечать на вопросы о расписании, используя инструменты (например, получение расписания группы). Если запрос не связан с расписанием, отвечает как обычный ассистент.
+
+**Тело запроса**:
+```json
+{
+  "message": "string"   // обязательное, текст запроса пользователя
+}
+```
+
+**Успешный ответ (200 OK)**:
+```json
+{
+  "success": true,
+  "message": "ok",
+  "data": {
+    "reply": "текст ответа ассистента"
+  }
+}
+```
+
+**Пример запроса**:
+```json
+{
+  "message": "Покажи расписание группы 501 на эту неделю"
+}
+```
+
+**Примечания**:
+- Ассистент сам определяет, нужно ли вызывать инструменты (например, `get_schedule_group`).
+- Поддерживаются вопросы о расписании на сегодня, завтра, неделю, с указанием группы и учебного периода.
+- При отсутствии необходимых параметров (например, номера группы) ассистент может запросить уточнение.
+- Используется LLM-провайдер, заданный в конфигурации (Ollama или GigaChat).
+
 --- 
 
 *Документация актуальна на основе исходного кода сервиса `core`.*
@@ -2952,11 +3060,13 @@ package llm
 
 import (
 	"context"
+	"core/internal/models"
 	"core/internal/services"
 	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
+	"time"
 )
 
 type Options map[string]any
@@ -2989,10 +3099,32 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 
 	toolsJSON, _ := json.MarshalIndent(a.tools, "", "  ")
 
+	now := time.Now()
+	var userInfo strings.Builder
+	user, ok := ctx.Value("user").(models.User)
+	if ok {
+		fmt.Fprintf(&userInfo, "Полное имя: %s\n", user.FullName)
+		fmt.Fprintf(&userInfo, "Роли:")
+		roles := map[string]string{
+			"user":    "Пользователь",
+			"student": "Студент",
+			"teacher": "Преподаватель",
+			"manager": "Управляющий",
+			"admin":   "Администратор",
+		}
+		for _, role := range user.Roles {
+			fmt.Fprintf(&userInfo, " %s", roles[role.Name])
+		}
+		userInfo.WriteString("\n")
+	}
+
 	systemPrompt := fmt.Sprintf(`Ты — ассистент по расписанию занятий. Твоя задача — понять, какую информацию хочет получить пользователь, и выбрать подходящий инструмент из списка ниже.
 
 ## Доступные инструменты:
 %s
+
+## Дополниетльная информация:
+- Текущая дата: %s
 
 ## Правила:
 1. Если пользователь спрашивает о расписании (сегодня, завтра, на неделю), используй get_group_schedule
@@ -3004,13 +3136,19 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 - Для дат используй формат YYYY-MM-DD
 
 Ответь ТОЛЬКО JSON-объектом в формате:
-{"action": "имя_инструмента", "params": {"параметр": "значение"}}`, string(toolsJSON))
+{"action": "имя_инструмента", "params": {"параметр": "значение"}}`, string(toolsJSON), now.Format("2006-01-02"))
 
-	log.Printf("Запрос пользователя: %s", userMessage)
+
+	userPrompt := fmt.Sprintf(`Информация о пользователе:
+%s
+Сообщение:
+%s`, userInfo.String(), userMessage)
+
 	log.Printf("Системная строка: %s", systemPrompt)
+	log.Printf("Запрос пользователя: %s", userPrompt)
 
 	// 2. Получаем решение от LLM
-	actionResp, err := a.client.Generate(ctx, systemPrompt, userMessage, Options{"temperature": 0})
+	actionResp, err := a.client.Generate(ctx, systemPrompt, userPrompt, Options{"temperature": 0})
 	if err != nil {
 		return "", fmt.Errorf("LLM action selection failed: %w", err)
 	}
@@ -3051,7 +3189,9 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 	}
 
 	// 5. Формируем финальный ответ на основе полученных данных
-	return a.formatResponse(ctx, userMessage, result)
+	// return a.formatResponse(ctx, userMessage, result)
+	// Тестово пробуем вернуть ответ пользователю
+	return result, nil
 }
 
 // directAnswer - прямой ответ от LLM без вызова инструментов
@@ -3117,7 +3257,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -3272,8 +3411,6 @@ func (c *GigaChatClient) Generate(ctx context.Context, systemPrompt, userPrompt 
 		return "", fmt.Errorf("marshal request: %w", err)
 	}
 
-	log.Printf("Запрос к GigaChat: %s", string(jsonData))
-
 	// другой url для запросов
 	url := "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
@@ -3405,8 +3542,9 @@ import (
 	"core/internal/dto"
 	"core/internal/services"
 	"fmt"
-	"log"
+	"slices"
 	"strings"
+	"time"
 )
 
 type Tool struct {
@@ -3419,48 +3557,64 @@ type Tool struct {
 func initTools(svc services.ScheduleService) []Tool {
 	return []Tool{
 		{
-			Name:        "get_schedule_group",
-			Description: "Получить основное расписание группы (без изменений) на неделю для указаного учебного периода. Можешь использовать его, если в запросе указаны на понедельник, на вторник и т.д. до конца недели; а так же на неделю и похожие запросы",
+			Name:        "get_schedule",
+			Description: "Получить основное расписание занятий заданное на конкретный учебный период, сформированно заранее на чебную неделю для групп, преподавателей и аудиторий",
 			Parameters: map[string]string{
-				"group_name":      "string, обязательный, трехзначиное число (например 501)",
+				"group_name":      "string, опциональный, трехзначное число (например 501)",
+				"teacher_name":    "string, опциональный, только фамилия преподавателя (может содержать имя или первую букву имени)",
+				"audience_number": "string, опциональный, номер аудитории трехзначное число, может в конце содержать букву (например 409 или 502а)",
+				"day_of_week":     "int, опциональный, порядковый номер дня недели (например для понедельника - 1)",
 				"period_year":     "string, опциональный, учебный период указывающий года обучения в формате YYYY/YYYY (например 2025/2026); если не указан, то подставляется текущий активный период",
 				"period_semester": "int, опциональный (должен быть задан, если задан period_year), указывает семестр учебного года, принимает одно из двух значений: 1 или 2",
 			},
 			Handler: func(ctx context.Context, params map[string]any) (string, error) {
-				log.Printf("Параметры: %+v", params)
-				groupName, ok := params["group_name"].(string)
-				if !ok {
-					return "", fmt.Errorf("group_name обязательный параметр")
-				}
-
-				var periodID *int
-				periodYear, ok := params["period_year"].(string)
-				if ok && periodYear != "" {
-					semester, okk := params["period_semester"].(float64)
-					if !okk {
-						return "", fmt.Errorf("period_semester обязательный, если указан period_year")
-					}
-
-					period, err := svc.GetAcademicPeriodByYear(ctx, periodYear, int(semester))
+				filter := dto.ScheduleFiltersRequest{}
+				if groupName, ok := params["group_name"].(string); ok && groupName != "" {
+					group, err := svc.GetGroupByName(ctx, groupName)
 					if err != nil {
-						return "", fmt.Errorf("get academic period: %w", err)
+						return "", fmt.Errorf("get group with name %s: %w", groupName, err)
 					}
-
-					periodID = &period.ID
+					filter.GroupID = &group.ID
+				}
+				if teacherName, ok := params["teacher_name"].(string); ok && teacherName != "" {
+					parts := strings.Fields(teacherName)
+					name := parts[0]
+					if len(parts) >= 2 {
+						name += string([]rune(parts[1])[0])
+					}
+					teacher, err := svc.GetTeacherByName(ctx, name)
+					if err != nil {
+						return "", fmt.Errorf("get teacher with name %s: %w", teacherName, err)
+					}
+					filter.TeacherID = &teacher.User.ID
+				}
+				if audienceNumber, ok := params["audience_number"].(string); ok && audienceNumber != "" {
+					audience, err := svc.GetAudienceByNumber(ctx, audienceNumber)
+					if err != nil {
+						return "", fmt.Errorf("get audience with number %s: %w", audienceNumber, err)
+					}
+					filter.AudienceID = &audience.ID
+				}
+				if dayOfWeek, ok := params["day_of_week"].(float64); ok && int(dayOfWeek) != 0 {
+					intDay := int(dayOfWeek)
+					filter.DayOfWeek = &intDay
+				}
+				periodYear, _ := params["period_year"].(string)
+				periodSemester, _ := params["period_semester"].(float64)
+				if periodYear != "" && int(periodSemester) != 0 {
+					period, err := svc.GetAcademicPeriodByYear(ctx, periodYear, int(periodSemester))
+					if err == nil {
+						filter.AcademicPeriodID = &period.ID
+					}
 				}
 
-				group, err := svc.GetGroupByName(ctx, groupName)
+				schedule, err := svc.GetAllScheduleTemplates(ctx, &filter)
 				if err != nil {
-					return "", fmt.Errorf("get group by name: %w", err)
+					return "", fmt.Errorf("get schedule: %w", err)
 				}
-
-				schedule, err := svc.GetAllScheduleTemplates(ctx, &dto.ScheduleFiltersRequest{
-					GroupID:          &group.ID,
-					AcademicPeriodID: periodID,
-				})
 
 				var builder strings.Builder
-				builder.WriteString("### Основное распиание занятий для группы " + group.Name + ":\n\n")
+				builder.WriteString("Расписание:\n\n")
 
 				dayOfWeek := map[int]string{
 					1: "Понедельник",
@@ -3472,15 +3626,154 @@ func initTools(svc services.ScheduleService) []Tool {
 					7: "Воскресенье",
 				}
 
-				for _, s := range schedule {
-					fmt.Fprintf(&builder, "[%s] Пара №%d\n", dayOfWeek[s.DayOfWeek], s.Number)
-					fmt.Fprintf(&builder, "- Предмет: %s\n", s.Subject.Title)
-					fmt.Fprintf(&builder, "- Аудитория: %s\n", s.Audience.Number)
-					fmt.Fprintf(&builder, "- Преподаватель: %s\n", s.Teacher.User.FullName)
-					builder.WriteString("\n")
+				if len(schedule) > 0 {
+					for day := range 7 {
+						fmt.Fprintf(&builder, "%s: ", dayOfWeek[day])
+						for _, s := range schedule {
+							if s.DayOfWeek == day {
+								fmt.Fprintf(&builder, "Пара №%d: ", s.Number)
+								fmt.Fprintf(&builder, "%s ", s.Subject.Title)
+								fmt.Fprintf(&builder, "| %s ", s.Audience.Number)
+								fmt.Fprintf(&builder, "| %s ", s.Teacher.User.FullName)
+								fmt.Fprintf(&builder, "| %s\n", s.Subject.Group.Name)
+
+							}
+						}
+						builder.WriteString("\n")
+					}
+				} else {
+					fmt.Fprintf(&builder, "Расписание отсутствует")
 				}
 
 				return builder.String(), nil
+
+			},
+		},
+		{
+			Name:        "get_lessons",
+			Description: "Получить спискок занятий по заданным фильтрам, используй когда пользователь хочет узнать занятия или расписание на определенную дату",
+			Parameters: map[string]string{
+				"date_from":       "string, опциональный, начальная дата в формате ГГГГ-ММ-ДД",
+				"date_to":         "string, опциональный, конечная дата в формате ГГГГ-ММ-ДД",
+				"status":          "string, опциональный, одно из 4 значений planned - запланировано на основе расписания, canceled - отменено, rescheduled - подставлено, completed - проведено",
+				"number":          "int, опциональный, номер занятия (пары)",
+				"group_name":      "string, опциональный, трехзначное число (например 501)",
+				"teacher_name":    "string, опциональный, только фамилия преподавателя (может содержать имя или первую букву имени)",
+				"audience_number": "string, опциональный, номер аудитории трехзначное число, может в конце содержать букву (например 409 или 502а)",
+			},
+			Handler: func(ctx context.Context, params map[string]any) (string, error) {
+				filter := dto.LessonLogFiltersRequest{}
+				if dateF, ok := params["date_from"].(string); ok && dateF != "" {
+					dateFrom, err := time.Parse("2006-01-02", dateF)
+					if err != nil {
+						return "", fmt.Errorf("parse date_from: %w", err)
+					}
+					filter.DateFrom = &dateFrom
+				}
+				if dateT, ok := params["date_to"].(string); ok && dateT != "" {
+					dateTo, err := time.Parse("2006-01-02", dateT)
+					if err != nil {
+						return "", fmt.Errorf("parse date_to: %w", err)
+					}
+					filter.DateTo = &dateTo
+				} else {
+					if dateF, ok := params["date_from"].(string); ok && dateF != "" {
+						dateFrom, err := time.Parse("2006-01-02", dateF)
+						if err != nil {
+							return "", fmt.Errorf("parse date_from: %w", err)
+						}
+						filter.DateTo = &dateFrom
+					}
+				}
+
+				if status, ok := params["status"].(string); ok && status != "" {
+					statuses := []string{"planned", "canceled", "rescheduled", "completed"}
+					if slices.Contains(statuses, status) {
+						filter.Status = &status
+					}
+				}
+				if number, ok := params["number"].(float64); ok && number != 0 {
+					intNumber := int(number)
+					filter.Number = &intNumber
+				}
+				if groupName, ok := params["group_name"].(string); ok && groupName != "" {
+					group, err := svc.GetGroupByName(ctx, groupName)
+					if err != nil {
+						return "", fmt.Errorf("get group with name %s: %w", groupName, err)
+					}
+					filter.GroupID = &group.ID
+				}
+				if teacherName, ok := params["teacher_name"].(string); ok && teacherName != "" {
+					parts := strings.Fields(teacherName)
+					name := parts[0]
+					// if len(parts) >= 2 {
+					// 	name += string([]rune(parts[1])[0])
+					// }
+					teacher, err := svc.GetTeacherByName(ctx, name)
+					if err != nil || teacher == nil {
+						return "", fmt.Errorf("get teacher with name %s: %w", teacherName, err)
+					}
+					filter.TeacherID = &teacher.User.ID
+				}
+				if audienceNumber, ok := params["audience_number"].(string); ok && audienceNumber != "" {
+					audience, err := svc.GetAudienceByNumber(ctx, audienceNumber)
+					if err != nil {
+						return "", fmt.Errorf("get audience with number %s: %w", audienceNumber, err)
+					}
+					filter.AudienceID = &audience.ID
+				}
+
+				periodYear, _ := params["period_year"].(string)
+				periodSemester, _ := params["period_semester"].(float64)
+				if periodYear != "" && int(periodSemester) != 0 {
+					period, err := svc.GetAcademicPeriodByYear(ctx, periodYear, int(periodSemester))
+					if err == nil {
+						filter.AcademicPeriodID = &period.ID
+					}
+				}
+
+				lessons, err := svc.GetLessonLogs(ctx, &filter)
+				if err != nil {
+					return "", fmt.Errorf("get lessons: %w", err)
+				}
+
+				var builder strings.Builder
+				dayOfWeek := map[int]string{
+					1: "Понедельник",
+					2: "Вторник",
+					3: "Среда",
+					4: "Четверг",
+					5: "Пятница",
+					6: "Суббота",
+					7: "Воскресенье",
+				}
+
+				lessonStatus := map[string]string{
+					"planned":     "По расписанию",
+					"canceled":    "Отменена",
+					"rescheduled": "Подставлена",
+					"completed":   "Проведена",
+				}
+
+				fmt.Fprintf(&builder, "Расписание занятий\n")
+
+				if len(lessons) > 0 {
+					for _, l := range lessons {
+						fmt.Fprintf(&builder, "Дата: %s | %s\n", l.Date.Format("02.01.2006"), dayOfWeek[int(l.Date.Weekday())])
+						fmt.Fprintf(&builder, "Пара №%d: ", l.Number)
+						fmt.Fprintf(&builder, "%s ", l.Subject.Title)
+						fmt.Fprintf(&builder, "| %s ", l.Audience.Number)
+						fmt.Fprintf(&builder, "| %s ", l.Teacher.User.FullName)
+						fmt.Fprintf(&builder, "| %s ", l.Subject.Group.Name)
+						fmt.Fprintf(&builder, "| %s\n", lessonStatus[l.Status])
+					}
+					builder.WriteString("\n")
+				} else {
+					fmt.Fprintf(&builder, "Занятия отсутствуют")
+				}
+
+				return builder.String(), nil
+
 			},
 		},
 	}
@@ -3919,6 +4212,26 @@ func (r *AudienceRepo) Get(ctx context.Context, id int) (*models.Audience, error
 	}
 
 	return &audience, nil
+}
+
+func (r *AudienceRepo) GetByNumber(ctx context.Context, number string) (*models.Audience, error) {
+	var audience models.Audience
+	query := `
+	SELECT id, name, number
+	FROM schedule.audiences
+	WHERE number = $1
+	`
+	err := r.db.QueryRow(ctx, query, number).Scan(
+		&audience.ID,
+		&audience.Name,
+		&audience.Number,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &audience, nil
+
 }
 
 func (r *AudienceRepo) GetAll(ctx context.Context) ([]models.Audience, error) {
@@ -4414,8 +4727,8 @@ func (r *LessonLogRepo) GetAllWithTx(ctx context.Context, tx pgx.Tx, filters Les
 
 		subject.Group = group
 		log.Subject = subject
-		log.Teacher = teacher
 		teacher.User = user
+		log.Teacher = teacher
 		log.Audience = audience
 		log.AcademicPeriod = period
 
@@ -5676,6 +5989,7 @@ import (
 	"context"
 	"core/internal/models"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -5781,6 +6095,53 @@ func (r *TeacherRepo) GetTeacherByUserID(ctx context.Context, userID int) (*mode
 	return &teacher, nil
 }
 
+func (r *TeacherRepo) GetTeacherByName(ctx context.Context, name string) (*models.Teacher, error) {
+	var teacher models.Teacher
+	query := `
+	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at
+	FROM auth.users u
+	JOIN auth.teacher_profiles tp ON u.id = tp.user_id
+	WHERE u.full_name ILIKE '%' || $1 || '%'
+	`
+	err := r.db.QueryRow(ctx, query, strings.ToLower(name)).Scan(
+		&teacher.User.ID,
+		&teacher.User.Name,
+		&teacher.User.FullName,
+		&teacher.User.Email,
+		&teacher.User.PasswordHash,
+		&teacher.User.CreatedAt,
+		&teacher.User.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	query = `
+	SELECT r.id, r.name, r.description
+	FROM auth.roles r
+	JOIN auth.user_roles ur ON r.id = ur.role_id
+	WHERE ur.user_id = $1
+	`
+	rows, err := r.db.Query(ctx, query, teacher.User.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var role models.Role
+		if err := rows.Scan(&role.ID, &role.Name, &role.Description); err != nil {
+			return nil, err
+		}
+		teacher.User.Roles = append(teacher.User.Roles, role)
+	}
+
+	return &teacher, nil
+
+}
+
 func (r *TeacherRepo) GetAllTeachers(ctx context.Context) ([]models.Teacher, error) {
 	query := `
 	SELECT u.id, u.username, u.full_name, u.email, u.password_hash, u.created_at, u.updated_at
@@ -5818,7 +6179,7 @@ func (r *TeacherRepo) DeleteTeacher(ctx context.Context, userID int) error {
 	return err
 }
 
-func ( r *TeacherRepo) IsTeacher(ctx context.Context, userID int) (bool, error) {
+func (r *TeacherRepo) IsTeacher(ctx context.Context, userID int) (bool, error) {
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM auth.teacher_profiles WHERE user_id = $1)`
 	err := r.db.QueryRow(ctx, query, userID).Scan(&exists)
@@ -6521,6 +6882,10 @@ func (s *ScheduleService) GetAudience(ctx context.Context, id int) (*models.Audi
 	return s.audienceRepo.Get(ctx, id)
 }
 
+func (s *ScheduleService) GetAudienceByNumber(ctx context.Context, number string) (*models.Audience, error) {
+	return s.audienceRepo.GetByNumber(ctx, number)
+}
+
 func (s *ScheduleService) GetAllAudience(ctx context.Context) ([]models.Audience, error) {
 	return s.audienceRepo.GetAll(ctx)
 }
@@ -6617,6 +6982,10 @@ func (s *ScheduleService) CreateTeacher(ctx context.Context, req *dto.CreateUser
 
 func (s *ScheduleService) GetTeacher(ctx context.Context, userID int) (*models.Teacher, error) {
 	return s.teacherRepo.GetTeacherByUserID(ctx, userID)
+}
+
+func (s *ScheduleService) GetTeacherByName(ctx context.Context, name string) (*models.Teacher, error) {
+	return s.teacherRepo.GetTeacherByName(ctx, name)
 }
 
 func (s *ScheduleService) GetAllTeachers(ctx context.Context) ([]models.Teacher, error) {
@@ -7056,6 +7425,14 @@ func (s *ScheduleService) GetAllScheduleTemplates(ctx context.Context, filters *
 		DayOfWeek:        filters.DayOfWeek,
 		WeekType:         filters.WeekType,
 		AcademicPeriodID: filters.AcademicPeriodID,
+	}
+
+	if repoFilters.AcademicPeriodID == nil {
+		period, err := s.academicPeriodRepo.GetActive(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get active academic period: %w", err)
+		}
+		repoFilters.AcademicPeriodID = &period.ID
 	}
 
 	return s.scheduleRepo.GetAll(ctx, repoFilters)
@@ -7569,6 +7946,15 @@ func (s *ScheduleService) GetLessonLogs(ctx context.Context, filters *dto.Lesson
 		Number:           filters.Number,
 	}
 
+	if repoFilters.AcademicPeriodID == nil {
+		period, err := s.academicPeriodRepo.GetActive(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get active academic period: %w", err)
+		}
+
+		repoFilters.AcademicPeriodID = &period.ID
+	}
+
 	return s.lessonLogRepo.GetAll(ctx, repoFilters)
 }
 
@@ -7721,7 +8107,7 @@ func (s *ScheduleService) CompleteLessonFromDate(ctx context.Context, date time.
 		if lesson.Status == models.LessonStatusCanceled {
 			continue
 		}
-		if err := s.lessonLogRepo.UpdateStatusWithTx(ctx, tx, lesson.ID, models.LessonStatusCanceled, comment); err != nil {
+		if err := s.lessonLogRepo.UpdateStatusWithTx(ctx, tx, lesson.ID, models.LessonStatusCompleted, comment); err != nil {
 			return fmt.Errorf("update status for lesson %d: %w", lesson.ID, err)
 		}
 	}
