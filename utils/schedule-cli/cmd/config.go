@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"schedule-cli/internal/prompts"
 
 	"github.com/spf13/cobra"
 )
@@ -12,15 +13,25 @@ var configCmd = &cobra.Command{
 }
 
 var serverCmd = &cobra.Command{
-	Use:   "server [base_url]",
+	Use:   "server",
 	Short: "Set base url for server",
-	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := cfgManager.SetBaseURL(args[0]); err != nil {
-			fmt.Printf("Failed to set base url: %v\n", err)
+		baseURL := prompts.AskString("Base URL:", true, func(val any) error { return nil })
+		timeout := prompts.AskInt("Timeout (sec):", 30, 100000)
+		if err := cfgManager.SetBaseURL(baseURL); err != nil {
+			msg := fmt.Sprintf("Failed to set base url: %v\n", err)
+			prompts.ShowError(msg)
 			return
 		}
-		fmt.Printf("Set base url to %s\n", args[0])
+		if err := cfgManager.SetTimeout(timeout); err != nil {
+			msg := fmt.Sprintf("Failed to set timeout: %v\n", err)
+			prompts.ShowError(msg)
+			return
+		}
+		msg := fmt.Sprintf("Set server config:\n")
+		msg += fmt.Sprintf("    Base URL: %s\n", baseURL)
+		msg += fmt.Sprintf("    Timeout: %d\n", timeout)
+		prompts.ShowSuccess(msg)
 	},
 }
 

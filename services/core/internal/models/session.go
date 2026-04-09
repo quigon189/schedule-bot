@@ -7,10 +7,10 @@ import (
 )
 
 type Session struct {
-	ID           pgtype.UUID
-	RefreshToken string
-	UserAgent    string
-	ClientIP     string
-	User         *User
-	CreatedAt    time.Time
+	ID           pgtype.UUID `json:"uuid"`
+	RefreshToken string      `json:"-"`
+	UserAgent    string      `json:"user_agent"`
+	ClientIP     string      `json:"client_ip"`
+	User         *User       `json:"user"`
+	CreatedAt    time.Time   `json:"created_at"`
 }

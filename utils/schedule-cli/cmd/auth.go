@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"schedule-cli/internal/config"
 	"schedule-cli/internal/models"
+	"schedule-cli/internal/prompts"
 
 	"github.com/spf13/cobra"
 )
@@ -16,18 +17,20 @@ var authCmd = &cobra.Command{
 var loginCmd = &cobra.Command{
     Use:   "login [username] [password]",
     Short: "Login and obtain tokens",
-    Args:  cobra.ExactArgs(2),
     Run: func(cmd *cobra.Command, args []string) {
 
+		username := prompts.AskUsername("")
+		password := prompts.AskPassword(false)
+
 		err := apiClient.Login(models.LoginRequest{
-			Username: args[0],
-			Password: args[1],
+			Username: username,
+			Password: password,
 		})
         if err != nil {
-            fmt.Println("Login failed:", err)
+			prompts.ShowError(fmt.Sprintf("Login failed: %v", err))
             return
         }
-        fmt.Println("Login successful")
+		prompts.ShowSuccess("Loggin successful")
     },
 }
 
@@ -37,9 +40,9 @@ var logoutCmd = &cobra.Command{
     Run: func(cmd *cobra.Command, args []string) {
         err := apiClient.Get("/logout", map[string]string{}, nil)
         if err != nil {
-            fmt.Println("Logout error:", err)
+			prompts.ShowError("Logout error:" + err.Error())
         } else {
-            fmt.Println("Logged out")
+            prompts.ShowSuccess("Logged out")
         }
        	cfgManager.UpdateToken(config.UpdateToken{
 			AccessToken: "",
@@ -56,10 +59,10 @@ var refreshCmd = &cobra.Command{
     Run: func(cmd *cobra.Command, args []string) {
         err := apiClient.Refresh()
         if err != nil {
-            fmt.Println("Refresh failed:", err)
+			prompts.ShowError("Refresh failed:" + err.Error())
             return
         }
-        fmt.Println("Token refreshed")
+		prompts.ShowSuccess("Token refreshed")
     },
 }
 

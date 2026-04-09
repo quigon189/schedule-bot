@@ -2,20 +2,21 @@ package cmd
 
 import (
 	"fmt"
+	"schedule-cli/internal/prompts"
 
 	"github.com/spf13/cobra"
 )
 
 var userCmd = &cobra.Command{
-	Use: "user",
+	Use:   "user",
 	Short: "Get current user info",
 	Run: func(cmd *cobra.Command, args []string) {
 		resp := make(map[string]any)
 		query := make(map[string]string)
 		if err := apiClient.Get("/user", query, &resp); err != nil {
-			fmt.Printf("Failed to get user info: %v", err)
+			prompts.ShowError(fmt.Sprintf("Failed to get user info: %v", err))
 			return
 		}
-		fmt.Printf("User info:\n%v\n", resp)
+		prompts.ShowSuccess(fmt.Sprintf("User info:\n%v\n", resp))
 	},
 }
