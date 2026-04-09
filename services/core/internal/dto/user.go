@@ -31,3 +31,7 @@ type UpdateUserPasswordRequest struct {
 	NewPassword string `json:"new_password" validate:"required,min=6"`
 	OldPassword string `json:"old_password" validate:"required,min=6"`
 }
+
+type UserFilter struct {
+	FullName *string
+}

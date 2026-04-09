@@ -172,6 +172,10 @@ func (s *UserService) CreateUser(ctx context.Context, req *dto.CreateUserRequest
 	return &user, nil
 }
 
+func (s *UserService) GetAllUsers(ctx context.Context, req *dto.UserFilter) ([]models.User, error) {
+	return s.userRepo.GetAll(ctx, req)
+}
+
 func (s *UserService) GetPaginatedUsers(ctx context.Context, req *dto.PagiantedUserRequest) (*dto.PaginatedUsers, error) {
 	page := req.Page
 	perPage := req.PerPage

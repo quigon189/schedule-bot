@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"core/internal/dto"
 	"core/internal/models"
 	"core/internal/services"
@@ -42,7 +43,7 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, "user created", user)
 }
 
-func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) GetPaginatedUsers(w http.ResponseWriter, r *http.Request) {
 	var req dto.PagiantedUserRequest
 	req.Page, _ = strconv.Atoi(r.URL.Query().Get("page"))
 	req.PerPage, _ = strconv.Atoi(r.URL.Query().Get("per_page"))
@@ -58,17 +59,31 @@ func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, "paginated users", users)
 }
 
-func (h *UserHandler) GetUser(w http.ResponseWriter, r* http.Request) {
+func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
+	var req dto.UserFilter
+	fullName := r.URL.Query().Get("full_name")
+	req.FullName = &fullName
+
+	users, err := h.userService.GetAllUsers(r.Context(), &req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get users: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "ok", users)
+}
+
+func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid path value: %v", err))
 		return
 	}
 
-	user, err := h.userService.GetUser(r.Context(), id)	
+	user, err := h.userService.GetUser(r.Context(), id)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get user wtih id %d: %v", id, err))
-		return 
+		return
 	}
 
 	utils.SuccessResponse(w, "get user success", user)

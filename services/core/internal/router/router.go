@@ -91,6 +91,7 @@ func (r *Router) SetupRoutes() {
 
 			r.Route("/users", func(r chi.Router) {
 				r.Get("/", userHandler.GetUsers)
+				r.Get("/paginated", userHandler.GetPaginatedUsers)
 				r.Get("/{id}", userHandler.GetUser)
 				r.Post("/", userHandler.CreateUser)
 
