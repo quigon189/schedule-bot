@@ -87,7 +87,16 @@ func (c *APIClient) Refresh() error {
 	})
 }
 
+func (c *APIClient) Logout() error {
+	return c.Get("/logout", map[string]string{}, nil)
+}
+
 func (c *APIClient) Login(req models.LoginRequest) error {
+	cfg := c.cfgMgr.Get()
+	if cfg.SessionID != "" {
+		c.Logout()
+	}
+
 	var resp models.LoginResponse
 	headers := map[string]string{
 		"User-Agent": "schedule-cli",
@@ -104,21 +113,30 @@ func (c *APIClient) Login(req models.LoginRequest) error {
 	})
 }
 
-func (c *APIClient) Get(path string, query map[string]string, result any) error {
+func (c *APIClient) getAccessToken() (string, error) {
 	cfg := c.cfgMgr.Get()
 	expiresAt := time.Unix(cfg.ExpiresAt, 0)
 	if time.Now().After(expiresAt) {
 		if cfg.RefreshToken == "" {
-			return  fmt.Errorf("you must login")
+			return "", fmt.Errorf("you must login")
 		}
 		if err := c.Refresh(); err != nil {
-			return fmt.Errorf("refresh token: %w", err)
+			return "", fmt.Errorf("refresh token: %w", err)
 		}
 		cfg = c.cfgMgr.Get()
 	}
 
+	return cfg.AccessToken, nil
+}
+
+func (c *APIClient) Get(path string, query map[string]string, result any) error {
+	accessToken, err := c.getAccessToken()
+	if err != nil {
+		return err
+	}
+
 	headrs := map[string]string{
-		"Authorization": "Bearer "+cfg.AccessToken,
+		"Authorization": "Bearer " + accessToken,
 	}
 
 	u, err := url.Parse(path)
@@ -133,4 +151,40 @@ func (c *APIClient) Get(path string, query map[string]string, result any) error 
 	u.RawQuery = q.Encode()
 
 	return c.doRequest("GET", u.String(), headrs, nil, result)
+}
+
+func (c *APIClient) Post(path string, body map[string]any, result any) error {
+	accessToken, err := c.getAccessToken()
+	if err != nil {
+		return err
+	}
+
+	heares := map[string]string{
+		"Authorization": "Bearer " + accessToken,
+	}
+
+	u, err := url.Parse(path)
+	if err != nil {
+		return fmt.Errorf("parse url path")
+	}
+
+	return c.doRequest("POST", u.String(), heares, body, result)
+}
+
+func (c *APIClient) Patch(path string, body map[string]any, result any) error {
+	accessToken, err := c.getAccessToken()
+	if err != nil {
+		return err
+	}
+
+	heares := map[string]string{
+		"Authorization": "Bearer " + accessToken,
+	}
+
+	u, err := url.Parse(path)
+	if err != nil {
+		return fmt.Errorf("parse url path")
+	}
+
+	return c.doRequest("PATCH", u.String(), heares, body, result)
 }

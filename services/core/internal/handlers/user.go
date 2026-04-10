@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"core/internal/dto"
 	"core/internal/models"
 	"core/internal/services"
@@ -61,8 +60,12 @@ func (h *UserHandler) GetPaginatedUsers(w http.ResponseWriter, r *http.Request) 
 
 func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	var req dto.UserFilter
-	fullName := r.URL.Query().Get("full_name")
-	req.FullName = &fullName
+	if fullName := r.URL.Query().Get("full_name"); fullName != "" {
+		req.FullName = &fullName
+	}
+	if username := r.URL.Query().Get("username"); username != "" {
+		req.Username = &username
+	}
 
 	users, err := h.userService.GetAllUsers(r.Context(), &req)
 	if err != nil {

@@ -31,7 +31,7 @@ var serverCmd = &cobra.Command{
 		msg := fmt.Sprintf("Set server config:\n")
 		msg += fmt.Sprintf("    Base URL: %s\n", baseURL)
 		msg += fmt.Sprintf("    Timeout: %d\n", timeout)
-		prompts.ShowSuccess(msg)
+		prompts.ShowSuccess(msg, nil)
 	},
 }
 

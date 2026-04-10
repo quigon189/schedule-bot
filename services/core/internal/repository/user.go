@@ -268,7 +268,7 @@ func (r *UserRepo) GetUsersPaginated(ctx context.Context, page, perPage int, sor
 
 func (r *UserRepo) GetAll(ctx context.Context, filters *dto.UserFilter) ([]models.User, error) {
 	var conditions []string
-	var args []string
+	var args []any
 	argIndex := 1
 
 	var users []models.User
@@ -278,16 +278,23 @@ func (r *UserRepo) GetAll(ctx context.Context, filters *dto.UserFilter) ([]model
 	FROM auth.users 
 	`
 
-	if filters.FullName!= nil {
+	if filters.FullName != nil {
 		conditions = append(conditions, fmt.Sprintf("full_name ILIKE '%%' || $%d || '%%'", argIndex))
 		args = append(args, *filters.FullName)
+		argIndex++
+	}
+
+	if filters.Username != nil {
+		conditions = append(conditions, fmt.Sprintf("username = $%d", argIndex))
+		args = append(args, *filters.Username)
+		argIndex++
 	}
 
 	if len(conditions) > 0 {
 		query += "\nWHERE " + strings.Join(conditions, " AND ")
 	}
 
-	row, err := r.db.Query(ctx, query)
+	row, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

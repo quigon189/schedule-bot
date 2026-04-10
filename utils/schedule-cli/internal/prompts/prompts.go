@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/amterp/jsoncolor"
 	"github.com/fatih/color"
 )
 
@@ -152,8 +153,17 @@ func AskConfirm(message string, def bool) bool {
 }
 
 // ShowSuccess выводит зеленое сообщение об успехе
-func ShowSuccess(message string) {
-	successStyle.Println("✓ " + message)
+func ShowSuccess(message string, data any) {
+	if data == nil {
+		successStyle.Println("✓ " + message)
+	} else {
+		msg, err := jsoncolor.MarshalIndent(data, "", "  ")
+		if err != nil {
+			fmt.Println("Failed to marshal data: ", err)
+			fmt.Println("Data: ", data)
+		}
+		successStyle.Println("✓ " + message + "\n" + string(msg))
+	}
 }
 
 // ShowError выводит красное сообщение об ошибке

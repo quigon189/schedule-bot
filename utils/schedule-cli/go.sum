@@ -2,6 +2,10 @@ github.com/AlecAivazis/survey/v2 v2.3.7 h1:6I/u8FvytdGsgonrYsVn2t8t4QiRnh6QSTqkk
 github.com/AlecAivazis/survey/v2 v2.3.7/go.mod h1:xUTIdE4KCOIjsBAE1JYsUPoCqYdZ1reCfTwbto0Fduo=
 github.com/Netflix/go-expect v0.0.0-20220104043353-73e0943537d2 h1:+vx7roKuyA63nhn5WAunQHLTznkw5W8b1Xc0dNjp83s=
 github.com/Netflix/go-expect v0.0.0-20220104043353-73e0943537d2/go.mod h1:HBCaDeC1lPdgDeDbhX8XFpy1jqjK0IBG8W5K+xYqA0w=
+github.com/amterp/color v1.20.0 h1:3qR8miQeGMfd++ExLt5xUdMWWYYwohdix6jLMSyXbWM=
+github.com/amterp/color v1.20.0/go.mod h1:XRJ2OonPd9eRKRg6ddVJc6Yv/rvjzMhn+qdIDHKjE04=
+github.com/amterp/jsoncolor v0.4.0 h1:X8QegRunhKC0HZ4PBQbUsSa5mfMqMIai9a3ipQbi+uc=
+github.com/amterp/jsoncolor v0.4.0/go.mod h1:/tXCJaCsrNNd8QpW/hqc0uz1yT2VzzaTbk9svkczlDM=
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/creack/pty v1.1.17 h1:QeVUsEDNrLBW4tMgZHvxy18sKtr6VI492kBhUfhDJNI=
 github.com/creack/pty v1.1.17/go.mod h1:MOBLtS5ELjhRRrroQr9kyvTxUAFNvYEK993ew/Vr4O4=

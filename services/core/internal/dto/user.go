@@ -29,9 +29,10 @@ type PagiantedUserRequest struct {
 type UpdateUserPasswordRequest struct {
 	UserID      int    `json:"user_id"`
 	NewPassword string `json:"new_password" validate:"required,min=6"`
-	OldPassword string `json:"old_password" validate:"required,min=6"`
+	OldPassword string `json:"old_password"`
 }
 
 type UserFilter struct {
 	FullName *string
+	Username *string
 }

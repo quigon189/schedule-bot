@@ -33,6 +33,7 @@ func Execute() {
 	rootCmd.AddCommand(configCmd)
     rootCmd.AddCommand(userCmd)
 	rootCmd.AddCommand(adminCmd)
+	rootCmd.AddCommand(chatCmd)
     // ... добавить остальные команды
     if err := rootCmd.Execute(); err != nil {
         log.Fatal(err)

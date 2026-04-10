@@ -10,14 +10,14 @@ import (
 )
 
 var authCmd = &cobra.Command{
-    Use:   "auth",
-    Short: "Authentication commands",
+	Use:   "auth",
+	Short: "Authentication commands",
 }
 
 var loginCmd = &cobra.Command{
-    Use:   "login [username] [password]",
-    Short: "Login and obtain tokens",
-    Run: func(cmd *cobra.Command, args []string) {
+	Use:   "login [username] [password]",
+	Short: "Login and obtain tokens",
+	Run: func(cmd *cobra.Command, args []string) {
 
 		username := prompts.AskUsername("")
 		password := prompts.AskPassword(false)
@@ -26,46 +26,46 @@ var loginCmd = &cobra.Command{
 			Username: username,
 			Password: password,
 		})
-        if err != nil {
+		if err != nil {
 			prompts.ShowError(fmt.Sprintf("Login failed: %v", err))
-            return
-        }
-		prompts.ShowSuccess("Loggin successful")
-    },
+			return
+		}
+		prompts.ShowSuccess("Loggin successful", nil)
+	},
 }
 
 var logoutCmd = &cobra.Command{
-    Use:   "logout",
-    Short: "Logout current session",
-    Run: func(cmd *cobra.Command, args []string) {
-        err := apiClient.Get("/logout", map[string]string{}, nil)
-        if err != nil {
+	Use:   "logout",
+	Short: "Logout current session",
+	Run: func(cmd *cobra.Command, args []string) {
+		err := apiClient.Logout()
+		if err != nil {
 			prompts.ShowError("Logout error:" + err.Error())
-        } else {
-            prompts.ShowSuccess("Logged out")
-        }
-       	cfgManager.UpdateToken(config.UpdateToken{
-			AccessToken: "",
+		} else {
+			prompts.ShowSuccess("Logged out", nil)
+		}
+		cfgManager.UpdateToken(config.UpdateToken{
+			AccessToken:  "",
 			RefreshToken: "",
-			SessionID: "",
-			ExpiresAt: 0,
-		}) 
-    },
+			SessionID:    "",
+			ExpiresAt:    0,
+		})
+	},
 }
 
 var refreshCmd = &cobra.Command{
-    Use:   "refresh",
-    Short: "Refresh access token",
-    Run: func(cmd *cobra.Command, args []string) {
-        err := apiClient.Refresh()
-        if err != nil {
+	Use:   "refresh",
+	Short: "Refresh access token",
+	Run: func(cmd *cobra.Command, args []string) {
+		err := apiClient.Refresh()
+		if err != nil {
 			prompts.ShowError("Refresh failed:" + err.Error())
-            return
-        }
-		prompts.ShowSuccess("Token refreshed")
-    },
+			return
+		}
+		prompts.ShowSuccess("Token refreshed", nil)
+	},
 }
 
 func init() {
-    authCmd.AddCommand(loginCmd, logoutCmd, refreshCmd)
+	authCmd.AddCommand(loginCmd, logoutCmd, refreshCmd)
 }

@@ -17,6 +17,6 @@ var userCmd = &cobra.Command{
 			prompts.ShowError(fmt.Sprintf("Failed to get user info: %v", err))
 			return
 		}
-		prompts.ShowSuccess(fmt.Sprintf("User info:\n%v\n", resp))
+		prompts.ShowSuccess("User info:", resp)
 	},
 }
