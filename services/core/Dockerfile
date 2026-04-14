@@ -14,9 +14,27 @@ FROM alpine:latest
 
 RUN addgroup -S app && adduser -S app -G app
 
+RUN apk add --no-cache \
+    ca-certificates \
+    fontconfig \
+    freetype \
+    libstdc++ \
+    libx11 \
+    libxext \
+    libxrender \
+    libssl3 \
+    ttf-freefont \
+    ttf-liberation
+
 WORKDIR /app
 
 COPY --from=builder /app/core .
+
+COPY --from=surnet/alpine-wkhtmltopdf:3.19.0-0.12.6-full \
+    /bin/wkhtmltopdf \
+    /bin/wkhtmltoimage \
+    /bin/libwkhtmltox* \
+    /bin/
 
 USER app
 

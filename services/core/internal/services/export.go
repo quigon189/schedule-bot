@@ -5,6 +5,8 @@ import (
 	"context"
 	"core/internal/models"
 	"fmt"
+	"os"
+	"os/exec"
 	"text/template"
 )
 
@@ -82,7 +84,38 @@ func (s *ScheduleExportService) ExportGroupSchedule(ctx context.Context, groupID
 		return nil, "", fmt.Errorf("render HTML: %w", err)
 	}
 
-	return htmlContent, "text/html", nil
+	if format == FormatHTML {
+		return htmlContent, "text/html", nil
+	}
+
+	tmpFile, err := os.CreateTemp("", "schedule_*.html")
+	if err != nil {
+		return nil, "", fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.Write(htmlContent); err != nil {
+		return nil, "", fmt.Errorf("write temp file: %w", err)
+	}
+	defer tmpFile.Close()
+
+	var out []byte
+	var mime string
+	switch format {
+	case FormatPDF:
+		out, err = convertHTMLToPDF(tmpFile.Name())
+		mime = "application/pdf"
+	case FormatPNG:
+		out, err = convertHTMLToPNG(tmpFile.Name())
+		mime = "image/png"
+	default:
+		return nil, "", fmt.Errorf("unsupported format: %s", format)
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("convert to %s: %w", format, err)
+	}
+
+	return out, mime, nil
 }
 
 func buildScheduleDate(group *models.Group, period *models.AcademicPeriod, templates []models.ScheduleTemplate) GroupScheduleData {
@@ -169,6 +202,16 @@ func renderScheduleHTML(data GroupScheduleData) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func convertHTMLToPDF(htmlPath string) ([]byte, error) {
+	cmd := exec.Command("wkhtmltopdf", "--enable-local-file-access", htmlPath, "-")
+	return cmd.Output()
+}
+
+func convertHTMLToPNG(htmlPath string) ([]byte, error) {
+    cmd := exec.Command("wkhtmltoimage", "--enable-local-file-access", htmlPath, "-")
+    return cmd.Output()
 }
 
 const tmplStr = `<!DOCTYPE html>
