@@ -469,6 +469,10 @@ func (s *ScheduleService) GetAcademicPeriodByID(ctx context.Context, id int) (*m
 	return s.academicPeriodRepo.GetByID(ctx, id)
 }
 
+func (s *ScheduleService) GetActiveAcademicPeriod(ctx context.Context) (*models.AcademicPeriod, error) {
+	return s.academicPeriodRepo.GetActive(ctx)
+}
+
 func (s *ScheduleService) GetAcademicPeriodByYear(ctx context.Context, year string, semester int) (*models.AcademicPeriod, error) {
 	return s.academicPeriodRepo.GetByYear(ctx, year, semester)
 }

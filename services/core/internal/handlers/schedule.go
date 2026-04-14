@@ -15,10 +15,14 @@ import (
 
 type ScheduleHandler struct {
 	scheduleService *services.ScheduleService
+	exportService   *services.ScheduleExportService
 }
 
 func NewScheduleHandler(scheduleService *services.ScheduleService) *ScheduleHandler {
-	return &ScheduleHandler{scheduleService: scheduleService}
+	return &ScheduleHandler{
+		scheduleService: scheduleService,
+		exportService: services.NewScheduleExportService(scheduleService),
+	}
 }
 
 // CreateScheduleTemplate создает новую запись в расписании
@@ -254,4 +258,42 @@ func (h *ScheduleHandler) CreateSemesterSchedule(w http.ResponseWriter, r *http.
 	}
 
 	utils.SuccessResponse(w, "semester schedule created successfully", nil)
+}
+
+func (h *ScheduleHandler) ExportGroupSchedule(w http.ResponseWriter, r *http.Request) {
+	groupID, err := strconv.Atoi(chi.URLParam(r, "group_id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid group id")
+	}
+
+	periodIDStr := r.URL.Query().Get("period_id")
+	var periodID *int
+	if periodIDStr != "" {
+		pid, err := strconv.Atoi(periodIDStr)
+		if err == nil {
+			periodID = &pid
+		}
+	}
+
+	formatStr := r.URL.Query().Get("format")
+	if formatStr == "" {
+		formatStr = "html"
+	}
+
+	format := services.ExportFormat(formatStr)
+	if format != services.FormatHTML && format != services.FormatPDF && format != services.FormatPNG {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid format, must be html, pdf or png")
+		return
+	}
+
+	content, mime, err := h.exportService.ExportGroupSchedule(r.Context(), groupID, periodID, format)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to export schedule: %v", err))
+		return
+	}
+
+	filename := fmt.Sprintf("schedule_group_%d.%s", groupID, format)
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	w.Write(content)
 }

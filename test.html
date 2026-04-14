@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Расписание СА-501</title>
+    <style>
+        /* Настройки страницы для экспорта */
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+            background-color: #ffffff;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 15mm;
+            margin: 0 auto;
+            box-sizing: border-box;
+            background: white;
+        }
+
+        /* Заголовок */
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 22pt;
+            color: #333;
+        }
+
+        .header p {
+            margin: 5px 0;
+            font-size: 14pt;
+            color: #666;
+        }
+
+        /* Стили дня недели */
+        .day-title {
+            font-weight: bold;
+            font-size: 16pt;
+            margin-top: 20px;
+            margin-bottom: 8px;
+            color: #2c3e50;
+            border-bottom: 2px solid #eee; /* Тонкая подчеркивающая линия для структуры */
+        }
+
+        /* Таблица занятий */
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+
+        .schedule-table td {
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            font-size: 11pt;
+            vertical-align: middle;
+        }
+
+        /* Ширина колонок */
+        .col-number { width: 5%; text-align: center; font-weight: bold; background: #f8f9fa; }
+        .col-subject { width: 55%; }
+        .col-teacher { width: 30%; font-style: italic; }
+        .col-room    { width: 10%; text-align: center; }
+
+        /* Чтобы избежать разрыва таблицы при печати в PDF */
+        .day-container {
+            page-break-inside: avoid;
+            margin-bottom: 15px;
+        }
+
+		/* Добавляем стили для четности */
+    .week-type {
+        font-size: 8pt;
+        color: #888;
+        text-transform: uppercase;
+        display: block;
+        margin-bottom: 2px;
+    }
+    
+    /* Выделение строк для визуального разделения внутри одной пары */
+    .row-odd { background-color: #fff; }
+    .row-even { background-color: #fafafa; }
+    
+    .schedule-table td {
+        line-height: 1.2;
+    }
+    </style>
+</head>
+<body>
+
+<div class="page">
+    <div class="header">
+        <h1>Расписание группы СА-501</h1>
+        <p>2 семестр 2025/2026 уч.г.</p>
+    </div>
+
+	
+	<div class="day-container">
+		<div class="day-title">Понедельник</div>
+		<table class="schedule-table">
+			
+				
+					<!-- Вариант: Обычная пара -->
+					<tr>
+						<td class="col-number">1</td>
+						<td class="col-subject">Эксплуатация</td>
+						<td class="col-teacher">Лятти А.А.</td>
+						<td class="col-room">409</td>
+					</tr>
+				
+			
+				
+					<!-- Вариант: Обычная пара -->
+					<tr>
+						<td class="col-number">2</td>
+						<td class="col-subject">Организация</td>
+						<td class="col-teacher">Лятти А.А.</td>
+						<td class="col-room">409</td>
+					</tr>
+				
+			
+		</table>
+	</div>
+    
+	<div class="day-container">
+		<div class="day-title">Вторник</div>
+		<table class="schedule-table">
+			
+				
+					<!-- Вариант: Обычная пара -->
+					<tr>
+						<td class="col-number"></td>
+						<td class="col-subject">День самостоятельной работы</td>
+						<td class="col-teacher"></td>
+						<td class="col-room"></td>
+					</tr>
+				
+			
+		</table>
+	</div>
+    
+	<div class="day-container">
+		<div class="day-title">Среда</div>
+		<table class="schedule-table">
+			
+				
+					<!-- Вариант: Разные предметы для Четной/Нечетной -->
+					<tr class="row-odd">
+						<td class="col-number" rowspan="2">4</td>
+						<td class="col-subject"><span class="week-type">Нечетная</span>Организация</td>
+						<td class="col-teacher">Лятти А.А.</td>
+						<td class="col-room">409</td>
+					</tr>
+					<tr class="row-even">
+						<!-- Номер пары пропущен, так как он объединен (rowspan) -->
+						<td class="col-subject"><span class="week-type">Четная</span></td>
+						<td class="col-teacher"></td>
+						<td class="col-room"></td>
+					</tr>
+				
+			
+		</table>
+	</div>
+    
+	<div class="day-container">
+		<div class="day-title">Четверг</div>
+		<table class="schedule-table">
+			
+				
+					<!-- Вариант: Обычная пара -->
+					<tr>
+						<td class="col-number"></td>
+						<td class="col-subject">День самостоятельной работы</td>
+						<td class="col-teacher"></td>
+						<td class="col-room"></td>
+					</tr>
+				
+			
+		</table>
+	</div>
+    
+	<div class="day-container">
+		<div class="day-title">Пятница</div>
+		<table class="schedule-table">
+			
+				
+					<!-- Вариант: Обычная пара -->
+					<tr>
+						<td class="col-number"></td>
+						<td class="col-subject">День самостоятельной работы</td>
+						<td class="col-teacher"></td>
+						<td class="col-room"></td>
+					</tr>
+				
+			
+		</table>
+	</div>
+    
+	<div class="day-container">
+		<div class="day-title">Суббота</div>
+		<table class="schedule-table">
+			
+				
+					<!-- Вариант: Обычная пара -->
+					<tr>
+						<td class="col-number"></td>
+						<td class="col-subject">День самостоятельной работы</td>
+						<td class="col-teacher"></td>
+						<td class="col-room"></td>
+					</tr>
+				
+			
+		</table>
+	</div>
+    
+</div>
+
+</body>
+</html>

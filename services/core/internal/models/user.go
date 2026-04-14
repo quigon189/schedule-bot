@@ -1,7 +1,9 @@
 package models
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -37,6 +39,27 @@ type Student struct {
 
 type Teacher struct {
 	User User `json:"user"`
+}
+
+func (u *User) GetShortName() string {
+	fields := strings.Fields(u.FullName)
+	if len(fields) == 1 {
+		return fields[0]
+	}
+
+	if len(fields) == 2 {
+		return fmt.Sprintf("%s %s.", fields[0], string([]rune(fields[1])[0]))
+	}
+
+	if len(fields) == 3 {
+		return fmt.Sprintf("%s %s.%s.", fields[0], string([]rune(fields[1])[0]), string([]rune(fields[2])[0]))
+	}
+
+	if len(fields) > 3 {
+		return fmt.Sprintf("%s %s.", fields[0], string([]rune(fields[1])[0]))
+	}
+
+	return ""
 }
 
 func (u *User) RequireRole(role string) bool {
