@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"regexp"
 	"schedule-cli/internal/models"
 	"schedule-cli/internal/prompts"
 	"time"
@@ -60,6 +61,100 @@ var usersListCmd = &cobra.Command{
 	},
 }
 
+var usersCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "create user",
+	Run: func(cmd *cobra.Command, args []string) {
+		username := prompts.AskString("Username", true, func(val any) error {
+			re := regexp.MustCompile(`^[A-Za-z0-9_]{3,30}$`)
+			u, ok := val.(string)
+			if ok && re.MatchString(u) {
+				return nil
+			}
+			return fmt.Errorf("invalid")
+		})
+		password := prompts.AskPassword(false)
+		fullName := prompts.AskString("Full name", true, func(val any) error { return nil })
+		email := prompts.AskString("Email", true, func(val any) error { return nil })
+
+		req := map[string]any{
+			"username":  username,
+			"password":  password,
+			"full_name": fullName,
+			"email":     email,
+		}
+
+		if err := apiClient.Post("/admin/users", req, nil); err != nil {
+			prompts.ShowError(err.Error())
+			return
+		}
+
+		users := []map[string]any{}
+		query := map[string]string{
+			"username": username,
+		}
+		if err := apiClient.Get("/admin/users", query, &users); err != nil {
+			prompts.ShowError(err.Error())
+			return
+		}
+
+		prompts.ShowSuccess("user created", users)
+	},
+}
+
+var studentCreateCmd = &cobra.Command{
+	Use:   "student",
+	Short: "create student profile",
+	Run: func(cmd *cobra.Command, args []string) {
+		groupName := prompts.AskString("Group Name", true, func(val any) error { return nil })
+		group := map[string]any{}
+		query := map[string]string{
+			"group_name": groupName,
+		}
+		if err := apiClient.Get("/groups", query, &group); err != nil {
+			prompts.ShowError(err.Error())
+			return
+		}
+
+		username := prompts.AskString("Username", true, func(val any) error {
+			re := regexp.MustCompile(`^[A-Za-z0-9_]{3,30}$`)
+			u, ok := val.(string)
+			if ok && re.MatchString(u) {
+				return nil
+			}
+			return fmt.Errorf("invalid")
+		})
+		password := prompts.AskPassword(false)
+		fullName := prompts.AskString("Full name", true, func(val any) error { return nil })
+		email := prompts.AskString("Email", true, func(val any) error { return nil })
+
+		req := map[string]any{
+			"username":  username,
+			"password":  password,
+			"full_name": fullName,
+			"email":     email,
+			"group_id":  group["id"],
+		}
+
+		if err := apiClient.Post("/students", req, nil); err != nil {
+			prompts.ShowError(err.Error())
+			return
+		}
+
+		users := []map[string]any{}
+		query = map[string]string{
+			"username": username,
+		}
+		if err := apiClient.Get("/admin/users", query, &users); err != nil {
+			prompts.ShowError(err.Error())
+			return
+		}
+
+		prompts.ShowSuccess("student created", users)
+
+	},
+}
+
 var changeUserPasswordCmd = &cobra.Command{
 	Use:   "passsword",
 	Short: "Change user password",
@@ -89,7 +184,7 @@ var changeUserPasswordCmd = &cobra.Command{
 		}
 
 		body := map[string]any{
-			"user_id":           int(userID),
+			"user_id":      int(userID),
 			"new_password": password,
 		}
 
@@ -103,6 +198,7 @@ var changeUserPasswordCmd = &cobra.Command{
 }
 
 func init() {
-	usersCmd.AddCommand(usersListCmd, changeUserPasswordCmd)
+	usersCreateCmd.AddCommand(studentCreateCmd)
+	usersCmd.AddCommand(usersCreateCmd, usersListCmd, changeUserPasswordCmd)
 	adminCmd.AddCommand(sessionsCmd, usersCmd)
 }

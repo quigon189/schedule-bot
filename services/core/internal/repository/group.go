@@ -59,6 +59,35 @@ func (r *GroupRepo) GetByID(ctx context.Context, id int) (*models.Group, error) 
 		}
 		return nil, err
 	}
+
+	query = `
+	SELECT u.id, u.username, u.full_name, u.email
+	FROM auth.users u
+	JOIN auth.student_profiles sp ON u.id = sp.user_id
+	WHERE sp.group_id = $1
+	ORDER BY u.full_name
+	`
+	rows, err := r.db.Query(ctx, query, group.ID)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
+		}
+		return &group, nil
+	}
+
+	for rows.Next() {
+		var student models.User
+		if err := rows.Scan(
+			&student.ID,
+			&student.Name,
+			&student.FullName,
+			&student.Email,
+		); err != nil {
+			return &group, nil
+		}
+		group.Students = append(group.Students, student)
+	}
+
 	return &group, nil
 }
 

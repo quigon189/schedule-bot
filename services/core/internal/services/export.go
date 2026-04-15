@@ -16,7 +16,18 @@ const (
 	FormatHTML ExportFormat = "html"
 	FormatPDF  ExportFormat = "pdf"
 	FormatPNG  ExportFormat = "png"
+	FormatDOCX ExportFormat = "docx"
 )
+
+var daysOfWeek = map[int]string{
+	1: "Понедельник",
+	2: "Вторник",
+	3: "Среда",
+	4: "Четверг",
+	5: "Пятница",
+	6: "Суббота",
+	7: "Воскресенье",
+}
 
 type ScheduleExportService struct {
 	scheduleService *ScheduleService
@@ -24,6 +35,16 @@ type ScheduleExportService struct {
 
 func NewScheduleExportService(scheduleService *ScheduleService) *ScheduleExportService {
 	return &ScheduleExportService{scheduleService: scheduleService}
+}
+
+type ScheduleData struct {
+	Title          string
+	AcademicPeriod string
+	Days           []Day
+	WidthCol0      string
+	WidthCol1      string
+	WidthCol2      string
+	WidthCol3      string
 }
 
 type GroupScheduleData struct {
@@ -47,9 +68,73 @@ type Lesson struct {
 }
 
 type LessonDetails struct {
-	Subject  string
-	Teacher  string
-	Audience string
+	Col1 string
+	Col2 string
+	Col3 string
+}
+
+func (s *ScheduleExportService) ExportTeacherSchedule(ctx context.Context, teacherID int, periodID *int, format ExportFormat) ([]byte, string, error) {
+	var period *models.AcademicPeriod
+	var err error
+	if periodID != nil {
+		period, err = s.scheduleService.GetAcademicPeriodByID(ctx, *periodID)
+		if err != nil {
+			return nil, "", fmt.Errorf("get academic period: %w", err)
+		}
+	} else {
+		period, err = s.scheduleService.GetActiveAcademicPeriod(ctx)
+		if err != nil {
+			return nil, "", fmt.Errorf("get active academic period: %w", err)
+		}
+	}
+
+	teacher, err := s.scheduleService.GetTeacher(ctx, teacherID)
+	if err != nil {
+		return nil, "", fmt.Errorf("get teacher: %w", err)
+	}
+	if teacher == nil {
+		return nil, "", fmt.Errorf("teacher %d not found", teacherID)
+	}
+
+	templates, err := s.scheduleService.GetTeacherSchedule(ctx, teacherID, periodID)
+	if err != nil {
+		return nil, "", fmt.Errorf("get teacher schedule: %w", err)
+	}
+
+	data := buildTeacherScheduleData(teacher, period, templates)
+	return convert(data, format)
+}
+
+func (s *ScheduleExportService) ExportAudienceSchedule(ctx context.Context, audienceID int, periodID *int, format ExportFormat) ([]byte, string, error) {
+	var period *models.AcademicPeriod
+	var err error
+	if periodID != nil {
+		period, err = s.scheduleService.GetAcademicPeriodByID(ctx, *periodID)
+		if err != nil {
+			return nil, "", fmt.Errorf("get academic period: %w", err)
+		}
+	} else {
+		period, err = s.scheduleService.GetActiveAcademicPeriod(ctx)
+		if err != nil {
+			return nil, "", fmt.Errorf("get active academic period: %w", err)
+		}
+	}
+
+	audience, err := s.scheduleService.GetAudience(ctx, audienceID)
+	if err != nil {
+		return nil, "", fmt.Errorf("get audience: %w", err)
+	}
+	if audience == nil {
+		return nil, "", fmt.Errorf("audience %d not found", audienceID)
+	}
+
+	templates, err := s.scheduleService.GetAudienceSchedule(ctx, audienceID, periodID)
+	if err != nil {
+		return nil, "", fmt.Errorf("get audience schedule: %w", err)
+	}
+
+	data := buildAudienceScheduleData(audience, period, templates)
+	return convert(data, format)
 }
 
 func (s *ScheduleExportService) ExportGroupSchedule(ctx context.Context, groupID int, periodID *int, format ExportFormat) ([]byte, string, error) {
@@ -71,14 +156,20 @@ func (s *ScheduleExportService) ExportGroupSchedule(ctx context.Context, groupID
 	if err != nil {
 		return nil, "", fmt.Errorf("get group: %w", err)
 	}
+	if group == nil {
+		return nil, "", fmt.Errorf("group %d not found", groupID)
+	}
 
 	templates, err := s.scheduleService.GetGroupSchedule(ctx, groupID, &period.ID)
 	if err != nil {
 		return nil, "", fmt.Errorf("get group schedule: %w", err)
 	}
 
-	data := buildScheduleDate(group, period, templates)
+	data := buildGroupScheduleData(group, period, templates)
+	return convert(data, format)
+}
 
+func convert(data ScheduleData, format ExportFormat) ([]byte, string, error) {
 	htmlContent, err := renderScheduleHTML(data)
 	if err != nil {
 		return nil, "", fmt.Errorf("render HTML: %w", err)
@@ -108,6 +199,9 @@ func (s *ScheduleExportService) ExportGroupSchedule(ctx context.Context, groupID
 	case FormatPNG:
 		out, err = convertHTMLToPNG(tmpFile.Name())
 		mime = "image/png"
+	case FormatDOCX:
+		out, err = convertHTMLToDOCX(tmpFile.Name())
+		mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 	default:
 		return nil, "", fmt.Errorf("unsupported format: %s", format)
 	}
@@ -118,10 +212,14 @@ func (s *ScheduleExportService) ExportGroupSchedule(ctx context.Context, groupID
 	return out, mime, nil
 }
 
-func buildScheduleDate(group *models.Group, period *models.AcademicPeriod, templates []models.ScheduleTemplate) GroupScheduleData {
-	data := GroupScheduleData{
-		GroupName:      group.Name,
+func buildTeacherScheduleData(teacher *models.Teacher, period *models.AcademicPeriod, templates []models.ScheduleTemplate) ScheduleData {
+	data := ScheduleData{
+		Title:          fmt.Sprintf("Расписание преподавателя %s", teacher.User.GetShortName()),
 		AcademicPeriod: fmt.Sprintf("%d семестр %s уч.г.", period.Semester, period.Year),
+		WidthCol0:      "5%",
+		WidthCol1:      "55%",
+		WidthCol2:      "20%",
+		WidthCol3:      "20%",
 	}
 
 	scheduleMatrix := make(map[int]map[int]*Lesson)
@@ -134,9 +232,9 @@ func buildScheduleDate(group *models.Group, period *models.AcademicPeriod, templ
 
 	for _, tmpl := range templates {
 		details := LessonDetails{
-			Subject:  tmpl.Subject.Title,
-			Teacher:  tmpl.Teacher.User.GetShortName(),
-			Audience: tmpl.Audience.Number,
+			Col1: tmpl.Subject.Title,
+			Col2: tmpl.Subject.Group.Name,
+			Col3: tmpl.Audience.Number,
 		}
 		lesson := scheduleMatrix[tmpl.DayOfWeek][tmpl.Number]
 		lesson.LessonNumber = fmt.Sprintf("%d", tmpl.Number)
@@ -154,14 +252,130 @@ func buildScheduleDate(group *models.Group, period *models.AcademicPeriod, templ
 		}
 	}
 
-	daysOfWeek := map[int]string{
-		1: "Понедельник",
-		2: "Вторник",
-		3: "Среда",
-		4: "Четверг",
-		5: "Пятница",
-		6: "Суббота",
-		7: "Воскресенье",
+	for d := 1; d <= 6; d++ {
+		day := Day{
+			DayName: daysOfWeek[d],
+			Lessons: []Lesson{},
+		}
+		for number := 0; number <= 8; number++ {
+			if scheduleMatrix[d][number] != nil {
+				lesson := scheduleMatrix[d][number]
+				if lesson.Check {
+					day.Lessons = append(day.Lessons, *lesson)
+				}
+			}
+		}
+
+		if len(day.Lessons) == 0 {
+			continue
+		}
+		data.Days = append(data.Days, day)
+	}
+
+	return data
+}
+
+func buildAudienceScheduleData(audience *models.Audience, period *models.AcademicPeriod, templates []models.ScheduleTemplate) ScheduleData {
+	data := ScheduleData{
+		Title:          fmt.Sprintf("Расписание аудитории %s", audience.Name),
+		AcademicPeriod: fmt.Sprintf("%d семестр %s уч.г.", period.Semester, period.Year),
+		WidthCol0:      "5%",
+		WidthCol1:      "55%",
+		WidthCol2:      "20%",
+		WidthCol3:      "20%",
+	}
+
+	scheduleMatrix := make(map[int]map[int]*Lesson)
+	for day := 1; day <= 7; day++ {
+		scheduleMatrix[day] = make(map[int]*Lesson)
+		for number := 0; number <= 8; number++ {
+			scheduleMatrix[day][number] = &Lesson{}
+		}
+	}
+
+	for _, tmpl := range templates {
+		details := LessonDetails{
+			Col1: tmpl.Subject.Title,
+			Col2: tmpl.Subject.Group.Name,
+			Col3: tmpl.Teacher.User.GetShortName(),
+		}
+		lesson := scheduleMatrix[tmpl.DayOfWeek][tmpl.Number]
+		lesson.LessonNumber = fmt.Sprintf("%d", tmpl.Number)
+		lesson.Check = true
+		switch tmpl.WeekType {
+		case 0:
+			lesson.IsSplit = false
+			lesson.Details = details
+		case 1:
+			lesson.IsSplit = true
+			lesson.Odd = details
+		case 2:
+			lesson.IsSplit = true
+			lesson.Even = details
+		}
+	}
+
+	for d := 1; d <= 6; d++ {
+		day := Day{
+			DayName: daysOfWeek[d],
+			Lessons: []Lesson{},
+		}
+		for number := 0; number <= 8; number++ {
+			if scheduleMatrix[d][number] != nil {
+				lesson := scheduleMatrix[d][number]
+				if lesson.Check {
+					day.Lessons = append(day.Lessons, *lesson)
+				}
+			}
+		}
+
+		if len(day.Lessons) == 0 {
+			continue
+		}
+		data.Days = append(data.Days, day)
+	}
+
+	return data
+}
+
+func buildGroupScheduleData(group *models.Group, period *models.AcademicPeriod, templates []models.ScheduleTemplate) ScheduleData {
+	data := ScheduleData{
+		Title:          fmt.Sprintf("Расписание группы %s", group.Name),
+		AcademicPeriod: fmt.Sprintf("%d семестр %s уч.г.", period.Semester, period.Year),
+		WidthCol0:      "5%",
+		WidthCol1:      "55%",
+		WidthCol2:      "30%",
+		WidthCol3:      "10%",
+	}
+
+	scheduleMatrix := make(map[int]map[int]*Lesson)
+	for day := 1; day <= 7; day++ {
+		scheduleMatrix[day] = make(map[int]*Lesson)
+		for number := 0; number <= 8; number++ {
+			scheduleMatrix[day][number] = &Lesson{}
+		}
+	}
+
+	for _, tmpl := range templates {
+		details := LessonDetails{
+			Col1: tmpl.Subject.Title,
+			Col2: tmpl.Teacher.User.GetShortName(),
+			Col3: tmpl.Audience.Number,
+		}
+		lesson := scheduleMatrix[tmpl.DayOfWeek][tmpl.Number]
+		lesson.LessonNumber = fmt.Sprintf("%d", tmpl.Number)
+		lesson.Check = true
+		switch tmpl.WeekType {
+		case 0:
+			lesson.IsSplit = false
+			lesson.Details = details
+		case 1:
+			lesson.IsSplit = true
+			lesson.Odd = details
+		case 2:
+			lesson.IsSplit = true
+			lesson.Even = details
+		}
 	}
 
 	for d := 1; d <= 6; d++ {
@@ -181,7 +395,7 @@ func buildScheduleDate(group *models.Group, period *models.AcademicPeriod, templ
 		if len(day.Lessons) == 0 {
 			Lesson := Lesson{
 				Details: LessonDetails{
-					Subject: "День самостоятельной работы",
+					Col1: "День самостоятельной работы",
 				},
 			}
 			day.Lessons = append(day.Lessons, Lesson)
@@ -192,7 +406,7 @@ func buildScheduleDate(group *models.Group, period *models.AcademicPeriod, templ
 	return data
 }
 
-func renderScheduleHTML(data GroupScheduleData) ([]byte, error) {
+func renderScheduleHTML(data ScheduleData) ([]byte, error) {
 	tmpl, err := template.New("schedule").Parse(tmplStr)
 	if err != nil {
 		return nil, err
@@ -210,15 +424,20 @@ func convertHTMLToPDF(htmlPath string) ([]byte, error) {
 }
 
 func convertHTMLToPNG(htmlPath string) ([]byte, error) {
-    cmd := exec.Command("wkhtmltoimage", "--enable-local-file-access", htmlPath, "-")
-    return cmd.Output()
+	cmd := exec.Command("wkhtmltoimage", "--enable-local-file-access", htmlPath, "-")
+	return cmd.Output()
+}
+
+func convertHTMLToDOCX(htmlPath string) ([]byte, error) {
+	cmd := exec.Command("pandoc", htmlPath, "-t", "docx", "-o", "-")
+	return cmd.Output()
 }
 
 const tmplStr = `<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Расписание {{.GroupName}}</title>
+    <title>{{.Title}}</title>
     <style>
         /* Настройки страницы для экспорта */
         @page {
@@ -285,10 +504,10 @@ const tmplStr = `<!DOCTYPE html>
         }
 
         /* Ширина колонок */
-        .col-number { width: 5%; text-align: center; font-weight: bold; background: #f8f9fa; }
-        .col-subject { width: 55%; }
-        .col-teacher { width: 30%; font-style: italic; }
-        .col-room    { width: 10%; text-align: center; }
+        .col-1 { text-align: center; font-weight: bold; background: #f8f9fa; }
+		.col-2 { text-align: left; }
+		.col-3 { text-align: center; }
+        .col-4 { text-align: center; }
 
         /* Чтобы избежать разрыва таблицы при печати в PDF */
         .day-container {
@@ -297,28 +516,28 @@ const tmplStr = `<!DOCTYPE html>
         }
 
 		/* Добавляем стили для четности */
-    .week-type {
-        font-size: 8pt;
-        color: #888;
-        text-transform: uppercase;
-        display: block;
-        margin-bottom: 2px;
-    }
-    
-    /* Выделение строк для визуального разделения внутри одной пары */
-    .row-odd { background-color: #fff; }
-    .row-even { background-color: #fafafa; }
-    
-    .schedule-table td {
-        line-height: 1.2;
-    }
+		.week-type {
+			font-size: 8pt;
+			color: #888;
+			text-transform: uppercase;
+			display: block;
+			margin-bottom: 2px;
+		}
+		
+		/* Выделение строк для визуального разделения внутри одной пары */
+		.row-odd { background-color: #fff; }
+		.row-even { background-color: #fafafa; }
+		
+		.schedule-table td {
+			line-height: 1.2;
+		}
     </style>
 </head>
 <body>
 
 <div class="page">
     <div class="header">
-        <h1>Расписание группы {{.GroupName}}</h1>
+        <h1>{{.Title}}</h1>
         <p>{{.AcademicPeriod}}</p>
     </div>
 
@@ -330,24 +549,24 @@ const tmplStr = `<!DOCTYPE html>
 				{{if .IsSplit}}
 					<!-- Вариант: Разные предметы для Четной/Нечетной -->
 					<tr class="row-odd">
-						<td class="col-number" rowspan="2">{{.LessonNumber}}</td>
-						<td class="col-subject"><span class="week-type">Нечетная</span>{{.Odd.Subject}}</td>
-						<td class="col-teacher">{{.Odd.Teacher}}</td>
-						<td class="col-room">{{.Odd.Audience}}</td>
+						<td width="{{$.WidthCol0}}" class="col-1" rowspan="2">{{.LessonNumber}}</td>
+						<td width="{{$.WidthCol1}}" class="col-2"><span class="week-type">Нечетная</span>{{.Odd.Col1}}</td>
+						<td width="{{$.WidthCol2}}" class="col-3">{{.Odd.Col2}}</td>
+						<td width="{{$.WidthCol3}}" class="col-4">{{.Odd.Col3}}</td>
 					</tr>
 					<tr class="row-even">
 						<!-- Номер пары пропущен, так как он объединен (rowspan) -->
-						<td class="col-subject"><span class="week-type">Четная</span>{{.Even.Subject}}</td>
-						<td class="col-teacher">{{.Even.Teacher}}</td>
-						<td class="col-room">{{.Even.Audience}}</td>
+						<td width="{{$.WidthCol1}}" class="col-2"><span class="week-type">Четная</span>{{.Even.Col1}}</td>
+						<td width="{{$.WidthCol2}}" class="col-3">{{.Even.Col2}}</td>
+						<td width="{{$.WidthCol3}}" class="col-4">{{.Even.Col3}}</td>
 					</tr>
 				{{else}}
 					<!-- Вариант: Обычная пара -->
 					<tr>
-						<td class="col-number">{{.LessonNumber}}</td>
-						<td class="col-subject">{{.Details.Subject}}</td>
-						<td class="col-teacher">{{.Details.Teacher}}</td>
-						<td class="col-room">{{.Details.Audience}}</td>
+						<td width="{{$.WidthCol0}}" class="col-1">{{.LessonNumber}}</td>
+						<td width="{{$.WidthCol1}}" class="col-2">{{.Details.Col1}}</td>
+						<td width="{{$.WidthCol2}}" class="col-3">{{.Details.Col2}}</td>
+						<td width="{{$.WidthCol3}}" class="col-4">{{.Details.Col3}}</td>
 					</tr>
 				{{end}}
 			{{end}}

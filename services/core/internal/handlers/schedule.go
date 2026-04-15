@@ -21,7 +21,7 @@ type ScheduleHandler struct {
 func NewScheduleHandler(scheduleService *services.ScheduleService) *ScheduleHandler {
 	return &ScheduleHandler{
 		scheduleService: scheduleService,
-		exportService: services.NewScheduleExportService(scheduleService),
+		exportService:   services.NewScheduleExportService(scheduleService),
 	}
 }
 
@@ -281,8 +281,8 @@ func (h *ScheduleHandler) ExportGroupSchedule(w http.ResponseWriter, r *http.Req
 	}
 
 	format := services.ExportFormat(formatStr)
-	if format != services.FormatHTML && format != services.FormatPDF && format != services.FormatPNG {
-		utils.ErrorResponse(w, http.StatusBadRequest, "invalid format, must be html, pdf or png")
+	if format != services.FormatHTML && format != services.FormatPDF && format != services.FormatPNG && format != services.FormatDOCX {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid format, must be html, docx, pdf or png")
 		return
 	}
 
@@ -293,6 +293,82 @@ func (h *ScheduleHandler) ExportGroupSchedule(w http.ResponseWriter, r *http.Req
 	}
 
 	filename := fmt.Sprintf("schedule_group_%d.%s", groupID, format)
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	w.Write(content)
+}
+
+func (h *ScheduleHandler) ExportTeacherSchedule(w http.ResponseWriter, r *http.Request) {
+	teacherID, err := strconv.Atoi(chi.URLParam(r, "teacher_id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid teacher id")
+	}
+
+	periodIDStr := r.URL.Query().Get("period_id")
+	var periodID *int
+	if periodIDStr != "" {
+		pid, err := strconv.Atoi(periodIDStr)
+		if err == nil {
+			periodID = &pid
+		}
+	}
+
+	formatStr := r.URL.Query().Get("format")
+	if formatStr == "" {
+		formatStr = "html"
+	}
+
+	format := services.ExportFormat(formatStr)
+	if format != services.FormatHTML && format != services.FormatPDF && format != services.FormatPNG && format != services.FormatDOCX {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid format, must be html, docx, pdf or png")
+		return
+	}
+
+	content, mime, err := h.exportService.ExportTeacherSchedule(r.Context(), teacherID, periodID, format)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to export schedule: %v", err))
+		return
+	}
+
+	filename := fmt.Sprintf("schedule_teahcer_%d.%s", teacherID, format)
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	w.Write(content)
+}
+
+func (h *ScheduleHandler) ExportAudienceSchedule(w http.ResponseWriter, r *http.Request) {
+	audienceID, err := strconv.Atoi(chi.URLParam(r, "audience_id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid audience id")
+	}
+
+	periodIDStr := r.URL.Query().Get("period_id")
+	var periodID *int
+	if periodIDStr != "" {
+		pid, err := strconv.Atoi(periodIDStr)
+		if err == nil {
+			periodID = &pid
+		}
+	}
+
+	formatStr := r.URL.Query().Get("format")
+	if formatStr == "" {
+		formatStr = "html"
+	}
+
+	format := services.ExportFormat(formatStr)
+	if format != services.FormatHTML && format != services.FormatPDF && format != services.FormatPNG && format != services.FormatDOCX {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid format, must be html, docx, pdf or png")
+		return
+	}
+
+	content, mime, err := h.exportService.ExportAudienceSchedule(r.Context(), audienceID, periodID, format)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to export schedule: %v", err))
+		return
+	}
+
+	filename := fmt.Sprintf("schedule_audience_%d.%s", audienceID, format)
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	w.Write(content)

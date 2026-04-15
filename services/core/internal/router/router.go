@@ -186,7 +186,9 @@ func (r *Router) SetupRoutes() {
 			r.Get("/group/{group_id}", scheduleHandler.GetGroupSchedule)
 			r.Get("/group/{group_id}/export", scheduleHandler.ExportGroupSchedule)
 			r.Get("/teacher/{teacher_id}", scheduleHandler.GetTeacherSchedule)
+			r.Get("/teacher/{teacher_id}/export", scheduleHandler.ExportTeacherSchedule)
 			r.Get("/audience/{audience_id}", scheduleHandler.GetAudienceSchedule)
+			r.Get("/audience/{audience_id}/export", scheduleHandler.ExportAudienceSchedule)
 		})
 
 		r.Route("/lessons", func(r chi.Router) {

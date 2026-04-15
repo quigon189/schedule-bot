@@ -59,12 +59,24 @@ func (h *GroupHandler) GetGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GroupHandler) GetAllGroups(w http.ResponseWriter, r *http.Request) {
-	groups, err := h.scheduleService.GetAllGroups(r.Context())
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get groups: %v", err))
+	groupName := r.URL.Query().Get("group_name")
+
+	if groupName == "" {
+		groups, err := h.scheduleService.GetAllGroups(r.Context())
+		if err != nil {
+			utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get groups: %v", err))
+			return
+		}
+		utils.SuccessResponse(w, "groups retrieved", groups)
 		return
 	}
-	utils.SuccessResponse(w, "groups retrieved", groups)
+
+	group, err := h.scheduleService.GetGroupByName(r.Context(), groupName)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get group: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "group retrieved", group)
 }
 
 func (h *GroupHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {

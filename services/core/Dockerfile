@@ -15,6 +15,7 @@ FROM alpine:latest
 RUN addgroup -S app && adduser -S app -G app
 
 RUN apk add --no-cache \
+    pandoc \
     ca-certificates \
     fontconfig \
     freetype \
@@ -30,7 +31,8 @@ WORKDIR /app
 
 COPY --from=builder /app/core .
 
-COPY --from=surnet/alpine-wkhtmltopdf:3.19.0-0.12.6-full \
+
+COPY --from=surnet/alpine-wkhtmltopdf:3.23.2-024b2b2-full\
     /bin/wkhtmltopdf \
     /bin/wkhtmltoimage \
     /bin/libwkhtmltox* \
