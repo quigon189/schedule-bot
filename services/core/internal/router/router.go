@@ -64,6 +64,7 @@ func (r *Router) SetupRoutes() {
 	academicPeriodHandler := handlers.NewAcademicPeriodHandler(r.scheduleService)
 	scheduleHandler := handlers.NewScheduleHandler(r.scheduleService)
 	lessonLogHandler := handlers.NewLessonLogHandler(r.scheduleService)
+	plannerHandler := handlers.NewPlannerHandler(r.scheduleService)
 
 	chatHandler := handlers.NewChatHandler(r.llmAgent)
 
@@ -180,6 +181,7 @@ func (r *Router) SetupRoutes() {
 				r.Patch("/{id}", scheduleHandler.UpdateScheduleTemplate)
 				r.Delete("/{id}", scheduleHandler.DeleteScheduleTemplate)
 				r.Post("/semester", scheduleHandler.CreateSemesterSchedule)
+				r.Post("/generate", plannerHandler.GenerateWeeklySchedule)
 			})
 			r.Get("/", scheduleHandler.GetAllScheduleTemplates)
 			r.Get("/{id}", scheduleHandler.GetScheduleTemplate)
