@@ -137,3 +137,37 @@ func (s *PlannerService) generateLessonRequests(ctx context.Context, req *dto.Pl
 
 	return lessonRequests, nil
 }
+
+func (s *PlannerService) getTimeSlots(sch *Schedule, req *LessonRequest) ([]TimeSlot, error) {
+	var timeSlots []TimeSlot
+	for slot := 1; slot <= 5; slot++ {
+		for day := 1; day <= 5; day++ {
+			schCells := sch.Grid[day][slot]
+			if !req.IsSplit {
+				if slices.ContainsFunc(schCells, func(cell *ScheduleCell) bool {
+					if cell.GroupID == req.GroupID ||
+						cell.TeacherID == req.TeacherID ||
+						cell.AudienceID == req.AudienceID {
+						return true
+					}
+					return false
+				}) {
+					continue
+				}
+			}
+
+			timeSlots = append(timeSlots, TimeSlot{
+				Day:  day,
+				Slot: slot,
+			})
+		}
+	}
+	for slot := 1; slot <= 4; slot++ {
+		timeSlots = append(timeSlots, TimeSlot{
+			Day:  6,
+			Slot: slot,
+		})
+	}
+
+	return timeSlots, nil
+}
