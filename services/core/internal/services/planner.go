@@ -11,6 +11,14 @@ import (
 	"slices"
 )
 
+type WeekType int
+
+const (
+	EveryWeek WeekType = 0
+	OddWeek   WeekType = 1
+	EvenWeek  WeekType = 2
+)
+
 type PlannerService struct {
 	scheduleService *ScheduleService
 }
@@ -32,7 +40,7 @@ type LessonRequest struct {
 }
 
 type ScheduleCell struct {
-	Type       int // 0 - обычная, 1 - нечетная, 2 - четная
+	Type       WeekType
 	SubjectID  int
 	GroupID    int
 	TeacherID  int
@@ -42,6 +50,7 @@ type ScheduleCell struct {
 type TimeSlot struct {
 	Day  int
 	Slot int
+	Type WeekType
 }
 
 type Schedule struct {
@@ -53,7 +62,7 @@ type Schedule struct {
 func (s *PlannerService) PlanWeeklySchedule(ctx context.Context, req *dto.PlanScheduleRequest) (*dto.WeeklySchedule, error) {
 	lr, err := s.generateLessonRequests(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("generate lesson requests: %w")
+		return nil, fmt.Errorf("generate lesson requests: %w", err)
 	}
 
 	prettyLR, _ := json.MarshalIndent(lr, "", "  ")
@@ -139,35 +148,85 @@ func (s *PlannerService) generateLessonRequests(ctx context.Context, req *dto.Pl
 }
 
 func (s *PlannerService) getTimeSlots(sch *Schedule, req *LessonRequest) ([]TimeSlot, error) {
-	var timeSlots []TimeSlot
+	var allTimeSlots []TimeSlot
+	var resTimeSlots []TimeSlot
+
 	for slot := 1; slot <= 5; slot++ {
 		for day := 1; day <= 5; day++ {
-			schCells := sch.Grid[day][slot]
-			if !req.IsSplit {
-				if slices.ContainsFunc(schCells, func(cell *ScheduleCell) bool {
-					if cell.GroupID == req.GroupID ||
-						cell.TeacherID == req.TeacherID ||
-						cell.AudienceID == req.AudienceID {
-						return true
-					}
-					return false
-				}) {
-					continue
-				}
-			}
-
-			timeSlots = append(timeSlots, TimeSlot{
+			allTimeSlots = append(allTimeSlots, TimeSlot{
 				Day:  day,
 				Slot: slot,
 			})
 		}
 	}
 	for slot := 1; slot <= 4; slot++ {
-		timeSlots = append(timeSlots, TimeSlot{
+		allTimeSlots = append(allTimeSlots, TimeSlot{
 			Day:  6,
 			Slot: slot,
 		})
 	}
 
-	return timeSlots, nil
+	for _, slot := range allTimeSlots {
+		if req.IsSplit {
+			if checkTimeSlotSchedule(OddWeek, sch.Grid[slot.Day][slot.Slot], req) {
+				resTimeSlots = append(resTimeSlots, TimeSlot{
+					Day:  slot.Day,
+					Slot: slot.Slot,
+					Type: OddWeek,
+				})
+			}
+			if checkTimeSlotSchedule(EvenWeek, sch.Grid[slot.Day][slot.Slot], req) {
+				resTimeSlots = append(resTimeSlots, TimeSlot{
+					Day:  slot.Day,
+					Slot: slot.Slot,
+					Type: EvenWeek,
+				})
+			}
+		} else {
+			if checkTimeSlotSchedule(EveryWeek, sch.Grid[slot.Day][slot.Slot], req) {
+				resTimeSlots = append(resTimeSlots, TimeSlot{
+					Day:  slot.Day,
+					Slot: slot.Slot,
+					Type: EveryWeek,
+				})
+			}
+		}
+
+	}
+
+	return resTimeSlots, nil
+}
+
+func checkTimeSlotSchedule(t WeekType, sch []*ScheduleCell, req *LessonRequest) bool {
+	switch t {
+	case EveryWeek:
+		return !slices.ContainsFunc(sch, func(sc *ScheduleCell) bool {
+			if sc.GroupID == req.GroupID || sc.AudienceID == req.AudienceID || sc.TeacherID == req.TeacherID {
+				return true
+			}
+			return false
+		})
+	case OddWeek:
+		return !slices.ContainsFunc(sch, func(sc *ScheduleCell) bool {
+			if sc.Type == EvenWeek {
+				return false
+			}
+			if sc.GroupID == req.GroupID || sc.AudienceID == req.AudienceID || sc.TeacherID == req.TeacherID {
+				return true
+			}
+			return false
+		})
+	case EvenWeek:
+		return !slices.ContainsFunc(sch, func(sc *ScheduleCell) bool {
+			if sc.Type == OddWeek {
+				return false
+			}
+			if sc.GroupID == req.GroupID || sc.AudienceID == req.AudienceID || sc.TeacherID == req.TeacherID {
+				return true
+			}
+			return false
+		})
+	default:
+		return false
+	}
 }
