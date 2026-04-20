@@ -14,6 +14,7 @@
 |   |   ├── auth.go
 |   |   ├── group.go
 |   |   ├── lesson_log.go
+|   |   ├── planner.go
 |   |   ├── role.go
 |   |   ├── schedule.go
 |   |   ├── subject.go
@@ -26,6 +27,7 @@
 |   |   ├── chat.go
 |   |   ├── group.go
 |   |   ├── lesson_log.go
+|   |   ├── planner.go
 |   |   ├── role.go
 |   |   ├── schedule.go
 |   |   ├── student.go
@@ -59,7 +61,9 @@
 |   ├── router
 |   |   └── router.go
 |   └── services
+|       ├── export.go
 |       ├── generate_user.go
+|       ├── planner.go
 |       ├── schedule.go
 |       ├── tokens.go
 |       ├── user.go
@@ -1427,6 +1431,40 @@ type StatisticsResponse struct {
 }
 
 --------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/dto/planner.go
+package dto
+
+import "core/internal/models"
+
+type PlanScheduleRequest struct {
+	AcademicPeriodID int              `json:"academic_period_id" validate:"required"`
+	Seed             int              `json:"seed" validate:"min=0"`
+	Days             int              `json:"days" validate:"min=0,max=6"`
+	Slots            int              `json:"slots" validate:"min=0,max=8"`
+	SubjectList      []SubjectRequest `json:"subject_list" validate:"required,min=1,dive"`
+}
+
+type SubjectRequest struct {
+	SubjectID    int `json:"subject_id" validate:"required"`
+	TeacherID    int `json:"teacher_id" validate:"required"`
+	AudienceID   int `json:"audience_id" validate:"required"`
+	Priority     int `json:"priority" validate:"min=0,max=100"`
+	LessonsCount int `json:"lessons_count" validate:"required"`
+}
+
+type ScheduleCell struct {
+	WeekType int             `json:"week_type"`
+	Subject  models.Subject  `json:"subject"`
+	Teacher  models.Teacher  `json:"teacher"`
+	Audience models.Audience `json:"audience"`
+}
+
+type WeeklySchedule struct {
+	Seed int                            `json:"seed"`
+	Grid map[int]map[int][]ScheduleCell `json:"grid"`
+}
+
+--------------------------
 Файл: /home/admin/schedule-bot/services/core/internal/dto/role.go
 package dto
 
@@ -2050,12 +2088,24 @@ func (h *GroupHandler) GetGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *GroupHandler) GetAllGroups(w http.ResponseWriter, r *http.Request) {
-	groups, err := h.scheduleService.GetAllGroups(r.Context())
-	if err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get groups: %v", err))
+	groupName := r.URL.Query().Get("group_name")
+
+	if groupName == "" {
+		groups, err := h.scheduleService.GetAllGroups(r.Context())
+		if err != nil {
+			utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get groups: %v", err))
+			return
+		}
+		utils.SuccessResponse(w, "groups retrieved", groups)
 		return
 	}
-	utils.SuccessResponse(w, "groups retrieved", groups)
+
+	group, err := h.scheduleService.GetGroupByName(r.Context(), groupName)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get group: %v", err))
+		return
+	}
+	utils.SuccessResponse(w, "group retrieved", group)
 }
 
 func (h *GroupHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
@@ -2306,6 +2356,43 @@ func (h *LessonLogHandler) GetLessonStatistics(w http.ResponseWriter, r *http.Re
 }
 
 --------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/planner.go
+package handlers
+
+import (
+	"core/internal/dto"
+	"core/internal/services"
+	"core/pkg/utils"
+	"encoding/json"
+	"fmt"
+	"net/http"
+)
+
+type PlannerHandler struct {
+	plannderService *services.PlannerService
+}
+
+func NewPlannerHandler(svc *services.ScheduleService) *PlannerHandler {
+	return &PlannerHandler{plannderService: services.NewPlannerService(svc)}
+}
+
+func (h *PlannerHandler) GenerateWeeklySchedule(w http.ResponseWriter, r *http.Request) {
+	var req dto.PlanScheduleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalide body: %v", err))
+		return
+	}
+
+	resp, err := h.plannderService.PlanWeeklySchedule(r.Context(), &req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get weekly schedule: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "weekly schedule generated", resp)
+}
+
+--------------------------
 Файл: /home/admin/schedule-bot/services/core/internal/handlers/role.go
 package handlers
 
@@ -2410,10 +2497,14 @@ import (
 
 type ScheduleHandler struct {
 	scheduleService *services.ScheduleService
+	exportService   *services.ScheduleExportService
 }
 
 func NewScheduleHandler(scheduleService *services.ScheduleService) *ScheduleHandler {
-	return &ScheduleHandler{scheduleService: scheduleService}
+	return &ScheduleHandler{
+		scheduleService: scheduleService,
+		exportService:   services.NewScheduleExportService(scheduleService),
+	}
 }
 
 // CreateScheduleTemplate создает новую запись в расписании
@@ -2649,6 +2740,120 @@ func (h *ScheduleHandler) CreateSemesterSchedule(w http.ResponseWriter, r *http.
 	}
 
 	utils.SuccessResponse(w, "semester schedule created successfully", nil)
+}
+
+func (h *ScheduleHandler) ExportGroupSchedule(w http.ResponseWriter, r *http.Request) {
+	groupID, err := strconv.Atoi(chi.URLParam(r, "group_id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid group id")
+	}
+
+	periodIDStr := r.URL.Query().Get("period_id")
+	var periodID *int
+	if periodIDStr != "" {
+		pid, err := strconv.Atoi(periodIDStr)
+		if err == nil {
+			periodID = &pid
+		}
+	}
+
+	formatStr := r.URL.Query().Get("format")
+	if formatStr == "" {
+		formatStr = "html"
+	}
+
+	format := services.ExportFormat(formatStr)
+	if format != services.FormatHTML && format != services.FormatPDF && format != services.FormatPNG && format != services.FormatDOCX {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid format, must be html, docx, pdf or png")
+		return
+	}
+
+	content, mime, err := h.exportService.ExportGroupSchedule(r.Context(), groupID, periodID, format)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to export schedule: %v", err))
+		return
+	}
+
+	filename := fmt.Sprintf("schedule_group_%d.%s", groupID, format)
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	w.Write(content)
+}
+
+func (h *ScheduleHandler) ExportTeacherSchedule(w http.ResponseWriter, r *http.Request) {
+	teacherID, err := strconv.Atoi(chi.URLParam(r, "teacher_id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid teacher id")
+	}
+
+	periodIDStr := r.URL.Query().Get("period_id")
+	var periodID *int
+	if periodIDStr != "" {
+		pid, err := strconv.Atoi(periodIDStr)
+		if err == nil {
+			periodID = &pid
+		}
+	}
+
+	formatStr := r.URL.Query().Get("format")
+	if formatStr == "" {
+		formatStr = "html"
+	}
+
+	format := services.ExportFormat(formatStr)
+	if format != services.FormatHTML && format != services.FormatPDF && format != services.FormatPNG && format != services.FormatDOCX {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid format, must be html, docx, pdf or png")
+		return
+	}
+
+	content, mime, err := h.exportService.ExportTeacherSchedule(r.Context(), teacherID, periodID, format)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to export schedule: %v", err))
+		return
+	}
+
+	filename := fmt.Sprintf("schedule_teahcer_%d.%s", teacherID, format)
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	w.Write(content)
+}
+
+func (h *ScheduleHandler) ExportAudienceSchedule(w http.ResponseWriter, r *http.Request) {
+	audienceID, err := strconv.Atoi(chi.URLParam(r, "audience_id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid audience id")
+	}
+
+	periodIDStr := r.URL.Query().Get("period_id")
+	var periodID *int
+	if periodIDStr != "" {
+		pid, err := strconv.Atoi(periodIDStr)
+		if err == nil {
+			periodID = &pid
+		}
+	}
+
+	formatStr := r.URL.Query().Get("format")
+	if formatStr == "" {
+		formatStr = "html"
+	}
+
+	format := services.ExportFormat(formatStr)
+	if format != services.FormatHTML && format != services.FormatPDF && format != services.FormatPNG && format != services.FormatDOCX {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid format, must be html, docx, pdf or png")
+		return
+	}
+
+	content, mime, err := h.exportService.ExportAudienceSchedule(r.Context(), audienceID, periodID, format)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to export schedule: %v", err))
+		return
+	}
+
+	filename := fmt.Sprintf("schedule_audience_%d.%s", audienceID, format)
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	w.Write(content)
 }
 
 --------------------------
@@ -4051,7 +4256,9 @@ type Session struct {
 package models
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -4078,6 +4285,7 @@ type Group struct {
 	Name          string `json:"name"`
 	Specialty     string `json:"specialty"`
 	AdmissionYear int    `json:"admission_year"`
+	Students      []User `json:"students,omitempty"`
 }
 
 type Student struct {
@@ -4087,6 +4295,27 @@ type Student struct {
 
 type Teacher struct {
 	User User `json:"user"`
+}
+
+func (u *User) GetShortName() string {
+	fields := strings.Fields(u.FullName)
+	if len(fields) == 1 {
+		return fields[0]
+	}
+
+	if len(fields) == 2 {
+		return fmt.Sprintf("%s %s.", fields[0], string([]rune(fields[1])[0]))
+	}
+
+	if len(fields) == 3 {
+		return fmt.Sprintf("%s %s.%s.", fields[0], string([]rune(fields[1])[0]), string([]rune(fields[2])[0]))
+	}
+
+	if len(fields) > 3 {
+		return fmt.Sprintf("%s %s.", fields[0], string([]rune(fields[1])[0]))
+	}
+
+	return ""
 }
 
 func (u *User) RequireRole(role string) bool {
@@ -4448,6 +4677,35 @@ func (r *GroupRepo) GetByID(ctx context.Context, id int) (*models.Group, error) 
 		}
 		return nil, err
 	}
+
+	query = `
+	SELECT u.id, u.username, u.full_name, u.email
+	FROM auth.users u
+	JOIN auth.student_profiles sp ON u.id = sp.user_id
+	WHERE sp.group_id = $1
+	ORDER BY u.full_name
+	`
+	rows, err := r.db.Query(ctx, query, group.ID)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
+		}
+		return &group, nil
+	}
+
+	for rows.Next() {
+		var student models.User
+		if err := rows.Scan(
+			&student.ID,
+			&student.Name,
+			&student.FullName,
+			&student.Email,
+		); err != nil {
+			return &group, nil
+		}
+		group.Students = append(group.Students, student)
+	}
+
 	return &group, nil
 }
 
@@ -6709,6 +6967,7 @@ func (r *Router) SetupRoutes() {
 	academicPeriodHandler := handlers.NewAcademicPeriodHandler(r.scheduleService)
 	scheduleHandler := handlers.NewScheduleHandler(r.scheduleService)
 	lessonLogHandler := handlers.NewLessonLogHandler(r.scheduleService)
+	plannerHandler := handlers.NewPlannerHandler(r.scheduleService)
 
 	chatHandler := handlers.NewChatHandler(r.llmAgent)
 
@@ -6825,12 +7084,16 @@ func (r *Router) SetupRoutes() {
 				r.Patch("/{id}", scheduleHandler.UpdateScheduleTemplate)
 				r.Delete("/{id}", scheduleHandler.DeleteScheduleTemplate)
 				r.Post("/semester", scheduleHandler.CreateSemesterSchedule)
+				r.Post("/generate", plannerHandler.GenerateWeeklySchedule)
 			})
 			r.Get("/", scheduleHandler.GetAllScheduleTemplates)
 			r.Get("/{id}", scheduleHandler.GetScheduleTemplate)
 			r.Get("/group/{group_id}", scheduleHandler.GetGroupSchedule)
+			r.Get("/group/{group_id}/export", scheduleHandler.ExportGroupSchedule)
 			r.Get("/teacher/{teacher_id}", scheduleHandler.GetTeacherSchedule)
+			r.Get("/teacher/{teacher_id}/export", scheduleHandler.ExportTeacherSchedule)
 			r.Get("/audience/{audience_id}", scheduleHandler.GetAudienceSchedule)
+			r.Get("/audience/{audience_id}/export", scheduleHandler.ExportAudienceSchedule)
 		})
 
 		r.Route("/lessons", func(r chi.Router) {
@@ -6852,6 +7115,588 @@ func (r *Router) SetupRoutes() {
 func (r *Router) Router() *chi.Mux {
 	return r.router
 }
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/services/export.go
+package services
+
+import (
+	"bytes"
+	"context"
+	"core/internal/models"
+	"fmt"
+	"os"
+	"os/exec"
+	"text/template"
+)
+
+type ExportFormat string
+
+const (
+	FormatHTML ExportFormat = "html"
+	FormatPDF  ExportFormat = "pdf"
+	FormatPNG  ExportFormat = "png"
+	FormatDOCX ExportFormat = "docx"
+)
+
+var daysOfWeek = map[int]string{
+	1: "Понедельник",
+	2: "Вторник",
+	3: "Среда",
+	4: "Четверг",
+	5: "Пятница",
+	6: "Суббота",
+	7: "Воскресенье",
+}
+
+type ScheduleExportService struct {
+	scheduleService *ScheduleService
+}
+
+func NewScheduleExportService(scheduleService *ScheduleService) *ScheduleExportService {
+	return &ScheduleExportService{scheduleService: scheduleService}
+}
+
+type ScheduleData struct {
+	Title          string
+	AcademicPeriod string
+	Days           []Day
+	WidthCol0      string
+	WidthCol1      string
+	WidthCol2      string
+	WidthCol3      string
+}
+
+type GroupScheduleData struct {
+	GroupName      string
+	AcademicPeriod string
+	Days           []Day
+}
+
+type Day struct {
+	DayName string
+	Lessons []Lesson
+}
+
+type Lesson struct {
+	LessonNumber string
+	IsSplit      bool
+	Check        bool
+	Details      LessonDetails
+	Odd          LessonDetails
+	Even         LessonDetails
+}
+
+type LessonDetails struct {
+	Col1 string
+	Col2 string
+	Col3 string
+}
+
+func (s *ScheduleExportService) ExportTeacherSchedule(ctx context.Context, teacherID int, periodID *int, format ExportFormat) ([]byte, string, error) {
+	var period *models.AcademicPeriod
+	var err error
+	if periodID != nil {
+		period, err = s.scheduleService.GetAcademicPeriodByID(ctx, *periodID)
+		if err != nil {
+			return nil, "", fmt.Errorf("get academic period: %w", err)
+		}
+	} else {
+		period, err = s.scheduleService.GetActiveAcademicPeriod(ctx)
+		if err != nil {
+			return nil, "", fmt.Errorf("get active academic period: %w", err)
+		}
+	}
+
+	teacher, err := s.scheduleService.GetTeacher(ctx, teacherID)
+	if err != nil {
+		return nil, "", fmt.Errorf("get teacher: %w", err)
+	}
+	if teacher == nil {
+		return nil, "", fmt.Errorf("teacher %d not found", teacherID)
+	}
+
+	templates, err := s.scheduleService.GetTeacherSchedule(ctx, teacherID, periodID)
+	if err != nil {
+		return nil, "", fmt.Errorf("get teacher schedule: %w", err)
+	}
+
+	data := buildTeacherScheduleData(teacher, period, templates)
+	return convert(data, format)
+}
+
+func (s *ScheduleExportService) ExportAudienceSchedule(ctx context.Context, audienceID int, periodID *int, format ExportFormat) ([]byte, string, error) {
+	var period *models.AcademicPeriod
+	var err error
+	if periodID != nil {
+		period, err = s.scheduleService.GetAcademicPeriodByID(ctx, *periodID)
+		if err != nil {
+			return nil, "", fmt.Errorf("get academic period: %w", err)
+		}
+	} else {
+		period, err = s.scheduleService.GetActiveAcademicPeriod(ctx)
+		if err != nil {
+			return nil, "", fmt.Errorf("get active academic period: %w", err)
+		}
+	}
+
+	audience, err := s.scheduleService.GetAudience(ctx, audienceID)
+	if err != nil {
+		return nil, "", fmt.Errorf("get audience: %w", err)
+	}
+	if audience == nil {
+		return nil, "", fmt.Errorf("audience %d not found", audienceID)
+	}
+
+	templates, err := s.scheduleService.GetAudienceSchedule(ctx, audienceID, periodID)
+	if err != nil {
+		return nil, "", fmt.Errorf("get audience schedule: %w", err)
+	}
+
+	data := buildAudienceScheduleData(audience, period, templates)
+	return convert(data, format)
+}
+
+func (s *ScheduleExportService) ExportGroupSchedule(ctx context.Context, groupID int, periodID *int, format ExportFormat) ([]byte, string, error) {
+	var period *models.AcademicPeriod
+	var err error
+	if periodID != nil {
+		period, err = s.scheduleService.GetAcademicPeriodByID(ctx, *periodID)
+		if err != nil {
+			return nil, "", fmt.Errorf("get academic period: %w", err)
+		}
+	} else {
+		period, err = s.scheduleService.GetActiveAcademicPeriod(ctx)
+		if err != nil {
+			return nil, "", fmt.Errorf("get active academic period: %w", err)
+		}
+	}
+
+	group, err := s.scheduleService.GetGroup(ctx, groupID)
+	if err != nil {
+		return nil, "", fmt.Errorf("get group: %w", err)
+	}
+	if group == nil {
+		return nil, "", fmt.Errorf("group %d not found", groupID)
+	}
+
+	templates, err := s.scheduleService.GetGroupSchedule(ctx, groupID, &period.ID)
+	if err != nil {
+		return nil, "", fmt.Errorf("get group schedule: %w", err)
+	}
+
+	data := buildGroupScheduleData(group, period, templates)
+	return convert(data, format)
+}
+
+func convert(data ScheduleData, format ExportFormat) ([]byte, string, error) {
+	htmlContent, err := renderScheduleHTML(data)
+	if err != nil {
+		return nil, "", fmt.Errorf("render HTML: %w", err)
+	}
+
+	if format == FormatHTML {
+		return htmlContent, "text/html", nil
+	}
+
+	tmpFile, err := os.CreateTemp("", "schedule_*.html")
+	if err != nil {
+		return nil, "", fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.Write(htmlContent); err != nil {
+		return nil, "", fmt.Errorf("write temp file: %w", err)
+	}
+	defer tmpFile.Close()
+
+	var out []byte
+	var mime string
+	switch format {
+	case FormatPDF:
+		out, err = convertHTMLToPDF(tmpFile.Name())
+		mime = "application/pdf"
+	case FormatPNG:
+		out, err = convertHTMLToPNG(tmpFile.Name())
+		mime = "image/png"
+	case FormatDOCX:
+		out, err = convertHTMLToDOCX(tmpFile.Name())
+		mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	default:
+		return nil, "", fmt.Errorf("unsupported format: %s", format)
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("convert to %s: %w", format, err)
+	}
+
+	return out, mime, nil
+}
+
+func buildTeacherScheduleData(teacher *models.Teacher, period *models.AcademicPeriod, templates []models.ScheduleTemplate) ScheduleData {
+	data := ScheduleData{
+		Title:          fmt.Sprintf("Расписание преподавателя %s", teacher.User.GetShortName()),
+		AcademicPeriod: fmt.Sprintf("%d семестр %s уч.г.", period.Semester, period.Year),
+		WidthCol0:      "5%",
+		WidthCol1:      "55%",
+		WidthCol2:      "20%",
+		WidthCol3:      "20%",
+	}
+
+	scheduleMatrix := make(map[int]map[int]*Lesson)
+	for day := 1; day <= 7; day++ {
+		scheduleMatrix[day] = make(map[int]*Lesson)
+		for number := 0; number <= 8; number++ {
+			scheduleMatrix[day][number] = &Lesson{}
+		}
+	}
+
+	for _, tmpl := range templates {
+		details := LessonDetails{
+			Col1: tmpl.Subject.Title,
+			Col2: tmpl.Subject.Group.Name,
+			Col3: tmpl.Audience.Number,
+		}
+		lesson := scheduleMatrix[tmpl.DayOfWeek][tmpl.Number]
+		lesson.LessonNumber = fmt.Sprintf("%d", tmpl.Number)
+		lesson.Check = true
+		switch tmpl.WeekType {
+		case 0:
+			lesson.IsSplit = false
+			lesson.Details = details
+		case 1:
+			lesson.IsSplit = true
+			lesson.Odd = details
+		case 2:
+			lesson.IsSplit = true
+			lesson.Even = details
+		}
+	}
+
+	for d := 1; d <= 6; d++ {
+		day := Day{
+			DayName: daysOfWeek[d],
+			Lessons: []Lesson{},
+		}
+		for number := 0; number <= 8; number++ {
+			if scheduleMatrix[d][number] != nil {
+				lesson := scheduleMatrix[d][number]
+				if lesson.Check {
+					day.Lessons = append(day.Lessons, *lesson)
+				}
+			}
+		}
+
+		if len(day.Lessons) == 0 {
+			continue
+		}
+		data.Days = append(data.Days, day)
+	}
+
+	return data
+}
+
+func buildAudienceScheduleData(audience *models.Audience, period *models.AcademicPeriod, templates []models.ScheduleTemplate) ScheduleData {
+	data := ScheduleData{
+		Title:          fmt.Sprintf("Расписание аудитории %s", audience.Name),
+		AcademicPeriod: fmt.Sprintf("%d семестр %s уч.г.", period.Semester, period.Year),
+		WidthCol0:      "5%",
+		WidthCol1:      "55%",
+		WidthCol2:      "20%",
+		WidthCol3:      "20%",
+	}
+
+	scheduleMatrix := make(map[int]map[int]*Lesson)
+	for day := 1; day <= 7; day++ {
+		scheduleMatrix[day] = make(map[int]*Lesson)
+		for number := 0; number <= 8; number++ {
+			scheduleMatrix[day][number] = &Lesson{}
+		}
+	}
+
+	for _, tmpl := range templates {
+		details := LessonDetails{
+			Col1: tmpl.Subject.Title,
+			Col2: tmpl.Subject.Group.Name,
+			Col3: tmpl.Teacher.User.GetShortName(),
+		}
+		lesson := scheduleMatrix[tmpl.DayOfWeek][tmpl.Number]
+		lesson.LessonNumber = fmt.Sprintf("%d", tmpl.Number)
+		lesson.Check = true
+		switch tmpl.WeekType {
+		case 0:
+			lesson.IsSplit = false
+			lesson.Details = details
+		case 1:
+			lesson.IsSplit = true
+			lesson.Odd = details
+		case 2:
+			lesson.IsSplit = true
+			lesson.Even = details
+		}
+	}
+
+	for d := 1; d <= 6; d++ {
+		day := Day{
+			DayName: daysOfWeek[d],
+			Lessons: []Lesson{},
+		}
+		for number := 0; number <= 8; number++ {
+			if scheduleMatrix[d][number] != nil {
+				lesson := scheduleMatrix[d][number]
+				if lesson.Check {
+					day.Lessons = append(day.Lessons, *lesson)
+				}
+			}
+		}
+
+		if len(day.Lessons) == 0 {
+			continue
+		}
+		data.Days = append(data.Days, day)
+	}
+
+	return data
+}
+
+func buildGroupScheduleData(group *models.Group, period *models.AcademicPeriod, templates []models.ScheduleTemplate) ScheduleData {
+	data := ScheduleData{
+		Title:          fmt.Sprintf("Расписание группы %s", group.Name),
+		AcademicPeriod: fmt.Sprintf("%d семестр %s уч.г.", period.Semester, period.Year),
+		WidthCol0:      "5%",
+		WidthCol1:      "55%",
+		WidthCol2:      "30%",
+		WidthCol3:      "10%",
+	}
+
+	scheduleMatrix := make(map[int]map[int]*Lesson)
+	for day := 1; day <= 7; day++ {
+		scheduleMatrix[day] = make(map[int]*Lesson)
+		for number := 0; number <= 8; number++ {
+			scheduleMatrix[day][number] = &Lesson{}
+		}
+	}
+
+	for _, tmpl := range templates {
+		details := LessonDetails{
+			Col1: tmpl.Subject.Title,
+			Col2: tmpl.Teacher.User.GetShortName(),
+			Col3: tmpl.Audience.Number,
+		}
+		lesson := scheduleMatrix[tmpl.DayOfWeek][tmpl.Number]
+		lesson.LessonNumber = fmt.Sprintf("%d", tmpl.Number)
+		lesson.Check = true
+		switch tmpl.WeekType {
+		case 0:
+			lesson.IsSplit = false
+			lesson.Details = details
+		case 1:
+			lesson.IsSplit = true
+			lesson.Odd = details
+		case 2:
+			lesson.IsSplit = true
+			lesson.Even = details
+		}
+	}
+
+	for d := 1; d <= 6; d++ {
+		day := Day{
+			DayName: daysOfWeek[d],
+			Lessons: []Lesson{},
+		}
+		for number := 0; number <= 8; number++ {
+			if scheduleMatrix[d][number] != nil {
+				lesson := scheduleMatrix[d][number]
+				if lesson.Check {
+					day.Lessons = append(day.Lessons, *lesson)
+				}
+			}
+		}
+
+		if len(day.Lessons) == 0 {
+			Lesson := Lesson{
+				Details: LessonDetails{
+					Col1: "День самостоятельной работы",
+				},
+			}
+			day.Lessons = append(day.Lessons, Lesson)
+		}
+		data.Days = append(data.Days, day)
+	}
+
+	return data
+}
+
+func renderScheduleHTML(data ScheduleData) ([]byte, error) {
+	tmpl, err := template.New("schedule").Parse(tmplStr)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func convertHTMLToPDF(htmlPath string) ([]byte, error) {
+	cmd := exec.Command("wkhtmltopdf", "--enable-local-file-access", htmlPath, "-")
+	return cmd.Output()
+}
+
+func convertHTMLToPNG(htmlPath string) ([]byte, error) {
+	cmd := exec.Command("wkhtmltoimage", "--enable-local-file-access", htmlPath, "-")
+	return cmd.Output()
+}
+
+func convertHTMLToDOCX(htmlPath string) ([]byte, error) {
+	cmd := exec.Command("pandoc", htmlPath, "-t", "docx", "-o", "-")
+	return cmd.Output()
+}
+
+const tmplStr = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{.Title}}</title>
+    <style>
+        /* Настройки страницы для экспорта */
+        @page {
+            size: A4;
+            margin: 0;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+            background-color: #ffffff;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 15mm;
+            margin: 0 auto;
+            box-sizing: border-box;
+            background: white;
+        }
+
+        /* Заголовок */
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 22pt;
+            color: #333;
+        }
+
+        .header p {
+            margin: 5px 0;
+            font-size: 14pt;
+            color: #666;
+        }
+
+        /* Стили дня недели */
+        .day-title {
+            font-weight: bold;
+            font-size: 16pt;
+            margin-top: 20px;
+            margin-bottom: 8px;
+            color: #2c3e50;
+            border-bottom: 2px solid #eee; /* Тонкая подчеркивающая линия для структуры */
+        }
+
+        /* Таблица занятий */
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+
+        .schedule-table td {
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            font-size: 11pt;
+            vertical-align: middle;
+        }
+
+        /* Ширина колонок */
+        .col-1 { text-align: center; font-weight: bold; background: #f8f9fa; }
+		.col-2 { text-align: left; }
+		.col-3 { text-align: center; }
+        .col-4 { text-align: center; }
+
+        /* Чтобы избежать разрыва таблицы при печати в PDF */
+        .day-container {
+            page-break-inside: avoid;
+            margin-bottom: 15px;
+        }
+
+		/* Добавляем стили для четности */
+		.week-type {
+			font-size: 8pt;
+			color: #888;
+			text-transform: uppercase;
+			display: block;
+			margin-bottom: 2px;
+		}
+		
+		/* Выделение строк для визуального разделения внутри одной пары */
+		.row-odd { background-color: #fff; }
+		.row-even { background-color: #fafafa; }
+		
+		.schedule-table td {
+			line-height: 1.2;
+		}
+    </style>
+</head>
+<body>
+
+<div class="page">
+    <div class="header">
+        <h1>{{.Title}}</h1>
+        <p>{{.AcademicPeriod}}</p>
+    </div>
+
+	{{range .Days}}
+	<div class="day-container">
+		<div class="day-title">{{.DayName}}</div>
+		<table class="schedule-table">
+			{{range .Lessons}}
+				{{if .IsSplit}}
+					<!-- Вариант: Разные предметы для Четной/Нечетной -->
+					<tr class="row-odd">
+						<td width="{{$.WidthCol0}}" class="col-1" rowspan="2">{{.LessonNumber}}</td>
+						<td width="{{$.WidthCol1}}" class="col-2"><span class="week-type">Нечетная</span>{{.Odd.Col1}}</td>
+						<td width="{{$.WidthCol2}}" class="col-3">{{.Odd.Col2}}</td>
+						<td width="{{$.WidthCol3}}" class="col-4">{{.Odd.Col3}}</td>
+					</tr>
+					<tr class="row-even">
+						<!-- Номер пары пропущен, так как он объединен (rowspan) -->
+						<td width="{{$.WidthCol1}}" class="col-2"><span class="week-type">Четная</span>{{.Even.Col1}}</td>
+						<td width="{{$.WidthCol2}}" class="col-3">{{.Even.Col2}}</td>
+						<td width="{{$.WidthCol3}}" class="col-4">{{.Even.Col3}}</td>
+					</tr>
+				{{else}}
+					<!-- Вариант: Обычная пара -->
+					<tr>
+						<td width="{{$.WidthCol0}}" class="col-1">{{.LessonNumber}}</td>
+						<td width="{{$.WidthCol1}}" class="col-2">{{.Details.Col1}}</td>
+						<td width="{{$.WidthCol2}}" class="col-3">{{.Details.Col2}}</td>
+						<td width="{{$.WidthCol3}}" class="col-4">{{.Details.Col3}}</td>
+					</tr>
+				{{end}}
+			{{end}}
+		</table>
+	</div>
+    {{end}}
+</div>
+
+</body>
+</html>`
 
 --------------------------
 Файл: /home/admin/schedule-bot/services/core/internal/services/generate_user.go
@@ -6942,6 +7787,357 @@ func ensureUniqueUsername(ctx context.Context, userRepo *repository.UserRepo, ba
 		counter++
 	}
 	return username, nil
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/services/planner.go
+package services
+
+import (
+	"cmp"
+	"context"
+	"core/internal/dto"
+	"fmt"
+	"math/rand/v2"
+	"slices"
+)
+
+type WeekType int
+
+const (
+	EveryWeek WeekType = 0
+	OddWeek   WeekType = 1
+	EvenWeek  WeekType = 2
+)
+
+type PlannerService struct {
+	scheduleService *ScheduleService
+}
+
+func NewPlannerService(svc *ScheduleService) *PlannerService {
+	return &PlannerService{scheduleService: svc}
+}
+
+var seed uint64 = 123
+
+type LessonRequest struct {
+	SubjectID  int
+	GroupID    int
+	TeacherID  int
+	AudienceID int
+	Priority   int
+	seed       uint64
+	IsSplit    bool
+}
+
+type ScheduleCell struct {
+	Type       WeekType
+	SubjectID  int
+	GroupID    int
+	TeacherID  int
+	AudienceID int
+}
+
+type TimeSlot struct {
+	Day  int
+	Slot int
+	Type WeekType
+}
+
+type Schedule struct {
+	Days  int
+	Slots int
+	Grid  [][][]*ScheduleCell // [day][slot][idx]
+}
+
+func (s *PlannerService) PlanWeeklySchedule(ctx context.Context, req *dto.PlanScheduleRequest) (*dto.WeeklySchedule, error) {
+	lr, err := s.generateLessonRequests(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("generate lesson requests: %w", err)
+	}
+
+	if req.Days == 0 {
+		req.Days = 5
+	}
+	if req.Slots == 0 {
+		req.Slots = 5
+	}
+
+	schedule := Schedule{
+		Days:  req.Days,
+		Slots: req.Slots,
+	}
+	schedule.Grid = make([][][]*ScheduleCell, schedule.Days)
+
+	for d := 0; d < schedule.Days; d++ {
+		schedule.Grid[d] = make([][]*ScheduleCell, schedule.Slots)
+	}
+
+	if err := planSchedule(&schedule, lr, 0, req.Days, req.Slots); err != nil {
+		return nil, fmt.Errorf("plan schedule: %w", err)
+	}
+
+	respGrid := make(map[int]map[int][]dto.ScheduleCell)
+
+	for day := 1; day <= schedule.Days; day++ {
+		respGrid[day] = make(map[int][]dto.ScheduleCell)
+		for slot := 1; slot <= schedule.Slots; slot++ {
+			respGrid[day][slot] = make([]dto.ScheduleCell, 0)
+			for _, cell := range schedule.Grid[day-1][slot-1] {
+				subject, _ := s.scheduleService.GetSubjectByID(ctx, cell.SubjectID)
+				teacher, _ := s.scheduleService.GetTeacher(ctx, cell.TeacherID)
+				audience, _ := s.scheduleService.GetAudience(ctx, cell.AudienceID)
+
+				respGrid[day][slot] = append(respGrid[day][slot], dto.ScheduleCell{
+					WeekType: int(cell.Type),
+					Subject: *subject,
+					Teacher: *teacher,
+					Audience: *audience,
+				})
+			}
+		}
+	}
+
+	resp := dto.WeeklySchedule{
+		Seed: req.Seed,
+		Grid: respGrid,
+	}
+
+	return &resp, nil
+}
+
+func (s *PlannerService) generateLessonRequests(ctx context.Context, req *dto.PlanScheduleRequest) ([]LessonRequest, error) {
+	lessonRequests := []LessonRequest{}
+
+	for _, subj := range req.SubjectList {
+		subject, err := s.scheduleService.GetSubjectByID(ctx, subj.SubjectID)
+		if err != nil {
+			return nil, fmt.Errorf("get subject with id %d: %w", subj.SubjectID, err)
+		}
+		if subject == nil {
+			return nil, fmt.Errorf("subject %d not found", subj.SubjectID)
+		}
+
+		teacher, err := s.scheduleService.GetTeacher(ctx, subj.TeacherID)
+		if err != nil {
+			return nil, fmt.Errorf("get teacher with id %d: %w", subj.TeacherID, err)
+		}
+		if teacher == nil {
+			return nil, fmt.Errorf("teacher %d not found", subj.TeacherID)
+		}
+
+		audience, err := s.scheduleService.GetAudience(ctx, subj.AudienceID)
+		if err != nil {
+			return nil, fmt.Errorf("get audience with id %d: %w", subj.AudienceID, err)
+		}
+		if audience == nil {
+			return nil, fmt.Errorf("audience %d not found", subj.AudienceID)
+		}
+
+		for i := 0; i < subj.LessonsCount/2; i++ {
+			lessonRequests = append(lessonRequests, LessonRequest{
+				SubjectID:  subject.ID,
+				AudienceID: audience.ID,
+				TeacherID:  teacher.User.ID,
+				Priority:   subj.Priority,
+				IsSplit:    false,
+			})
+		}
+
+		if subj.LessonsCount%2 != 0 {
+			lessonRequests = append(lessonRequests, LessonRequest{
+				SubjectID:  subject.ID,
+				AudienceID: audience.ID,
+				TeacherID:  teacher.User.ID,
+				Priority:   subj.Priority,
+				IsSplit:    true,
+			})
+		}
+	}
+
+	if req.Seed == 0 {
+		req.Seed = rand.IntN(1000000)
+	}
+
+	pcg := rand.NewPCG(seed, uint64(req.Seed))
+
+	r := rand.New(pcg)
+
+	for i := range lessonRequests {
+		lessonRequests[i].seed = r.Uint64()
+	}
+
+	slices.SortFunc(lessonRequests, func(a, b LessonRequest) int {
+		if a.Priority != b.Priority {
+			return cmp.Compare(b.Priority, a.Priority)
+		}
+
+		return cmp.Compare(b.seed, a.seed)
+	})
+
+	return lessonRequests, nil
+}
+
+func getTimeSlots(sch *Schedule, req *LessonRequest, days, slots int) []TimeSlot {
+	var allTimeSlots []TimeSlot
+	var resTimeSlots []TimeSlot
+
+	if days < 6 {
+		for slot := 0; slot < slots-1; slot++ {
+			for day := 0; day < days-1; day++ {
+				allTimeSlots = append(allTimeSlots, TimeSlot{
+					Day:  day,
+					Slot: slot,
+				})
+			}
+		}
+	}
+	if days == 6 {
+		for slot := 0; slot < slots-1; slot++ {
+			for day := 0; day < days-2; day++ {
+				allTimeSlots = append(allTimeSlots, TimeSlot{
+					Day:  day,
+					Slot: slot,
+				})
+			}
+		}
+		for slot := 0; slot < slots-1; slot++ {
+			allTimeSlots = append(allTimeSlots, TimeSlot{
+				Day:  5,
+				Slot: slot,
+			})
+
+		}
+	}
+
+	for _, slot := range allTimeSlots {
+		if req.IsSplit {
+			if checkTimeSlotSchedule(OddWeek, sch.Grid[slot.Day][slot.Slot], req) {
+				resTimeSlots = append(resTimeSlots, TimeSlot{
+					Day:  slot.Day,
+					Slot: slot.Slot,
+					Type: OddWeek,
+				})
+			}
+			if checkTimeSlotSchedule(EvenWeek, sch.Grid[slot.Day][slot.Slot], req) {
+				resTimeSlots = append(resTimeSlots, TimeSlot{
+					Day:  slot.Day,
+					Slot: slot.Slot,
+					Type: EvenWeek,
+				})
+			}
+		} else {
+			if checkTimeSlotSchedule(EveryWeek, sch.Grid[slot.Day][slot.Slot], req) {
+				resTimeSlots = append(resTimeSlots, TimeSlot{
+					Day:  slot.Day,
+					Slot: slot.Slot,
+					Type: EveryWeek,
+				})
+			}
+		}
+	}
+
+	if req.IsSplit {
+		var priority1 []TimeSlot
+		var priority2 []TimeSlot
+		var other []TimeSlot
+
+		for _, slot := range resTimeSlots {
+			var teacherFree bool
+			var groupFree bool
+			for _, cell := range sch.Grid[slot.Day][slot.Slot] {
+				if cell.Type == EveryWeek {
+					continue
+				}
+				if cell.Type != slot.Type {
+					if cell.TeacherID == req.TeacherID {
+						teacherFree = true
+					}
+					if cell.GroupID == req.GroupID {
+						groupFree = true
+					}
+				}
+			}
+			if groupFree && teacherFree {
+				priority1 = append(priority1, slot)
+				continue
+			}
+			if groupFree {
+				priority2 = append(priority2, slot)
+				continue
+			}
+			other = append(other, slot)
+		}
+
+		resTimeSlots = []TimeSlot{}
+
+		resTimeSlots = append(resTimeSlots, priority1...)
+		resTimeSlots = append(resTimeSlots, priority2...)
+		resTimeSlots = append(resTimeSlots, other...)
+	}
+
+	return resTimeSlots
+}
+
+func planSchedule(sch *Schedule, req []LessonRequest, idx int, days, slots int) error {
+	if idx >= len(req) {
+		return nil
+	}
+
+	r := req[idx]
+	schSlots := getTimeSlots(sch, &r, days, slots)
+
+	for _, slot := range schSlots {
+		cell := ScheduleCell{
+			Type:       slot.Type,
+			GroupID:    r.GroupID,
+			TeacherID:  r.TeacherID,
+			AudienceID: r.AudienceID,
+			SubjectID:  r.SubjectID,
+		}
+		sch.Grid[slot.Day][slot.Slot] = append(sch.Grid[slot.Day][slot.Slot], &cell)
+
+		if err := planSchedule(sch, req, idx+1, days, slots); err == nil {
+			return nil
+		}
+		sch.Grid[slot.Day][slot.Slot] = sch.Grid[slot.Day][slot.Slot][:len(sch.Grid[slot.Day][slot.Slot])-1]
+	}
+
+	return fmt.Errorf("not a single slot fit")
+}
+
+func checkTimeSlotSchedule(t WeekType, sch []*ScheduleCell, req *LessonRequest) bool {
+	switch t {
+	case EveryWeek:
+		return !slices.ContainsFunc(sch, func(sc *ScheduleCell) bool {
+			if sc.GroupID == req.GroupID || sc.AudienceID == req.AudienceID || sc.TeacherID == req.TeacherID {
+				return true
+			}
+			return false
+		})
+	case OddWeek:
+		return !slices.ContainsFunc(sch, func(sc *ScheduleCell) bool {
+			if sc.Type == EvenWeek {
+				return false
+			}
+			if sc.GroupID == req.GroupID || sc.AudienceID == req.AudienceID || sc.TeacherID == req.TeacherID {
+				return true
+			}
+			return false
+		})
+	case EvenWeek:
+		return !slices.ContainsFunc(sch, func(sc *ScheduleCell) bool {
+			if sc.Type == OddWeek {
+				return false
+			}
+			if sc.GroupID == req.GroupID || sc.AudienceID == req.AudienceID || sc.TeacherID == req.TeacherID {
+				return true
+			}
+			return false
+		})
+	default:
+		return false
+	}
 }
 
 --------------------------
@@ -7415,6 +8611,10 @@ func (s *ScheduleService) CreateAcademicPeriod(ctx context.Context, req *dto.Cre
 
 func (s *ScheduleService) GetAcademicPeriodByID(ctx context.Context, id int) (*models.AcademicPeriod, error) {
 	return s.academicPeriodRepo.GetByID(ctx, id)
+}
+
+func (s *ScheduleService) GetActiveAcademicPeriod(ctx context.Context) (*models.AcademicPeriod, error) {
+	return s.academicPeriodRepo.GetActive(ctx)
 }
 
 func (s *ScheduleService) GetAcademicPeriodByYear(ctx context.Context, year string, semester int) (*models.AcademicPeriod, error) {

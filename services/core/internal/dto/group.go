@@ -14,11 +14,19 @@ type UpdateGroupRequest struct {
 	AdmissionYear int    `json:"admission_year"`
 }
 
+type CreateGroupSubjectRequest struct {
+	Title     string `json:"title" validate:"required"`
+	Semester  int    `json:"semester" validate:"required,min=1,max=10"`
+	HoursLoad int    `json:"hours_load" validate:"required,min=1"`
+	StartDate string `json:"start_date" validate:"required"`
+	EndDate   string `json:"end_date" validate:"required"`
+}
+
 // CreateGroupWithCurriculumRequest - запрос на создание группы с дисциплинами и студентами
 type CreateGroupWithCurriculumRequest struct {
 	Group    CreateGroupRequest                    `json:"group" validate:"required"`
-	Subjects []CreateSubjectRequest                `json:"subjects" validate:"required,min=1,dive"`
-	Students []CreateStudentWithCredentialsRequest `json:"students" validate:"required,min=1,dive"`
+	Subjects []CreateGroupSubjectRequest                `json:"subjects" validate:"required,min=1,dive"`
+	Students []CreateStudentWithCredentialsRequest `json:"students" validate:"dive"`
 }
 
 // CreateStudentWithCredentialsRequest - данные студента без указания пароля (генерируется)
