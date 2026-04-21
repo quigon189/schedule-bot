@@ -103,3 +103,37 @@ func (h *AudienceHandler) DeleteAudience(w http.ResponseWriter, r *http.Request)
 
 	utils.SuccessResponse(w, "audience deleted", nil)
 }
+
+// DownloadTemplate скачивает Excel-шаблон для аудиторий
+func (h *AudienceHandler) DownloadTemplate(w http.ResponseWriter, r *http.Request) {
+    excelSvc := services.NewExcelService()
+    data, err := excelSvc.GenerateAudienceTemplate()
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate template: %v", err))
+        return
+    }
+    w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    w.Header().Set("Content-Disposition", "attachment; filename=audiences_template.xlsx")
+    w.Write(data)
+}
+
+// UploadExcel загружает Excel и создаёт аудитории
+func (h *AudienceHandler) UploadExcel(w http.ResponseWriter, r *http.Request) {
+    if err := r.ParseMultipartForm(10 << 20); err != nil {
+        utils.ErrorResponse(w, http.StatusBadRequest, "file too large or invalid form")
+        return
+    }
+    file, _, err := r.FormFile("file")
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusBadRequest, "missing file field")
+        return
+    }
+    defer file.Close()
+    
+    audiences, err := h.scheduleService.CreateAudiencesFromExcel(r.Context(), file)
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("import failed: %v", err))
+        return
+    }
+    utils.SuccessResponse(w, "audiences created from Excel", audiences)
+}

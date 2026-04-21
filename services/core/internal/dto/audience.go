@@ -9,3 +9,8 @@ type UpdateAudienceRequest struct {
 	Name   string `json:"name"`
 	Number string `json:"number"`
 }
+
+type AudienceImport struct {
+    Name   string
+    Number string
+}

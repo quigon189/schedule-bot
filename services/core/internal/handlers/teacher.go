@@ -78,3 +78,37 @@ func (h *TeacherHandler) DeleteTeacher(w http.ResponseWriter, r *http.Request) {
 	}
 	utils.SuccessResponse(w, "teacher deleted", nil)
 }
+
+// DownloadTeacherTemplate скачивает Excel-шаблон для преподавателей
+func (h *TeacherHandler) DownloadTemplate(w http.ResponseWriter, r *http.Request) {
+    excelSvc := services.NewExcelService()
+    data, err := excelSvc.GenerateTeacherTemplate()
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate template: %v", err))
+        return
+    }
+    w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    w.Header().Set("Content-Disposition", "attachment; filename=teachers_template.xlsx")
+    w.Write(data)
+}
+
+// UploadTeachersExcel загружает Excel и создаёт преподавателей
+func (h *TeacherHandler) UploadExcel(w http.ResponseWriter, r *http.Request) {
+    if err := r.ParseMultipartForm(10 << 20); err != nil {
+        utils.ErrorResponse(w, http.StatusBadRequest, "file too large or invalid form")
+        return
+    }
+    file, _, err := r.FormFile("file")
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusBadRequest, "missing file field")
+        return
+    }
+    defer file.Close()
+    
+    results, err := h.scheduleService.CreateTeachersFromExcel(r.Context(), file)
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("import failed: %v", err))
+        return
+    }
+    utils.SuccessResponse(w, "teachers created from Excel", results)
+}

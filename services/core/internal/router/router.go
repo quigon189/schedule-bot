@@ -115,6 +115,8 @@ func (r *Router) SetupRoutes() {
 		r.Route("/teachers", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", teacherHandler.CreateTeacher)
+				r.Get("/template", teacherHandler.DownloadTemplate)
+				r.Post("/upload", teacherHandler.UploadExcel)
 				r.Post("/assign", roleHandler.AssignTeacher)
 				r.Delete("/{id}", teacherHandler.DeleteTeacher)
 			})
@@ -125,6 +127,8 @@ func (r *Router) SetupRoutes() {
 		r.Route("/students", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", studentHandler.CreateStudent)
+				r.Get("/template", studentHandler.DownloadTemplate)
+				r.Post("/upload", studentHandler.UploadExcel)
 				r.Post("/assign", roleHandler.AssignStudent)
 				r.Patch("/{id}/group", studentHandler.UpdateStudentGroup)
 				r.Delete("/{id}", studentHandler.DeleteStudent)
@@ -147,6 +151,8 @@ func (r *Router) SetupRoutes() {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", groupHandler.CreateGroup)
 				r.Post("/with-curriculum", groupHandler.CreateGroupWtihCurriculum)
+				r.Get("/template", groupHandler.DownloadTemplate)
+				r.Post("/upload", groupHandler.UploadGroupExcel)
 				r.Patch("/{id}", groupHandler.UpdateGroup)
 				r.Delete("/{id}", groupHandler.DeleteGroup)
 			})
@@ -157,6 +163,8 @@ func (r *Router) SetupRoutes() {
 		r.Route("/audiences", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", audienceHandler.CreateAudience)
+				r.Get("/template", audienceHandler.DownloadTemplate)
+				r.Post("/upload", audienceHandler.UploadExcel)
 				r.Patch("/{id}", audienceHandler.UpdateAudience)
 				r.Delete("/{id}", audienceHandler.DeleteAudience)
 			})
@@ -180,6 +188,7 @@ func (r *Router) SetupRoutes() {
 				r.Post("/", scheduleHandler.CreateScheduleTemplate)
 				r.Patch("/{id}", scheduleHandler.UpdateScheduleTemplate)
 				r.Delete("/{id}", scheduleHandler.DeleteScheduleTemplate)
+				r.Get("/template/{period_id}", scheduleHandler.DownloadPlannerTemplate)
 				r.Post("/semester", scheduleHandler.CreateSemesterSchedule)
 				r.Post("/generate", plannerHandler.GenerateWeeklySchedule)
 			})

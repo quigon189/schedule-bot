@@ -373,6 +373,25 @@
 }
 ```
 
+### GET `/groups/template` (требуется `admin`)
+Скачать Excel-шаблон для заполнения данных группы, дисциплин и студентов.
+
+**Ответ**: файл `group_template.xlsx` с тремя листами:
+- `Информация о группе` (name, specialty, admission_year)
+- `Дисциплины` (title, semester, hours_load, start_date, end_date)
+- `Студенты` (full_name, email)
+
+### POST `/groups/upload` (требуется `admin`)
+Загрузить заполненный Excel-файл для создания группы, учебного плана и студентов.
+
+**Тело запроса**: `multipart/form-data` с полем `file`.
+
+**Успешный ответ (200 OK)** – структура `GroupWithCurriculumResponse` (аналогично POST `/groups/with-curriculum`).
+
+**Ошибки**:
+- `400` – неверный формат файла или отсутствие данных
+- `500` – внутренняя ошибка при импорте
+
 **Успешный ответ (200 OK)** – объект `Group`.
 
 ### PATCH `/groups/{id}` (требуется `admin`)

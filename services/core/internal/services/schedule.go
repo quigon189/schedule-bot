@@ -7,6 +7,7 @@ import (
 	"core/internal/repository"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"slices"
 	"time"
@@ -390,6 +391,10 @@ func (s *ScheduleService) GetSubjectByID(ctx context.Context, id int) (*models.S
 
 func (s *ScheduleService) GetAllSubjects(ctx context.Context, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
 	return s.subjectRepo.GetAllSubjects(ctx, req)
+}
+
+func (s *ScheduleService) GetSubjectsByDate(ctx context.Context, startDate, endDate time.Time) ([]models.Subject, error) {
+	return s.subjectRepo.GetSubjectsByDate(ctx, startDate, endDate)
 }
 
 func (s *ScheduleService) GetSubjectsByGroupID(ctx context.Context, groupID int, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
@@ -1395,6 +1400,16 @@ func (s *ScheduleService) CreateGroupWithCurriculumAndStudents(ctx context.Conte
 	}, nil
 }
 
+// CreateGroupFromExcel создаёт группу, дисциплины и студентов из Excel файла
+func (s *ScheduleService) CreateGroupFromExcel(ctx context.Context, file io.Reader) (*dto.GroupWithCurriculumResponse, error) {
+	excelSvc := NewExcelService()
+	req, err := excelSvc.ParseGroupFromExcel(file)
+	if err != nil {
+		return nil, fmt.Errorf("parse excel: %w", err)
+	}
+	return s.CreateGroupWithCurriculumAndStudents(ctx, req)
+}
+
 // GetLessonStatistics возвращает статистику занятий с учётом фильтров
 func (s *ScheduleService) GetLessonStatistics(ctx context.Context, req *dto.StatisticsRequest) (*dto.StatisticsResponse, error) {
 	filters := repository.LessonLogFilters{
@@ -1489,4 +1504,166 @@ func (s *ScheduleService) GetLessonStatistics(ctx context.Context, req *dto.Stat
 		resp.Subjects = append(resp.Subjects, *stat)
 	}
 	return resp, nil
+}
+
+// CreateStudentsFromExcel создаёт студентов из Excel-файла
+func (s *ScheduleService) CreateStudentsFromExcel(ctx context.Context, r io.Reader) ([]dto.StudentCreationResult, error) {
+	excelSvc := NewExcelService()
+	studentsData, err := excelSvc.ParseStudentsFromExcel(r)
+	if err != nil {
+		return nil, fmt.Errorf("parse excel: %w", err)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var results []dto.StudentCreationResult
+	for _, data := range studentsData {
+		// Найти группу по имени
+		group, err := s.groupRepo.GetByName(ctx, data.GroupName)
+		if err != nil {
+			return nil, fmt.Errorf("find group '%s': %w", data.GroupName, err)
+		}
+		if group == nil {
+			return nil, fmt.Errorf("group '%s' not found", data.GroupName)
+		}
+
+		// Генерация username
+		baseUsername := generateUsername(data.FullName, group.Name)
+		username, err := ensureUniqueUsername(ctx, s.userRepo, baseUsername)
+		if err != nil {
+			return nil, fmt.Errorf("generate username for %s: %w", data.FullName, err)
+		}
+
+		// Генерация пароля
+		plainPassword, err := generateRandomPassword()
+		if err != nil {
+			return nil, fmt.Errorf("generate password: %w", err)
+		}
+		passwordHash, err := hashPassword(plainPassword)
+		if err != nil {
+			return nil, fmt.Errorf("hash password: %w", err)
+		}
+
+		user := models.User{
+			Name:         username,
+			FullName:     data.FullName,
+			Email:        data.Email,
+			PasswordHash: passwordHash,
+		}
+
+		// Создаём в транзакции
+
+		if err := s.userRepo.CreateWithTx(ctx, tx, &user); err != nil {
+			return nil, fmt.Errorf("create user: %w", err)
+		}
+		if err := s.studentRepo.CreateStudentWithTx(ctx, tx, &user, group.ID); err != nil {
+			return nil, fmt.Errorf("create student profile: %w", err)
+		}
+
+		results = append(results, dto.StudentCreationResult{
+			User:     user,
+			Password: plainPassword,
+			GroupID:  group.ID,
+		})
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+
+	return results, nil
+}
+
+// CreateTeachersFromExcel создаёт преподавателей из Excel-файла
+func (s *ScheduleService) CreateTeachersFromExcel(ctx context.Context, r io.Reader) ([]dto.TeacherCreationResult, error) {
+	excelSvc := NewExcelService()
+	teachersData, err := excelSvc.ParseTeachersFromExcel(r)
+	if err != nil {
+		return nil, fmt.Errorf("parse excel: %w", err)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var results []dto.TeacherCreationResult
+	for _, data := range teachersData {
+		// Генерация username из ФИО (латиница)
+		baseUsername := generateUsername(data.FullName, "") // без группы
+		username, err := ensureUniqueUsername(ctx, s.userRepo, baseUsername)
+		if err != nil {
+			return nil, fmt.Errorf("generate username for %s: %w", data.FullName, err)
+		}
+
+		plainPassword, err := generateRandomPassword()
+		if err != nil {
+			return nil, fmt.Errorf("generate password: %w", err)
+		}
+		passwordHash, err := hashPassword(plainPassword)
+		if err != nil {
+			return nil, fmt.Errorf("hash password: %w", err)
+		}
+
+		user := models.User{
+			Name:         username,
+			FullName:     data.FullName,
+			Email:        data.Email,
+			PasswordHash: passwordHash,
+		}
+
+		if err := s.userRepo.CreateWithTx(ctx, tx, &user); err != nil {
+			return nil, fmt.Errorf("create user: %w", err)
+		}
+		if err := s.teacherRepo.CreateTeacherWithTx(ctx, tx, &user); err != nil { 
+			return nil, fmt.Errorf("create teacher profile: %w", err)
+		}
+
+		results = append(results, dto.TeacherCreationResult{
+			User:     user,
+			Password: plainPassword,
+		})
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+	return results, nil
+}
+
+// CreateAudiencesFromExcel создаёт аудитории из Excel-файла
+func (s *ScheduleService) CreateAudiencesFromExcel(ctx context.Context, r io.Reader) ([]models.Audience, error) {
+    excelSvc := NewExcelService()
+    audiencesData, err := excelSvc.ParseAudiencesFromExcel(r)
+    if err != nil {
+        return nil, fmt.Errorf("parse excel: %w", err)
+    }
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("create transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+    
+    var created []models.Audience
+    for _, data := range audiencesData {
+        audience := models.Audience{
+            Name:   data.Name,
+            Number: data.Number,
+        }
+        if err := s.audienceRepo.CreateWithTx(ctx, tx, &audience); err != nil {
+            return nil, fmt.Errorf("create audience %s: %w", data.Name, err)
+        }
+        created = append(created, audience)
+    }
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+    return created, nil
 }

@@ -18,12 +18,24 @@ func NewAudienceRepo(db *pgxpool.Pool) *AudienceRepo {
 }
 
 func (r *AudienceRepo) Create(ctx context.Context, audience *models.Audience) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := r.CreateWithTx(ctx, tx, audience); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *AudienceRepo) CreateWithTx(ctx context.Context, tx pgx.Tx, audience *models.Audience) error {
 	query := `
 	INSERT INTO schedule.audiences(name, number)
 	VALUES ($1, $2)
 	RETURNING id
 	`
-	return r.db.QueryRow(ctx, query, audience.Name, audience.Number).Scan(&audience.ID)
+	return tx.QueryRow(ctx, query, audience.Name, audience.Number).Scan(&audience.ID)
 }
 
 func (r *AudienceRepo) Get(ctx context.Context, id int) (*models.Audience, error) {

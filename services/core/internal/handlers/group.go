@@ -138,3 +138,37 @@ func (h *GroupHandler) CreateGroupWtihCurriculum(w http.ResponseWriter, r *http.
 
 	utils.SuccessResponse(w, "group with curriculum and students created", resp)
 }
+
+func (h *GroupHandler) DownloadTemplate(w http.ResponseWriter, r *http.Request) {
+	excelSvc := services.NewExcelService()
+	data, err := excelSvc.GenerateGroupTemplate()
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate template: %v", err))
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", "attachment; filename=group_template.xlsx")
+	w.Write(data)
+}
+
+func (h *GroupHandler) UploadGroupExcel(w http.ResponseWriter, r *http.Request) {
+	// Ограничим размер файла (10 MB)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "file too large or invalid form")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "missing file field")
+		return
+	}
+	defer file.Close()
+
+	resp, err := h.scheduleService.CreateGroupFromExcel(r.Context(), file)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("import failed: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "group with curriculum and students created from Excel", resp)
+}

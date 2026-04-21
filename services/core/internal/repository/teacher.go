@@ -25,12 +25,20 @@ func (r *TeacherRepo) CreateTeacher(ctx context.Context, user *models.User) erro
 	}
 	defer tx.Rollback(ctx)
 
+	if err := r.CreateTeacherWithTx(ctx, tx, user); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *TeacherRepo) CreateTeacherWithTx(ctx context.Context, tx pgx.Tx, user *models.User) error {
 	query := `
 	INSERT INTO auth.user_roles (user_id, role_id)
 	VALUES ($1, (SELECT id FROM auth.roles WHERE name = 'teacher'))
 	ON CONFLICT DO NOTHING
 	`
-	if _, err = tx.Exec(ctx, query, user.ID); err != nil {
+	if _, err := tx.Exec(ctx, query, user.ID); err != nil {
 		return err
 	}
 
@@ -38,10 +46,11 @@ func (r *TeacherRepo) CreateTeacher(ctx context.Context, user *models.User) erro
 	INSERT INTO auth.teacher_profiles (user_id)
 	VALUES ($1)
 	`
-	if _, err = tx.Exec(ctx, query, user.ID); err != nil {
+	if _, err := tx.Exec(ctx, query, user.ID); err != nil {
 		return err
 	}
 
+	user.Roles = []models.Role{}
 	query = `
 	SELECT r.id, r.name, r.description
 	FROM auth.user_roles ur
@@ -61,7 +70,7 @@ func (r *TeacherRepo) CreateTeacher(ctx context.Context, user *models.User) erro
 		user.Roles = append(user.Roles, role)
 	}
 
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (r *TeacherRepo) GetTeacherByUserID(ctx context.Context, userID int) (*models.Teacher, error) {

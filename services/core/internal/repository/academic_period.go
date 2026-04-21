@@ -149,8 +149,8 @@ func (r *AcademicPeriodRepo) GetAll(ctx context.Context) ([]models.AcademicPerio
 func (r *AcademicPeriodRepo) Update(ctx context.Context, period *models.AcademicPeriod) error {
 	query := `
 	UPDATE schedule.academic_periods
-	SET year = $1, semester = $2, start_date = $3, end_date = $4, is_active = $5, updated_at = NOW()
-	WHERE id = $6
+	SET year = $1, semester = $2, start_date = $3, end_date = $4, updated_at = NOW()
+	WHERE id = $5
 	`
 	_, err := r.db.Exec(ctx, query,
 		period.Year,

@@ -36,3 +36,19 @@ type UserFilter struct {
 	FullName *string
 	Username *string
 }
+
+type StudentImport struct {
+	FullName  string
+	Email     string
+	GroupName string
+}
+
+type TeacherImport struct {
+	FullName string
+	Email    string
+}
+
+type TeacherCreationResult struct {
+    User     models.User `json:"user"`
+    Password string      `json:"password"`
+}

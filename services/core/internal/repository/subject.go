@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"core/internal/dto"
 	"core/internal/models"
@@ -176,6 +177,50 @@ func (r *SubjectRepo) GetAllSubjects(ctx context.Context, req *dto.PaginatedSubj
 		PerPage:    perPage,
 		TotalPages: totalPages,
 	}, nil
+}
+
+func (r *SubjectRepo) GetSubjectsByDate(ctx context.Context, startDate, endDate time.Time) ([]models.Subject, error) {
+	query := `
+	SELECT s.id, s.title, s.semester, s.hours_load, s.start_date, s.end_date, s.group_id,
+	       g.id, g.name, g.specialty, g.admission_year
+	FROM schedule.subjects s
+	LEFT JOIN auth.groups g ON s.group_id = g.id
+	WHERE s.start_date >= $1 AND s.end_date <= $2
+	ORDER BY g.name
+	`
+	rows, err := r.db.Query(ctx, query, startDate, endDate)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("subjects not found")
+		}
+		return nil, err
+	}
+
+	var subjects []models.Subject
+	for rows.Next() {
+		var subject models.Subject
+		var group models.Group
+		err := rows.Scan(
+			&subject.ID,
+			&subject.Title,
+			&subject.Semester,
+			&subject.HoursLoad,
+			&subject.StartDate,
+			&subject.EndDate,
+			&subject.GroupID,
+			&group.ID,
+			&group.Name,
+			&group.Specialty,
+			&group.AdmissionYear,
+		)
+		if err != nil {
+			return nil, err
+		}
+		subject.Group = group
+		subjects = append(subjects, subject)
+	}
+
+	return subjects, nil
 }
 
 func (r *SubjectRepo) GetSubjectsByGroupID(ctx context.Context, groupID int, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {

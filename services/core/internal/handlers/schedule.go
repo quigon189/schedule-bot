@@ -373,3 +373,25 @@ func (h *ScheduleHandler) ExportAudienceSchedule(w http.ResponseWriter, r *http.
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	w.Write(content)
 }
+
+func (h *ScheduleHandler) DownloadPlannerTemplate(w http.ResponseWriter, r *http.Request) {
+	periodID, err := strconv.Atoi(chi.URLParam(r, "period_id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid period_id")
+		return
+	}
+	period, err := h.scheduleService.GetAcademicPeriodByID(r.Context(), periodID)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to ge academic period: %v", err))
+		return
+	}
+    excelSvc := services.NewExcelService()
+    data, err := excelSvc.GeneratePlannerTemplate(r.Context(), h.scheduleService, period)
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate template: %v", err))
+        return
+    }
+    w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    w.Header().Set("Content-Disposition", "attachment; filename=planner_template.xlsx")
+    w.Write(data)
+}

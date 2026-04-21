@@ -49,6 +49,7 @@ func (r *StudentRepo) CreateStudentWithTx(ctx context.Context, tx pgx.Tx, user *
 		return err
 	}
 
+	user.Roles = []models.Role{}
 	query = `
 	SELECT r.id, r.name, r.description
 	FROM auth.user_roles ur

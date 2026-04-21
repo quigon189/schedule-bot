@@ -1,4 +1,4 @@
-Текущий каталог: /home/admin/schedule-bot/services/core
+Текущий каталог: /home/quigon/schedule-bot/services/core
 ├── Dockerfile
 ├── README.md
 ├── cmd
@@ -77,7 +77,7 @@
     └── utils
         └── response.go
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/README.md
+Файл: /home/quigon/schedule-bot/services/core/README.md
 ## Введение
 
 Сервис предоставляет REST API для управления пользователями, ролями, группами, аудиториями, предметами, расписанием и журналом занятий. Аутентификация осуществляется с помощью JWT токенов.
@@ -976,7 +976,7 @@
 
 *Документация актуальна на основе исходного кода сервиса `core`.*
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/cmd/main.go
+Файл: /home/quigon/schedule-bot/services/core/cmd/main.go
 package main
 
 import (
@@ -1070,7 +1070,7 @@ func Migrations(pool *pgxpool.Pool, path string) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/go.mod
+Файл: /home/quigon/schedule-bot/services/core/go.mod
 module core
 
 go 1.25.0
@@ -1103,7 +1103,7 @@ require (
 )
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/config/config.go
+Файл: /home/quigon/schedule-bot/services/core/internal/config/config.go
 package config
 
 import (
@@ -1228,7 +1228,7 @@ func getIntEnv(key string, defaultValue int) int {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/academic_year.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/academic_year.go
 package dto
 
 type CreateAcademicPeriodRequest struct {
@@ -1246,7 +1246,7 @@ type UpdateAcademicPeriodRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/audience.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/audience.go
 package dto
 
 type CreateAudienceRequest struct {
@@ -1260,7 +1260,7 @@ type UpdateAudienceRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/auth.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/auth.go
 package dto
 
 type LoginRequest struct {
@@ -1284,7 +1284,7 @@ type RefreshTokenRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/group.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/group.go
 package dto
 
 import "core/internal/models"
@@ -1301,11 +1301,19 @@ type UpdateGroupRequest struct {
 	AdmissionYear int    `json:"admission_year"`
 }
 
+type CreateGroupSubjectRequest struct {
+	Title     string `json:"title" validate:"required"`
+	Semester  int    `json:"semester" validate:"required,min=1,max=10"`
+	HoursLoad int    `json:"hours_load" validate:"required,min=1"`
+	StartDate string `json:"start_date" validate:"required"`
+	EndDate   string `json:"end_date" validate:"required"`
+}
+
 // CreateGroupWithCurriculumRequest - запрос на создание группы с дисциплинами и студентами
 type CreateGroupWithCurriculumRequest struct {
 	Group    CreateGroupRequest                    `json:"group" validate:"required"`
-	Subjects []CreateSubjectRequest                `json:"subjects" validate:"required,min=1,dive"`
-	Students []CreateStudentWithCredentialsRequest `json:"students" validate:"required,min=1,dive"`
+	Subjects []CreateGroupSubjectRequest                `json:"subjects" validate:"required,min=1,dive"`
+	Students []CreateStudentWithCredentialsRequest `json:"students" validate:"dive"`
 }
 
 // CreateStudentWithCredentialsRequest - данные студента без указания пароля (генерируется)
@@ -1328,7 +1336,7 @@ type StudentCreationResult struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/lesson_log.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/lesson_log.go
 package dto
 
 import "time"
@@ -1431,7 +1439,7 @@ type StatisticsResponse struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/planner.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/planner.go
 package dto
 
 import "core/internal/models"
@@ -1465,7 +1473,7 @@ type WeeklySchedule struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/role.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/role.go
 package dto
 
 type AssignStudentRequest struct {
@@ -1488,7 +1496,7 @@ type RemoveRoleRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/schedule.go
 package dto
 
 type CreateStudentRequest struct {
@@ -1550,7 +1558,7 @@ type BulkDeleteScheduleRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/subject.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/subject.go
 package dto
 
 import "core/internal/models"
@@ -1588,7 +1596,7 @@ type PaginatedSubjectsResponse struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/user.go
 package dto
 
 import (
@@ -1629,7 +1637,7 @@ type UserFilter struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/validator.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/validator.go
 package dto
 
 import (
@@ -1655,7 +1663,7 @@ func ValidateStruct(s any) error {
 
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/academic_year.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/academic_year.go
 package handlers
 
 import (
@@ -1771,7 +1779,7 @@ func (h *AcademicPeriodHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/audience.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/audience.go
 package handlers
 
 import (
@@ -1879,7 +1887,7 @@ func (h *AudienceHandler) DeleteAudience(w http.ResponseWriter, r *http.Request)
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/auth.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/auth.go
 package handlers
 
 import (
@@ -1977,7 +1985,7 @@ func (h *AuthHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/chat.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/chat.go
 package handlers
 
 import (
@@ -2026,7 +2034,7 @@ func (h *ChatHandler) Handle(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/group.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/group.go
 package handlers
 
 import (
@@ -2169,7 +2177,7 @@ func (h *GroupHandler) CreateGroupWtihCurriculum(w http.ResponseWriter, r *http.
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/lesson_log.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/lesson_log.go
 package handlers
 
 import (
@@ -2356,7 +2364,7 @@ func (h *LessonLogHandler) GetLessonStatistics(w http.ResponseWriter, r *http.Re
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/planner.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/planner.go
 package handlers
 
 import (
@@ -2393,7 +2401,7 @@ func (h *PlannerHandler) GenerateWeeklySchedule(w http.ResponseWriter, r *http.R
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/role.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/role.go
 package handlers
 
 import (
@@ -2479,7 +2487,7 @@ func (h *RoleHandler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/schedule.go
 package handlers
 
 import (
@@ -2857,7 +2865,7 @@ func (h *ScheduleHandler) ExportAudienceSchedule(w http.ResponseWriter, r *http.
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/student.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/student.go
 package handlers
 
 import (
@@ -2963,7 +2971,7 @@ func (h *StudentHandler) DeleteStudent(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/subject.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/subject.go
 package handlers
 
 import (
@@ -3109,7 +3117,7 @@ func (h *SubjectHandler) DeleteSubject(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/teacher.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/teacher.go
 package handlers
 
 import (
@@ -3192,7 +3200,7 @@ func (h *TeacherHandler) DeleteTeacher(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/user.go
 package handlers
 
 import (
@@ -3356,7 +3364,7 @@ func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request)
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/agent.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/agent.go
 package llm
 
 import (
@@ -3518,7 +3526,7 @@ func (a *LLMAgent) formatResponse(ctx context.Context, userMessage string, data 
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/factory.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/factory.go
 package llm
 
 import (
@@ -3548,7 +3556,7 @@ func NewLLMClient(cfg *config.LLMConfig) (Client, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/giga.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/giga.go
 package llm
 
 import (
@@ -3759,7 +3767,7 @@ func (c *GigaChatClient) GetModelName() string {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/ollama.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/ollama.go
 package llm
 
 import (
@@ -3836,7 +3844,7 @@ func (c *OllamaClient) Generate(ctx context.Context, systemPrompt, userMessage s
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/tools.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/tools.go
 package llm
 
 import (
@@ -4088,7 +4096,7 @@ func initTools(svc services.ScheduleService) []Tool {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/middlewares/tokens.go
+Файл: /home/quigon/schedule-bot/services/core/internal/middlewares/tokens.go
 package middlewares
 
 import (
@@ -4143,7 +4151,7 @@ func (m *AuthMiddleware) AdminRequire(next http.Handler) http.Handler {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/models/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/models/schedule.go
 package models
 
 import "time"
@@ -4233,7 +4241,7 @@ type SubjectProgress struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/models/session.go
+Файл: /home/quigon/schedule-bot/services/core/internal/models/session.go
 package models
 
 import (
@@ -4252,7 +4260,7 @@ type Session struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/models/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/models/user.go
 package models
 
 import (
@@ -4325,7 +4333,7 @@ func (u *User) RequireRole(role string) bool {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/academic_period.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/academic_period.go
 package repository
 
 import (
@@ -4498,7 +4506,7 @@ func (r *AcademicPeriodRepo) Delete(ctx context.Context, id int) error {
 
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/audience.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/audience.go
 package repository
 
 import (
@@ -4615,7 +4623,7 @@ func (r *AudienceRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/group.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/group.go
 package repository
 
 import (
@@ -4771,7 +4779,7 @@ func (r *GroupRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/lesson_logs.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/lesson_logs.go
 package repository
 
 import (
@@ -5178,7 +5186,7 @@ func (r *LessonLogRepo) UpdateStatusWithTx(ctx context.Context, tx pgx.Tx, id in
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/role.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/role.go
 package repository
 
 import (
@@ -5288,7 +5296,7 @@ func (r *RoleRepo) GetRoles(ctx context.Context) ([]models.Role, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/schedule.go
 package repository
 
 import (
@@ -5660,7 +5668,7 @@ func (r *ScheduleRepo) DeleteWithTx(ctx context.Context, tx pgx.Tx, id int) erro
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/session.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/session.go
 package repository
 
 import (
@@ -5823,7 +5831,7 @@ func (r *SessionRepo) Delete(ctx context.Context, id pgtype.UUID) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/student.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/student.go
 package repository
 
 import (
@@ -6058,7 +6066,7 @@ func (r *StudentRepo) IsStudent(ctx context.Context, userID int) (bool, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/subject.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/subject.go
 package repository
 
 import (
@@ -6343,7 +6351,7 @@ func (r *SubjectRepo) DeleteSubject(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/teacher.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/teacher.go
 package repository
 
 import (
@@ -6548,7 +6556,7 @@ func (r *TeacherRepo) IsTeacher(ctx context.Context, userID int) (bool, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/user.go
 package repository
 
 import (
@@ -6900,7 +6908,7 @@ func (r *UserRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/router/router.go
+Файл: /home/quigon/schedule-bot/services/core/internal/router/router.go
 package router
 
 import (
@@ -7117,7 +7125,7 @@ func (r *Router) Router() *chi.Mux {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/export.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/export.go
 package services
 
 import (
@@ -7699,7 +7707,7 @@ const tmplStr = `<!DOCTYPE html>
 </html>`
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/generate_user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/generate_user.go
 package services
 
 import (
@@ -7790,7 +7798,7 @@ func ensureUniqueUsername(ctx context.Context, userRepo *repository.UserRepo, ba
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/planner.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/planner.go
 package services
 
 import (
@@ -7798,6 +7806,7 @@ import (
 	"context"
 	"core/internal/dto"
 	"fmt"
+	"log"
 	"math/rand/v2"
 	"slices"
 )
@@ -7856,6 +7865,8 @@ func (s *PlannerService) PlanWeeklySchedule(ctx context.Context, req *dto.PlanSc
 		return nil, fmt.Errorf("generate lesson requests: %w", err)
 	}
 
+	log.Printf("Запросов на пары: %d", len(lr))
+
 	if req.Days == 0 {
 		req.Days = 5
 	}
@@ -7890,8 +7901,8 @@ func (s *PlannerService) PlanWeeklySchedule(ctx context.Context, req *dto.PlanSc
 
 				respGrid[day][slot] = append(respGrid[day][slot], dto.ScheduleCell{
 					WeekType: int(cell.Type),
-					Subject: *subject,
-					Teacher: *teacher,
+					Subject:  *subject,
+					Teacher:  *teacher,
 					Audience: *audience,
 				})
 			}
@@ -7908,6 +7919,8 @@ func (s *PlannerService) PlanWeeklySchedule(ctx context.Context, req *dto.PlanSc
 
 func (s *PlannerService) generateLessonRequests(ctx context.Context, req *dto.PlanScheduleRequest) ([]LessonRequest, error) {
 	lessonRequests := []LessonRequest{}
+
+	teacherBusy := make(map[int]int)
 
 	for _, subj := range req.SubjectList {
 		subject, err := s.scheduleService.GetSubjectByID(ctx, subj.SubjectID)
@@ -7926,6 +7939,13 @@ func (s *PlannerService) generateLessonRequests(ctx context.Context, req *dto.Pl
 			return nil, fmt.Errorf("teacher %d not found", subj.TeacherID)
 		}
 
+		_, ok := teacherBusy[teacher.User.ID]
+		if !ok {
+			teacherBusy[teacher.User.ID] = 1
+		} else {
+			teacherBusy[teacher.User.ID]++
+		}
+
 		audience, err := s.scheduleService.GetAudience(ctx, subj.AudienceID)
 		if err != nil {
 			return nil, fmt.Errorf("get audience with id %d: %w", subj.AudienceID, err)
@@ -7937,6 +7957,7 @@ func (s *PlannerService) generateLessonRequests(ctx context.Context, req *dto.Pl
 		for i := 0; i < subj.LessonsCount/2; i++ {
 			lessonRequests = append(lessonRequests, LessonRequest{
 				SubjectID:  subject.ID,
+				GroupID:    subject.GroupID,
 				AudienceID: audience.ID,
 				TeacherID:  teacher.User.ID,
 				Priority:   subj.Priority,
@@ -7947,12 +7968,27 @@ func (s *PlannerService) generateLessonRequests(ctx context.Context, req *dto.Pl
 		if subj.LessonsCount%2 != 0 {
 			lessonRequests = append(lessonRequests, LessonRequest{
 				SubjectID:  subject.ID,
+				GroupID:    subj.SubjectID,
 				AudienceID: audience.ID,
 				TeacherID:  teacher.User.ID,
 				Priority:   subj.Priority,
 				IsSplit:    true,
 			})
 		}
+	}
+
+	var maxLessons int
+
+	for _, val := range teacherBusy {
+		if val > maxLessons {
+			maxLessons = val
+		}
+	}
+
+	for i := range lessonRequests {
+		tCount := teacherBusy[lessonRequests[i].TeacherID]
+		tPriority := tCount / maxLessons * 100
+		lessonRequests[i].Priority = (lessonRequests[i].Priority + tPriority) / 2
 	}
 
 	if req.Seed == 0 {
@@ -8003,7 +8039,7 @@ func getTimeSlots(sch *Schedule, req *LessonRequest, days, slots int) []TimeSlot
 		}
 		for slot := 0; slot < slots-1; slot++ {
 			allTimeSlots = append(allTimeSlots, TimeSlot{
-				Day:  5,
+				Day:  4,
 				Slot: slot,
 			})
 
@@ -8087,6 +8123,9 @@ func planSchedule(sch *Schedule, req []LessonRequest, idx int, days, slots int) 
 	r := req[idx]
 	schSlots := getTimeSlots(sch, &r, days, slots)
 
+	log.Printf("Plan %d req %+v", idx, req[idx])
+	log.Printf("Getted slots: %+v", schSlots)
+
 	for _, slot := range schSlots {
 		cell := ScheduleCell{
 			Type:       slot.Type,
@@ -8097,9 +8136,15 @@ func planSchedule(sch *Schedule, req []LessonRequest, idx int, days, slots int) 
 		}
 		sch.Grid[slot.Day][slot.Slot] = append(sch.Grid[slot.Day][slot.Slot], &cell)
 
+		log.Printf("Подставили пару: день %d пара %d предмет %d преподаватель %d аудитория %d",
+			slot.Day, slot.Slot, cell.SubjectID, cell.TeacherID, cell.AudienceID)
+
 		if err := planSchedule(sch, req, idx+1, days, slots); err == nil {
 			return nil
 		}
+		log.Printf("Отменили пару: день %d пара %d предмет %d преподаватель %d аудитория %d",
+			slot.Day, slot.Slot, cell.SubjectID, cell.TeacherID, cell.AudienceID)
+
 		sch.Grid[slot.Day][slot.Slot] = sch.Grid[slot.Day][slot.Slot][:len(sch.Grid[slot.Day][slot.Slot])-1]
 	}
 
@@ -8141,7 +8186,7 @@ func checkTimeSlotSchedule(t WeekType, sch []*ScheduleCell, req *LessonRequest) 
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/schedule.go
 package services
 
 import (
@@ -9636,7 +9681,7 @@ func (s *ScheduleService) GetLessonStatistics(ctx context.Context, req *dto.Stat
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/tokens.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/tokens.go
 package services
 
 import (
@@ -9711,7 +9756,7 @@ func (s *JWTService) GenerateRefreshToken() (string, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/user.go
 package services
 
 import (
@@ -9947,7 +9992,7 @@ func (s *UserService) GetSessions(ctx context.Context) ([]models.Session, error)
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/utils.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/utils.go
 package services
 
 import "golang.org/x/crypto/bcrypt"
@@ -9963,7 +10008,7 @@ func checkPasswordHash(password, hash string) bool {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/pkg/postgres/postgres.go
+Файл: /home/quigon/schedule-bot/services/core/pkg/postgres/postgres.go
 package postgres
 
 import (
@@ -10005,7 +10050,7 @@ func NewPostgresPool(dsn string) (*pgxpool.Pool, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/pkg/utils/response.go
+Файл: /home/quigon/schedule-bot/services/core/pkg/utils/response.go
 package utils
 
 import (
