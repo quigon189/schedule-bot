@@ -191,6 +191,8 @@ func (r *Router) SetupRoutes() {
 				r.Get("/template/{period_id}", scheduleHandler.DownloadPlannerTemplate)
 				r.Post("/semester", scheduleHandler.CreateSemesterSchedule)
 				r.Post("/generate", plannerHandler.GenerateWeeklySchedule)
+				r.Post("/generate/upload", plannerHandler.UploadPlannerExcel)
+				r.Get("/file/{uuid}", plannerHandler.GetScheduleFile)
 			})
 			r.Get("/", scheduleHandler.GetAllScheduleTemplates)
 			r.Get("/{id}", scheduleHandler.GetScheduleTemplate)

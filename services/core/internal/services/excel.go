@@ -442,26 +442,6 @@ func (s *ExcelService) GeneratePlannerTemplate(ctx context.Context, scheduleServ
 	f.SetCellStr(paramsSheet, "E2", "")
 	f.SetColVisible(paramsSheet, "A", false)
 
-	// listsSheet := "Справочник_учебные_периоды"
-	// _, err = f.NewSheet(listsSheet)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("create lists sheet: %w", err)
-	// }
-	// for i, p := range periods {
-	// 	f.SetCellStr(listsSheet, fmt.Sprintf("A%d", i+1), periodNames[i])
-	// 	f.SetCellInt(listsSheet, fmt.Sprintf("B%d", i+1), int64(p.ID))
-	// }
-	//
-	// dv := excelize.NewDataValidation(true)
-	// dv.Sqref = "B2"
-	// dv.SetSqrefDropList(fmt.Sprintf("%s!A1:A%d", listsSheet, len(periods)))
-	// f.AddDataValidation(paramsSheet, dv)
-	//
-	// formula := fmt.Sprintf("=VLOOKUP(B2, %s!A1:B%d, 2, FALSE)", listsSheet, len(periods))
-	// f.SetCellFormula(paramsSheet, "A2", formula)
-	// f.SetColVisible(paramsSheet, "A", false)
-	// f.SetSheetVisible(listsSheet, false)
-
 	// 2. Лист "Данные" (основной)
 	dataSheet := "Данные"
 	_, err = f.NewSheet(dataSheet)
@@ -569,6 +549,177 @@ func (s *ExcelService) GeneratePlannerTemplate(ctx context.Context, scheduleServ
 		f.SetCellFormula(dataSheet, fmt.Sprintf("J%d", i), formula)
 	}
 	f.SetSheetVisible(audiencesSheet, false)
+
+	// Удаляем дефолтный лист
+	f.DeleteSheet("Sheet1")
+
+	// Устанавливаем активный лист
+	f.SetActiveSheet(0) // данные
+
+	buf := new(bytes.Buffer)
+	if err := f.Write(buf); err != nil {
+		return nil, fmt.Errorf("write excel: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+// ParsePlannerTemplate читает заполненный Excel и возвращает запрос для планировщика
+func (s *ExcelService) ParsePlannerTemplate(r io.Reader, scheduleService *ScheduleService) (*dto.PlanScheduleRequest, error) {
+	f, err := excelize.OpenReader(r)
+	if err != nil {
+		return nil, fmt.Errorf("open excel: %w", err)
+	}
+	defer f.Close()
+
+	// Читаем параметры
+	paramsSheet := "Параметры"
+	academicPeriodID, err := s.getCellInt(f, paramsSheet, "A2")
+	if err != nil {
+		return nil, fmt.Errorf("academic_period_id: %w", err)
+	}
+	days, err := s.getCellInt(f, paramsSheet, "C2")
+	if err != nil {
+		days = 5
+	}
+	slots, err := s.getCellInt(f, paramsSheet, "D2")
+	if err != nil {
+		slots = 5
+	}
+	seed, err := s.getCellInt(f, paramsSheet, "E2")
+	if err != nil {
+		seed = 0
+	}
+
+	// Читаем данные
+	dataSheet := "Данные"
+	rows, err := f.GetRows(dataSheet)
+	if err != nil {
+		return nil, fmt.Errorf("get rows from data sheet: %w", err)
+	}
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("data sheet must have at least one row")
+	}
+
+	var subjectRequests []dto.SubjectRequest
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+		if len(row) < 10 {
+			return nil, fmt.Errorf("parse %d row: must be filled 10 columns", i+1)
+		}
+		priority, _ := strconv.Atoi(strings.TrimSpace(row[5]))
+		lessonsCount, _ := strconv.Atoi(strings.TrimSpace(row[6]))
+		subjectID, err := s.getCellInt(f, dataSheet, fmt.Sprintf("H%d", i+1))
+		if err != nil {
+			return nil, fmt.Errorf("parse subject id in row %d: %w", i+1, err)
+		}
+		if subjectID == 0 {
+			break
+		}
+		teacherID, err := s.getCellInt(f, dataSheet, fmt.Sprintf("I%d", i+1))
+		if err != nil {
+			return nil, fmt.Errorf("parse teacher id in row %d: %w", i+1, err)
+		}
+		audienceID, err := s.getCellInt(f, dataSheet, fmt.Sprintf("J%d", i+1))
+		if err != nil {
+			return nil, fmt.Errorf("parse audience id in row %d: %w", i+1, err)
+		}
+		subjectRequests = append(subjectRequests, dto.SubjectRequest{
+			SubjectID:    subjectID,
+			TeacherID:    teacherID,
+			AudienceID:   audienceID,
+			Priority:     priority,
+			LessonsCount: lessonsCount,
+		})
+	}
+
+	return &dto.PlanScheduleRequest{
+		AcademicPeriodID: academicPeriodID,
+		Days:             days,
+		Slots:            slots,
+		Seed:             seed,
+		SubjectList:      subjectRequests,
+	}, nil
+}
+
+// Вспомогательные методы для парсинга Excel
+func (s *ExcelService) getCellInt(f *excelize.File, sheet, cell string) (int, error) {
+	val, err := f.GetCellValue(sheet, cell)
+	if err != nil {
+		return 0, err
+	}
+	if val == "" {
+		return 0, nil
+	}
+	return strconv.Atoi(strings.TrimSpace(val))
+}
+
+func (s *ExcelService) GenerateGroupSchedule(sch *dto.WeeklySchedule) ([]byte, error) {
+	f := excelize.NewFile()
+	defer f.Close()
+
+	weekDays := map[int]string{
+		1: "Понедельник",
+		2: "Вторник",
+		3: "Среда",
+		4: "Четверг",
+		5: "Пятница",
+		6: "Суббота",
+	}
+
+	for _, group := range sch.Groups {
+		groupSheet := group.Name
+		_, err := f.NewSheet(groupSheet)
+		if err != nil {
+			return nil, fmt.Errorf("create params sheet: %w", err)
+		}
+
+		f.SetCellStr(groupSheet, "A1", "День недели")
+		f.SetCellStr(groupSheet, "B1", "Номер пары")
+		f.SetCellStr(groupSheet, "C1", "Предмет")
+		f.SetCellStr(groupSheet, "D1", "Аудитория")
+		f.SetCellStr(groupSheet, "E1", "Преподаватель")
+
+		f.SetColWidth(groupSheet, "A", "E", 20)
+
+		type SchRow struct {
+			WeekDay  string
+			Slot     int
+			Subject  string
+			Audience string
+			Teacher  string
+		}
+		schRows := []SchRow{}
+		for day, daySchedule := range sch.Grid {
+			for slot, data := range daySchedule {
+				for _, lesson := range data {
+					if lesson.Subject.GroupID == group.ID {
+						var subjectTitle string
+						if lesson.WeekType == 1 {
+							subjectTitle += "нечетная "
+						}
+						if lesson.WeekType == 2 {
+							subjectTitle += "четная"
+						}
+						schRows = append(schRows, SchRow{
+							WeekDay: weekDays[day],
+							Slot: slot,
+							Subject: subjectTitle + lesson.Subject.Title,
+							Audience: lesson.Audience.Number,
+							Teacher: lesson.Teacher.User.GetShortName(),
+						})
+					}
+				}
+			}
+		}
+
+		for i, row := range schRows {
+			f.SetCellStr(groupSheet, fmt.Sprintf("A%d", i+2), row.WeekDay)
+			f.SetCellInt(groupSheet, fmt.Sprintf("B%d", i+2), int64(row.Slot))
+			f.SetCellStr(groupSheet, fmt.Sprintf("C%d", i+2), row.Subject)
+			f.SetCellStr(groupSheet, fmt.Sprintf("D%d", i+2), row.Audience)
+			f.SetCellStr(groupSheet, fmt.Sprintf("E%d", i+2), row.Teacher)
+		}
+	}
 
 	// Удаляем дефолтный лист
 	f.DeleteSheet("Sheet1")

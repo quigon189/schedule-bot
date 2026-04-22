@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"context"
 	"core/internal/dto"
+	"core/internal/models"
 	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
 	"slices"
@@ -83,7 +85,8 @@ func (s *PlannerService) PlanWeeklySchedule(ctx context.Context, req *dto.PlanSc
 		schedule.Grid[d] = make([][]*ScheduleCell, schedule.Slots)
 	}
 
-	if err := planSchedule(&schedule, lr, 0, req.Days, req.Slots); err != nil {
+	steps := 0
+	if err := planSchedule(&schedule, lr, 0, req.Days, req.Slots, &steps); err != nil {
 		return nil, fmt.Errorf("plan schedule: %w", err)
 	}
 
@@ -108,9 +111,22 @@ func (s *PlannerService) PlanWeeklySchedule(ctx context.Context, req *dto.PlanSc
 		}
 	}
 
+	var groups []models.Group
+	for _, r := range lr {
+		group, err := s.scheduleService.GetGroup(ctx, r.GroupID)
+		if err != nil {
+			return nil, fmt.Errorf("get group: %w", err)
+		}
+		if group == nil {
+			return nil, fmt.Errorf("group %d not found", r.GroupID)
+		}
+		groups = append(groups, *group)
+	}
+
 	resp := dto.WeeklySchedule{
-		Seed: req.Seed,
-		Grid: respGrid,
+		Seed:   req.Seed,
+		Grid:   respGrid,
+		Groups: groups,
 	}
 
 	return &resp, nil
@@ -167,7 +183,7 @@ func (s *PlannerService) generateLessonRequests(ctx context.Context, req *dto.Pl
 		if subj.LessonsCount%2 != 0 {
 			lessonRequests = append(lessonRequests, LessonRequest{
 				SubjectID:  subject.ID,
-				GroupID:    subj.SubjectID,
+				GroupID:    subject.GroupID,
 				AudienceID: audience.ID,
 				TeacherID:  teacher.User.ID,
 				Priority:   subj.Priority,
@@ -218,8 +234,8 @@ func getTimeSlots(sch *Schedule, req *LessonRequest, days, slots int) []TimeSlot
 	var resTimeSlots []TimeSlot
 
 	if days < 6 {
-		for slot := 0; slot < slots-1; slot++ {
-			for day := 0; day < days-1; day++ {
+		for slot := 0; slot < slots; slot++ {
+			for day := 0; day < days; day++ {
 				allTimeSlots = append(allTimeSlots, TimeSlot{
 					Day:  day,
 					Slot: slot,
@@ -228,17 +244,17 @@ func getTimeSlots(sch *Schedule, req *LessonRequest, days, slots int) []TimeSlot
 		}
 	}
 	if days == 6 {
-		for slot := 0; slot < slots-1; slot++ {
-			for day := 0; day < days-2; day++ {
+		for slot := 0; slot < slots; slot++ {
+			for day := 0; day < days-1; day++ {
 				allTimeSlots = append(allTimeSlots, TimeSlot{
 					Day:  day,
 					Slot: slot,
 				})
 			}
 		}
-		for slot := 0; slot < slots-1; slot++ {
+		for slot := 0; slot < slots; slot++ {
 			allTimeSlots = append(allTimeSlots, TimeSlot{
-				Day:  4,
+				Day:  5,
 				Slot: slot,
 			})
 
@@ -314,7 +330,7 @@ func getTimeSlots(sch *Schedule, req *LessonRequest, days, slots int) []TimeSlot
 	return resTimeSlots
 }
 
-func planSchedule(sch *Schedule, req []LessonRequest, idx int, days, slots int) error {
+func planSchedule(sch *Schedule, req []LessonRequest, idx int, days, slots int, steps *int) error {
 	if idx >= len(req) {
 		return nil
 	}
@@ -338,13 +354,18 @@ func planSchedule(sch *Schedule, req []LessonRequest, idx int, days, slots int) 
 		log.Printf("Подставили пару: день %d пара %d предмет %d преподаватель %d аудитория %d",
 			slot.Day, slot.Slot, cell.SubjectID, cell.TeacherID, cell.AudienceID)
 
-		if err := planSchedule(sch, req, idx+1, days, slots); err == nil {
+		*steps = 0
+		if err := planSchedule(sch, req, idx+1, days, slots, steps); err == nil {
 			return nil
+		} else {
+			log.Printf("Отменили пару: день %d пара %d предмет %d преподаватель %d аудитория %d",
+				slot.Day, slot.Slot, cell.SubjectID, cell.TeacherID, cell.AudienceID)
+			sch.Grid[slot.Day][slot.Slot] = sch.Grid[slot.Day][slot.Slot][:len(sch.Grid[slot.Day][slot.Slot])-1]
+			*steps++
+			if *steps < 5 {
+				return err
+			}
 		}
-		log.Printf("Отменили пару: день %d пара %d предмет %d преподаватель %d аудитория %d",
-			slot.Day, slot.Slot, cell.SubjectID, cell.TeacherID, cell.AudienceID)
-
-		sch.Grid[slot.Day][slot.Slot] = sch.Grid[slot.Day][slot.Slot][:len(sch.Grid[slot.Day][slot.Slot])-1]
 	}
 
 	return fmt.Errorf("not a single slot fit")
@@ -382,4 +403,14 @@ func checkTimeSlotSchedule(t WeekType, sch []*ScheduleCell, req *LessonRequest) 
 	default:
 		return false
 	}
+}
+
+func (s *PlannerService) GenerateScheduleFromExcel(ctx context.Context, r io.Reader) (*dto.WeeklySchedule, error) {
+	excelSvc := NewExcelService()
+	req, err := excelSvc.ParsePlannerTemplate(r, s.scheduleService)
+	if err != nil {
+		return nil, fmt.Errorf("parse planner template: %w", err)
+	}
+
+	return s.PlanWeeklySchedule(ctx, req)
 }

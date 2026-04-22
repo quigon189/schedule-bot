@@ -1,6 +1,9 @@
 package dto
 
-import "core/internal/models"
+import (
+	"time"
+	"core/internal/models"
+)
 
 type PlanScheduleRequest struct {
 	AcademicPeriodID int              `json:"academic_period_id" validate:"required"`
@@ -26,6 +29,13 @@ type ScheduleCell struct {
 }
 
 type WeeklySchedule struct {
-	Seed int                            `json:"seed"`
-	Grid map[int]map[int][]ScheduleCell `json:"grid"`
+	Seed   int                            `json:"seed"`
+	Grid   map[int]map[int][]ScheduleCell `json:"grid"`
+	Groups []models.Group                 `json:"groups"`
+}
+
+type GenerationResult struct {
+	Seed     int       `json:"seed"`
+	FilePath string    `json:"file_path"`
+	ExiresAt time.Time `json:"expires_at"`
 }
