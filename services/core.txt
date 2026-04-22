@@ -1,4 +1,4 @@
-Текущий каталог: /home/quigon/schedule-bot/services/core
+Текущий каталог: /home/admin/schedule-bot/services/core
 ├── Dockerfile
 ├── README.md
 ├── cmd
@@ -60,14 +60,17 @@
 |   |   └── user.go
 |   ├── router
 |   |   └── router.go
-|   └── services
-|       ├── export.go
-|       ├── generate_user.go
-|       ├── planner.go
-|       ├── schedule.go
-|       ├── tokens.go
-|       ├── user.go
-|       └── utils.go
+|   ├── services
+|   |   ├── excel.go
+|   |   ├── export.go
+|   |   ├── generate_user.go
+|   |   ├── planner.go
+|   |   ├── schedule.go
+|   |   ├── tokens.go
+|   |   ├── user.go
+|   |   └── utils.go
+|   └── storage
+|       └── memory.go
 ├── migrations
 |   ├── 001_init_auth_schema.sql
 |   └── 002_init_schedule.sql
@@ -77,7 +80,7 @@
     └── utils
         └── response.go
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/README.md
+Файл: /home/admin/schedule-bot/services/core/README.md
 ## Введение
 
 Сервис предоставляет REST API для управления пользователями, ролями, группами, аудиториями, предметами, расписанием и журналом занятий. Аутентификация осуществляется с помощью JWT токенов.
@@ -452,6 +455,25 @@
   "admission_year": 2024
 }
 ```
+
+### GET `/groups/template` (требуется `admin`)
+Скачать Excel-шаблон для заполнения данных группы, дисциплин и студентов.
+
+**Ответ**: файл `group_template.xlsx` с тремя листами:
+- `Информация о группе` (name, specialty, admission_year)
+- `Дисциплины` (title, semester, hours_load, start_date, end_date)
+- `Студенты` (full_name, email)
+
+### POST `/groups/upload` (требуется `admin`)
+Загрузить заполненный Excel-файл для создания группы, учебного плана и студентов.
+
+**Тело запроса**: `multipart/form-data` с полем `file`.
+
+**Успешный ответ (200 OK)** – структура `GroupWithCurriculumResponse` (аналогично POST `/groups/with-curriculum`).
+
+**Ошибки**:
+- `400` – неверный формат файла или отсутствие данных
+- `500` – внутренняя ошибка при импорте
 
 **Успешный ответ (200 OK)** – объект `Group`.
 
@@ -975,8 +997,9 @@
 --- 
 
 *Документация актуальна на основе исходного кода сервиса `core`.*
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/cmd/main.go
+Файл: /home/admin/schedule-bot/services/core/cmd/main.go
 package main
 
 import (
@@ -1070,7 +1093,7 @@ func Migrations(pool *pgxpool.Pool, path string) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/go.mod
+Файл: /home/admin/schedule-bot/services/core/go.mod
 module core
 
 go 1.25.0
@@ -1083,6 +1106,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/pressly/goose/v3 v3.27.0
+	github.com/xuri/excelize/v2 v2.10.1
 	golang.org/x/crypto v0.49.0
 )
 
@@ -1095,15 +1119,21 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
+	github.com/richardlehane/mscfb v1.0.6 // indirect
+	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
+	github.com/tiendc/go-deepcopy v1.7.2 // indirect
+	github.com/xuri/efp v0.0.1 // indirect
+	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 )
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/config/config.go
+Файл: /home/admin/schedule-bot/services/core/internal/config/config.go
 package config
 
 import (
@@ -1228,7 +1258,7 @@ func getIntEnv(key string, defaultValue int) int {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/academic_year.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/academic_year.go
 package dto
 
 type CreateAcademicPeriodRequest struct {
@@ -1246,7 +1276,7 @@ type UpdateAcademicPeriodRequest struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/audience.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/audience.go
 package dto
 
 type CreateAudienceRequest struct {
@@ -1259,8 +1289,13 @@ type UpdateAudienceRequest struct {
 	Number string `json:"number"`
 }
 
+type AudienceImport struct {
+    Name   string
+    Number string
+}
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/auth.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/auth.go
 package dto
 
 type LoginRequest struct {
@@ -1284,7 +1319,7 @@ type RefreshTokenRequest struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/group.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/group.go
 package dto
 
 import "core/internal/models"
@@ -1336,7 +1371,7 @@ type StudentCreationResult struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/lesson_log.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/lesson_log.go
 package dto
 
 import "time"
@@ -1439,10 +1474,13 @@ type StatisticsResponse struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/planner.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/planner.go
 package dto
 
-import "core/internal/models"
+import (
+	"time"
+	"core/internal/models"
+)
 
 type PlanScheduleRequest struct {
 	AcademicPeriodID int              `json:"academic_period_id" validate:"required"`
@@ -1468,12 +1506,19 @@ type ScheduleCell struct {
 }
 
 type WeeklySchedule struct {
-	Seed int                            `json:"seed"`
-	Grid map[int]map[int][]ScheduleCell `json:"grid"`
+	Seed   int                            `json:"seed"`
+	Grid   map[int]map[int][]ScheduleCell `json:"grid"`
+	Groups []models.Group                 `json:"groups"`
+}
+
+type GenerationResult struct {
+	Seed     int       `json:"seed"`
+	FilePath string    `json:"file_path"`
+	ExiresAt time.Time `json:"expires_at"`
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/role.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/role.go
 package dto
 
 type AssignStudentRequest struct {
@@ -1496,7 +1541,7 @@ type RemoveRoleRequest struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/schedule.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/schedule.go
 package dto
 
 type CreateStudentRequest struct {
@@ -1558,7 +1603,7 @@ type BulkDeleteScheduleRequest struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/subject.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/subject.go
 package dto
 
 import "core/internal/models"
@@ -1596,7 +1641,7 @@ type PaginatedSubjectsResponse struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/user.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/user.go
 package dto
 
 import (
@@ -1636,8 +1681,24 @@ type UserFilter struct {
 	Username *string
 }
 
+type StudentImport struct {
+	FullName  string
+	Email     string
+	GroupName string
+}
+
+type TeacherImport struct {
+	FullName string
+	Email    string
+}
+
+type TeacherCreationResult struct {
+    User     models.User `json:"user"`
+    Password string      `json:"password"`
+}
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/dto/validator.go
+Файл: /home/admin/schedule-bot/services/core/internal/dto/validator.go
 package dto
 
 import (
@@ -1663,7 +1724,7 @@ func ValidateStruct(s any) error {
 
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/academic_year.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/academic_year.go
 package handlers
 
 import (
@@ -1779,7 +1840,7 @@ func (h *AcademicPeriodHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/audience.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/audience.go
 package handlers
 
 import (
@@ -1886,8 +1947,42 @@ func (h *AudienceHandler) DeleteAudience(w http.ResponseWriter, r *http.Request)
 	utils.SuccessResponse(w, "audience deleted", nil)
 }
 
+// DownloadTemplate скачивает Excel-шаблон для аудиторий
+func (h *AudienceHandler) DownloadTemplate(w http.ResponseWriter, r *http.Request) {
+    excelSvc := services.NewExcelService()
+    data, err := excelSvc.GenerateAudienceTemplate()
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate template: %v", err))
+        return
+    }
+    w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    w.Header().Set("Content-Disposition", "attachment; filename=audiences_template.xlsx")
+    w.Write(data)
+}
+
+// UploadExcel загружает Excel и создаёт аудитории
+func (h *AudienceHandler) UploadExcel(w http.ResponseWriter, r *http.Request) {
+    if err := r.ParseMultipartForm(10 << 20); err != nil {
+        utils.ErrorResponse(w, http.StatusBadRequest, "file too large or invalid form")
+        return
+    }
+    file, _, err := r.FormFile("file")
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusBadRequest, "missing file field")
+        return
+    }
+    defer file.Close()
+    
+    audiences, err := h.scheduleService.CreateAudiencesFromExcel(r.Context(), file)
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("import failed: %v", err))
+        return
+    }
+    utils.SuccessResponse(w, "audiences created from Excel", audiences)
+}
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/auth.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/auth.go
 package handlers
 
 import (
@@ -1985,7 +2080,7 @@ func (h *AuthHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/chat.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/chat.go
 package handlers
 
 import (
@@ -2034,7 +2129,7 @@ func (h *ChatHandler) Handle(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/group.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/group.go
 package handlers
 
 import (
@@ -2176,8 +2271,42 @@ func (h *GroupHandler) CreateGroupWtihCurriculum(w http.ResponseWriter, r *http.
 	utils.SuccessResponse(w, "group with curriculum and students created", resp)
 }
 
+func (h *GroupHandler) DownloadTemplate(w http.ResponseWriter, r *http.Request) {
+	excelSvc := services.NewExcelService()
+	data, err := excelSvc.GenerateGroupTemplate()
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate template: %v", err))
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", "attachment; filename=group_template.xlsx")
+	w.Write(data)
+}
+
+func (h *GroupHandler) UploadGroupExcel(w http.ResponseWriter, r *http.Request) {
+	// Ограничим размер файла (10 MB)
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "file too large or invalid form")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "missing file field")
+		return
+	}
+	defer file.Close()
+
+	resp, err := h.scheduleService.CreateGroupFromExcel(r.Context(), file)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("import failed: %v", err))
+		return
+	}
+
+	utils.SuccessResponse(w, "group with curriculum and students created from Excel", resp)
+}
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/lesson_log.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/lesson_log.go
 package handlers
 
 import (
@@ -2364,24 +2493,32 @@ func (h *LessonLogHandler) GetLessonStatistics(w http.ResponseWriter, r *http.Re
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/planner.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/planner.go
 package handlers
 
 import (
 	"core/internal/dto"
 	"core/internal/services"
+	"core/internal/storage"
 	"core/pkg/utils"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type PlannerHandler struct {
 	plannderService *services.PlannerService
+	storage         *storage.MemoryStorage
 }
 
 func NewPlannerHandler(svc *services.ScheduleService) *PlannerHandler {
-	return &PlannerHandler{plannderService: services.NewPlannerService(svc)}
+	return &PlannerHandler{
+		plannderService: services.NewPlannerService(svc),
+		storage:         storage.NewMemoryStorage(5*time.Minute, 1*time.Minute),
+	}
 }
 
 func (h *PlannerHandler) GenerateWeeklySchedule(w http.ResponseWriter, r *http.Request) {
@@ -2400,8 +2537,65 @@ func (h *PlannerHandler) GenerateWeeklySchedule(w http.ResponseWriter, r *http.R
 	utils.SuccessResponse(w, "weekly schedule generated", resp)
 }
 
+func (h *PlannerHandler) UploadPlannerExcel(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "file too large or invalid form")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "missing file field")
+		return
+	}
+	defer file.Close()
+
+	schedule, err := h.plannderService.GenerateScheduleFromExcel(r.Context(), file)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate schedule from excel failed: %v", err))
+		return
+	}
+
+	exlService := services.NewExcelService()
+
+	resFile, err := exlService.GenerateGroupSchedule(schedule)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate schedule file failed: %v", err))
+		return
+	}
+
+	filename := fmt.Sprintf("schedule_%d.xlsx", schedule.Seed)
+	mime := "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	id, exires := h.storage.PutFile(filename, mime, resFile)
+
+	result := dto.GenerationResult{
+		Seed: schedule.Seed,
+		FilePath: fmt.Sprintf("/schedule/file/%s", id),
+		ExiresAt: exires,
+	}
+
+	utils.SuccessResponse(w, "schedule generated from Excel", result)
+}
+
+func (h *PlannerHandler) GetScheduleFile(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "uuid")
+	if id == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid file uuid")
+		return
+	}
+
+	file, exists := h.storage.GetFile(id)
+	if !exists {
+		utils.ErrorResponse(w, http.StatusNotFound, "file not found")
+	}
+
+    w.Header().Set("Content-Type", file.Mime)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", file.Filename))
+    w.Write(file.Data)
+
+}
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/role.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/role.go
 package handlers
 
 import (
@@ -2487,7 +2681,7 @@ func (h *RoleHandler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/schedule.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/schedule.go
 package handlers
 
 import (
@@ -2864,8 +3058,30 @@ func (h *ScheduleHandler) ExportAudienceSchedule(w http.ResponseWriter, r *http.
 	w.Write(content)
 }
 
+func (h *ScheduleHandler) DownloadPlannerTemplate(w http.ResponseWriter, r *http.Request) {
+	periodID, err := strconv.Atoi(chi.URLParam(r, "period_id"))
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "invalid period_id")
+		return
+	}
+	period, err := h.scheduleService.GetAcademicPeriodByID(r.Context(), periodID)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to ge academic period: %v", err))
+		return
+	}
+    excelSvc := services.NewExcelService()
+    data, err := excelSvc.GeneratePlannerTemplate(r.Context(), h.scheduleService, period)
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate template: %v", err))
+        return
+    }
+    w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    w.Header().Set("Content-Disposition", "attachment; filename=planner_template.xlsx")
+    w.Write(data)
+}
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/student.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/student.go
 package handlers
 
 import (
@@ -2970,8 +3186,42 @@ func (h *StudentHandler) DeleteStudent(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, "student deleted", nil)
 }
 
+// DownloadStudentTemplate скачивает Excel-шаблон для студентов
+func (h *StudentHandler) DownloadTemplate(w http.ResponseWriter, r *http.Request) {
+    excelSvc := services.NewExcelService()
+    data, err := excelSvc.GenerateStudentTemplate()
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate template: %v", err))
+        return
+    }
+    w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    w.Header().Set("Content-Disposition", "attachment; filename=students_template.xlsx")
+    w.Write(data)
+}
+
+// UploadStudentsExcel загружает Excel и создаёт студентов
+func (h *StudentHandler) UploadExcel(w http.ResponseWriter, r *http.Request) {
+    if err := r.ParseMultipartForm(10 << 20); err != nil {
+        utils.ErrorResponse(w, http.StatusBadRequest, "file too large or invalid form")
+        return
+    }
+    file, _, err := r.FormFile("file")
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusBadRequest, "missing file field")
+        return
+    }
+    defer file.Close()
+    
+    results, err := h.scheduleService.CreateStudentsFromExcel(r.Context(), file)
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("import failed: %v", err))
+        return
+    }
+    utils.SuccessResponse(w, "students created from Excel", results)
+}
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/subject.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/subject.go
 package handlers
 
 import (
@@ -3117,7 +3367,7 @@ func (h *SubjectHandler) DeleteSubject(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/teacher.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/teacher.go
 package handlers
 
 import (
@@ -3199,8 +3449,42 @@ func (h *TeacherHandler) DeleteTeacher(w http.ResponseWriter, r *http.Request) {
 	utils.SuccessResponse(w, "teacher deleted", nil)
 }
 
+// DownloadTeacherTemplate скачивает Excel-шаблон для преподавателей
+func (h *TeacherHandler) DownloadTemplate(w http.ResponseWriter, r *http.Request) {
+    excelSvc := services.NewExcelService()
+    data, err := excelSvc.GenerateTeacherTemplate()
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate template: %v", err))
+        return
+    }
+    w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    w.Header().Set("Content-Disposition", "attachment; filename=teachers_template.xlsx")
+    w.Write(data)
+}
+
+// UploadTeachersExcel загружает Excel и создаёт преподавателей
+func (h *TeacherHandler) UploadExcel(w http.ResponseWriter, r *http.Request) {
+    if err := r.ParseMultipartForm(10 << 20); err != nil {
+        utils.ErrorResponse(w, http.StatusBadRequest, "file too large or invalid form")
+        return
+    }
+    file, _, err := r.FormFile("file")
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusBadRequest, "missing file field")
+        return
+    }
+    defer file.Close()
+    
+    results, err := h.scheduleService.CreateTeachersFromExcel(r.Context(), file)
+    if err != nil {
+        utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("import failed: %v", err))
+        return
+    }
+    utils.SuccessResponse(w, "teachers created from Excel", results)
+}
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/handlers/user.go
+Файл: /home/admin/schedule-bot/services/core/internal/handlers/user.go
 package handlers
 
 import (
@@ -3364,7 +3648,7 @@ func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request)
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/llm/agent.go
+Файл: /home/admin/schedule-bot/services/core/internal/llm/agent.go
 package llm
 
 import (
@@ -3526,7 +3810,7 @@ func (a *LLMAgent) formatResponse(ctx context.Context, userMessage string, data 
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/llm/factory.go
+Файл: /home/admin/schedule-bot/services/core/internal/llm/factory.go
 package llm
 
 import (
@@ -3556,7 +3840,7 @@ func NewLLMClient(cfg *config.LLMConfig) (Client, error) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/llm/giga.go
+Файл: /home/admin/schedule-bot/services/core/internal/llm/giga.go
 package llm
 
 import (
@@ -3767,7 +4051,7 @@ func (c *GigaChatClient) GetModelName() string {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/llm/ollama.go
+Файл: /home/admin/schedule-bot/services/core/internal/llm/ollama.go
 package llm
 
 import (
@@ -3844,7 +4128,7 @@ func (c *OllamaClient) Generate(ctx context.Context, systemPrompt, userMessage s
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/llm/tools.go
+Файл: /home/admin/schedule-bot/services/core/internal/llm/tools.go
 package llm
 
 import (
@@ -4096,7 +4380,7 @@ func initTools(svc services.ScheduleService) []Tool {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/middlewares/tokens.go
+Файл: /home/admin/schedule-bot/services/core/internal/middlewares/tokens.go
 package middlewares
 
 import (
@@ -4151,7 +4435,7 @@ func (m *AuthMiddleware) AdminRequire(next http.Handler) http.Handler {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/models/schedule.go
+Файл: /home/admin/schedule-bot/services/core/internal/models/schedule.go
 package models
 
 import "time"
@@ -4241,7 +4525,7 @@ type SubjectProgress struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/models/session.go
+Файл: /home/admin/schedule-bot/services/core/internal/models/session.go
 package models
 
 import (
@@ -4260,7 +4544,7 @@ type Session struct {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/models/user.go
+Файл: /home/admin/schedule-bot/services/core/internal/models/user.go
 package models
 
 import (
@@ -4333,7 +4617,7 @@ func (u *User) RequireRole(role string) bool {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/academic_period.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/academic_period.go
 package repository
 
 import (
@@ -4485,8 +4769,8 @@ func (r *AcademicPeriodRepo) GetAll(ctx context.Context) ([]models.AcademicPerio
 func (r *AcademicPeriodRepo) Update(ctx context.Context, period *models.AcademicPeriod) error {
 	query := `
 	UPDATE schedule.academic_periods
-	SET year = $1, semester = $2, start_date = $3, end_date = $4, is_active = $5, updated_at = NOW()
-	WHERE id = $6
+	SET year = $1, semester = $2, start_date = $3, end_date = $4, updated_at = NOW()
+	WHERE id = $5
 	`
 	_, err := r.db.Exec(ctx, query,
 		period.Year,
@@ -4506,7 +4790,7 @@ func (r *AcademicPeriodRepo) Delete(ctx context.Context, id int) error {
 
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/audience.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/audience.go
 package repository
 
 import (
@@ -4527,12 +4811,24 @@ func NewAudienceRepo(db *pgxpool.Pool) *AudienceRepo {
 }
 
 func (r *AudienceRepo) Create(ctx context.Context, audience *models.Audience) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := r.CreateWithTx(ctx, tx, audience); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *AudienceRepo) CreateWithTx(ctx context.Context, tx pgx.Tx, audience *models.Audience) error {
 	query := `
 	INSERT INTO schedule.audiences(name, number)
 	VALUES ($1, $2)
 	RETURNING id
 	`
-	return r.db.QueryRow(ctx, query, audience.Name, audience.Number).Scan(&audience.ID)
+	return tx.QueryRow(ctx, query, audience.Name, audience.Number).Scan(&audience.ID)
 }
 
 func (r *AudienceRepo) Get(ctx context.Context, id int) (*models.Audience, error) {
@@ -4623,7 +4919,7 @@ func (r *AudienceRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/group.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/group.go
 package repository
 
 import (
@@ -4779,7 +5075,7 @@ func (r *GroupRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/lesson_logs.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/lesson_logs.go
 package repository
 
 import (
@@ -5186,7 +5482,7 @@ func (r *LessonLogRepo) UpdateStatusWithTx(ctx context.Context, tx pgx.Tx, id in
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/role.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/role.go
 package repository
 
 import (
@@ -5296,7 +5592,7 @@ func (r *RoleRepo) GetRoles(ctx context.Context) ([]models.Role, error) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/schedule.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/schedule.go
 package repository
 
 import (
@@ -5668,7 +5964,7 @@ func (r *ScheduleRepo) DeleteWithTx(ctx context.Context, tx pgx.Tx, id int) erro
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/session.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/session.go
 package repository
 
 import (
@@ -5831,7 +6127,7 @@ func (r *SessionRepo) Delete(ctx context.Context, id pgtype.UUID) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/student.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/student.go
 package repository
 
 import (
@@ -5883,6 +6179,7 @@ func (r *StudentRepo) CreateStudentWithTx(ctx context.Context, tx pgx.Tx, user *
 		return err
 	}
 
+	user.Roles = []models.Role{}
 	query = `
 	SELECT r.id, r.name, r.description
 	FROM auth.user_roles ur
@@ -6066,7 +6363,7 @@ func (r *StudentRepo) IsStudent(ctx context.Context, userID int) (bool, error) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/subject.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/subject.go
 package repository
 
 import (
@@ -6075,6 +6372,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"core/internal/dto"
 	"core/internal/models"
@@ -6247,6 +6545,50 @@ func (r *SubjectRepo) GetAllSubjects(ctx context.Context, req *dto.PaginatedSubj
 	}, nil
 }
 
+func (r *SubjectRepo) GetSubjectsByDate(ctx context.Context, startDate, endDate time.Time) ([]models.Subject, error) {
+	query := `
+	SELECT s.id, s.title, s.semester, s.hours_load, s.start_date, s.end_date, s.group_id,
+	       g.id, g.name, g.specialty, g.admission_year
+	FROM schedule.subjects s
+	LEFT JOIN auth.groups g ON s.group_id = g.id
+	WHERE s.start_date >= $1 AND s.end_date <= $2
+	ORDER BY g.name
+	`
+	rows, err := r.db.Query(ctx, query, startDate, endDate)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("subjects not found")
+		}
+		return nil, err
+	}
+
+	var subjects []models.Subject
+	for rows.Next() {
+		var subject models.Subject
+		var group models.Group
+		err := rows.Scan(
+			&subject.ID,
+			&subject.Title,
+			&subject.Semester,
+			&subject.HoursLoad,
+			&subject.StartDate,
+			&subject.EndDate,
+			&subject.GroupID,
+			&group.ID,
+			&group.Name,
+			&group.Specialty,
+			&group.AdmissionYear,
+		)
+		if err != nil {
+			return nil, err
+		}
+		subject.Group = group
+		subjects = append(subjects, subject)
+	}
+
+	return subjects, nil
+}
+
 func (r *SubjectRepo) GetSubjectsByGroupID(ctx context.Context, groupID int, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
 	page := req.Page
 	if page < 1 {
@@ -6351,7 +6693,7 @@ func (r *SubjectRepo) DeleteSubject(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/teacher.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/teacher.go
 package repository
 
 import (
@@ -6379,12 +6721,20 @@ func (r *TeacherRepo) CreateTeacher(ctx context.Context, user *models.User) erro
 	}
 	defer tx.Rollback(ctx)
 
+	if err := r.CreateTeacherWithTx(ctx, tx, user); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *TeacherRepo) CreateTeacherWithTx(ctx context.Context, tx pgx.Tx, user *models.User) error {
 	query := `
 	INSERT INTO auth.user_roles (user_id, role_id)
 	VALUES ($1, (SELECT id FROM auth.roles WHERE name = 'teacher'))
 	ON CONFLICT DO NOTHING
 	`
-	if _, err = tx.Exec(ctx, query, user.ID); err != nil {
+	if _, err := tx.Exec(ctx, query, user.ID); err != nil {
 		return err
 	}
 
@@ -6392,10 +6742,11 @@ func (r *TeacherRepo) CreateTeacher(ctx context.Context, user *models.User) erro
 	INSERT INTO auth.teacher_profiles (user_id)
 	VALUES ($1)
 	`
-	if _, err = tx.Exec(ctx, query, user.ID); err != nil {
+	if _, err := tx.Exec(ctx, query, user.ID); err != nil {
 		return err
 	}
 
+	user.Roles = []models.Role{}
 	query = `
 	SELECT r.id, r.name, r.description
 	FROM auth.user_roles ur
@@ -6415,7 +6766,7 @@ func (r *TeacherRepo) CreateTeacher(ctx context.Context, user *models.User) erro
 		user.Roles = append(user.Roles, role)
 	}
 
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (r *TeacherRepo) GetTeacherByUserID(ctx context.Context, userID int) (*models.Teacher, error) {
@@ -6556,7 +6907,7 @@ func (r *TeacherRepo) IsTeacher(ctx context.Context, userID int) (bool, error) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/repository/user.go
+Файл: /home/admin/schedule-bot/services/core/internal/repository/user.go
 package repository
 
 import (
@@ -6908,7 +7259,7 @@ func (r *UserRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/router/router.go
+Файл: /home/admin/schedule-bot/services/core/internal/router/router.go
 package router
 
 import (
@@ -7026,6 +7377,8 @@ func (r *Router) SetupRoutes() {
 		r.Route("/teachers", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", teacherHandler.CreateTeacher)
+				r.Get("/template", teacherHandler.DownloadTemplate)
+				r.Post("/upload", teacherHandler.UploadExcel)
 				r.Post("/assign", roleHandler.AssignTeacher)
 				r.Delete("/{id}", teacherHandler.DeleteTeacher)
 			})
@@ -7036,6 +7389,8 @@ func (r *Router) SetupRoutes() {
 		r.Route("/students", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", studentHandler.CreateStudent)
+				r.Get("/template", studentHandler.DownloadTemplate)
+				r.Post("/upload", studentHandler.UploadExcel)
 				r.Post("/assign", roleHandler.AssignStudent)
 				r.Patch("/{id}/group", studentHandler.UpdateStudentGroup)
 				r.Delete("/{id}", studentHandler.DeleteStudent)
@@ -7058,6 +7413,8 @@ func (r *Router) SetupRoutes() {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", groupHandler.CreateGroup)
 				r.Post("/with-curriculum", groupHandler.CreateGroupWtihCurriculum)
+				r.Get("/template", groupHandler.DownloadTemplate)
+				r.Post("/upload", groupHandler.UploadGroupExcel)
 				r.Patch("/{id}", groupHandler.UpdateGroup)
 				r.Delete("/{id}", groupHandler.DeleteGroup)
 			})
@@ -7068,6 +7425,8 @@ func (r *Router) SetupRoutes() {
 		r.Route("/audiences", func(r chi.Router) {
 			r.With(authMiddleware.AdminRequire).Group(func(r chi.Router) {
 				r.Post("/", audienceHandler.CreateAudience)
+				r.Get("/template", audienceHandler.DownloadTemplate)
+				r.Post("/upload", audienceHandler.UploadExcel)
 				r.Patch("/{id}", audienceHandler.UpdateAudience)
 				r.Delete("/{id}", audienceHandler.DeleteAudience)
 			})
@@ -7091,8 +7450,11 @@ func (r *Router) SetupRoutes() {
 				r.Post("/", scheduleHandler.CreateScheduleTemplate)
 				r.Patch("/{id}", scheduleHandler.UpdateScheduleTemplate)
 				r.Delete("/{id}", scheduleHandler.DeleteScheduleTemplate)
+				r.Get("/template/{period_id}", scheduleHandler.DownloadPlannerTemplate)
 				r.Post("/semester", scheduleHandler.CreateSemesterSchedule)
 				r.Post("/generate", plannerHandler.GenerateWeeklySchedule)
+				r.Post("/generate/upload", plannerHandler.UploadPlannerExcel)
+				r.Get("/file/{uuid}", plannerHandler.GetScheduleFile)
 			})
 			r.Get("/", scheduleHandler.GetAllScheduleTemplates)
 			r.Get("/{id}", scheduleHandler.GetScheduleTemplate)
@@ -7125,7 +7487,745 @@ func (r *Router) Router() *chi.Mux {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/services/export.go
+Файл: /home/admin/schedule-bot/services/core/internal/services/excel.go
+package services
+
+import (
+	"bytes"
+	"context"
+	"core/internal/dto"
+	"core/internal/models"
+	"fmt"
+	"io"
+	"math"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/xuri/excelize/v2"
+)
+
+type ExcelService struct{}
+
+func NewExcelService() *ExcelService {
+	return &ExcelService{}
+}
+
+func (s *ExcelService) GenerateGroupTemplate() ([]byte, error) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+
+	// Лист 1: Общая информация о группе
+	sheetInfo := "Информация о группе"
+	_, err := f.NewSheet(sheetInfo)
+	if err != nil {
+		return nil, fmt.Errorf("create sheet info: %w", err)
+	}
+	f.SetCellStr(sheetInfo, "A1", "name")
+	f.SetCellStr(sheetInfo, "B1", "specialty")
+	f.SetCellStr(sheetInfo, "C1", "admission_year")
+	f.SetCellStr(sheetInfo, "A2", "Пример: ИС-51")
+	f.SetCellStr(sheetInfo, "B2", "Информационные системы")
+	f.SetCellStr(sheetInfo, "C2", "2025")
+	f.SetColWidth(sheetInfo, "A", "A", 20)
+	f.SetColWidth(sheetInfo, "B", "B", 30)
+	f.SetColWidth(sheetInfo, "C", "C", 15)
+
+	// Лист 2: Дисциплины
+	sheetSubjects := "Дисциплины"
+	_, err = f.NewSheet(sheetSubjects)
+	if err != nil {
+		return nil, fmt.Errorf("create sheet subjects: %w", err)
+	}
+	headers := []string{"title", "semester", "hours_load", "start_date", "end_date"}
+	for i, h := range headers {
+		col := string(rune('A' + i))
+		f.SetCellStr(sheetSubjects, col+"1", h)
+	}
+	// Пример
+	f.SetCellStr(sheetSubjects, "A2", "Математика")
+	f.SetCellInt(sheetSubjects, "B2", 1)
+	f.SetCellInt(sheetSubjects, "C2", 72)
+	f.SetCellStr(sheetSubjects, "D2", "2025-09-01")
+	f.SetCellStr(sheetSubjects, "E2", "2025-12-31")
+	f.SetColWidth(sheetSubjects, "A", "E", 15)
+
+	// Лист 3: Студенты
+	sheetStudents := "Студенты"
+	_, err = f.NewSheet(sheetStudents)
+	if err != nil {
+		return nil, fmt.Errorf("create sheet students: %w", err)
+	}
+	f.SetCellStr(sheetStudents, "A1", "full_name")
+	f.SetCellStr(sheetStudents, "B1", "email")
+	f.SetCellStr(sheetStudents, "A2", "Иванов Иван Иванович")
+	f.SetCellStr(sheetStudents, "B2", "ivanov@example.com")
+	f.SetColWidth(sheetStudents, "A", "B", 25)
+
+	f.DeleteSheet("Sheet1")
+	// Устанавливаем активный лист
+	f.SetActiveSheet(0)
+
+	// Сохраняем в буфер
+	buf := new(bytes.Buffer)
+	if err := f.Write(buf); err != nil {
+		return nil, fmt.Errorf("write excel: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func (s *ExcelService) ParseGroupFromExcel(r io.Reader) (*dto.CreateGroupWithCurriculumRequest, error) {
+	f, err := excelize.OpenReader(r)
+	if err != nil {
+		return nil, fmt.Errorf("open excel: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	// 1. Информация о группе
+	group, err := s.parseGroupInfo(f)
+	if err != nil {
+		return nil, fmt.Errorf("parse group info: %w", err)
+	}
+
+	// 2. Дисциплины
+	subjects, err := s.parseSubjects(f)
+	if err != nil {
+		return nil, fmt.Errorf("parse subjects: %w", err)
+	}
+	if len(subjects) == 0 {
+		return nil, fmt.Errorf("subjects sheet must contain at least one discipline")
+	}
+
+	// 3. Студенты
+	students, err := s.parseStudents(f)
+	if err != nil {
+		return nil, fmt.Errorf("parse students: %w", err)
+	}
+	if len(students) == 0 {
+		return nil, fmt.Errorf("students sheet must contain at least one student")
+	}
+
+	return &dto.CreateGroupWithCurriculumRequest{
+		Group:    *group,
+		Subjects: subjects,
+		Students: students,
+	}, nil
+}
+
+func (s *ExcelService) parseGroupInfo(f *excelize.File) (*dto.CreateGroupRequest, error) {
+	sheet := "Информация о группе"
+	rows, err := f.GetRows(sheet)
+	if err != nil {
+		return nil, fmt.Errorf("get rows from %s: %w", sheet, err)
+	}
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("sheet '%s' must have at least 2 rows (header + data)", sheet)
+	}
+	// Первая строка — заголовки, вторая — данные
+	data := rows[1]
+	if len(data) < 3 {
+		return nil, fmt.Errorf("not enough columns in group info: need name, specialty, admission_year")
+	}
+	admissionYear, err := strconv.Atoi(strings.TrimSpace(data[2]))
+	if err != nil {
+		return nil, fmt.Errorf("admission_year must be integer: %w", err)
+	}
+	return &dto.CreateGroupRequest{
+		Name:          strings.TrimSpace(data[0]),
+		Specialty:     strings.TrimSpace(data[1]),
+		AdmissionYear: admissionYear,
+	}, nil
+}
+
+func (s *ExcelService) parseSubjects(f *excelize.File) ([]dto.CreateGroupSubjectRequest, error) {
+	sheet := "Дисциплины"
+	rows, err := f.GetRows(sheet)
+	if err != nil {
+		return nil, fmt.Errorf("get rows from %s: %w", sheet, err)
+	}
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("sheet '%s' must have header and at least one discipline", sheet)
+	}
+	var subjects []dto.CreateGroupSubjectRequest
+	// Пропускаем заголовок
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+		if len(row) < 5 {
+			continue // пропускаем неполные строки
+		}
+		semester, err := strconv.Atoi(strings.TrimSpace(row[1]))
+		if err != nil {
+			return nil, fmt.Errorf("row %d: semester must be integer: %w", i+1, err)
+		}
+		hoursLoad, err := strconv.Atoi(strings.TrimSpace(row[2]))
+		if err != nil {
+			return nil, fmt.Errorf("row %d: hours_load must be integer: %w", i+1, err)
+		}
+		startDate := strings.TrimSpace(row[3])
+		endDate := strings.TrimSpace(row[4])
+
+		// Валидация формата дат
+		if _, err := time.Parse("2006-01-02", startDate); err != nil {
+			return nil, fmt.Errorf("row %d: start_date must be in YYYY-MM-DD format", i+1)
+		}
+		if _, err := time.Parse("2006-01-02", endDate); err != nil {
+			return nil, fmt.Errorf("row %d: end_date must be in YYYY-MM-DD format", i+1)
+		}
+
+		subjects = append(subjects, dto.CreateGroupSubjectRequest{
+			Title:     strings.TrimSpace(row[0]),
+			Semester:  semester,
+			HoursLoad: hoursLoad,
+			StartDate: startDate,
+			EndDate:   endDate,
+		})
+	}
+	return subjects, nil
+}
+
+func (s *ExcelService) parseStudents(f *excelize.File) ([]dto.CreateStudentWithCredentialsRequest, error) {
+	sheet := "Студенты"
+	rows, err := f.GetRows(sheet)
+	if err != nil {
+		return nil, fmt.Errorf("get rows from %s: %w", sheet, err)
+	}
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("sheet '%s' must have header and at least one student", sheet)
+	}
+	var students []dto.CreateStudentWithCredentialsRequest
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+		if len(row) < 2 {
+			continue
+		}
+		fullName := strings.TrimSpace(row[0])
+		email := strings.TrimSpace(row[1])
+		if fullName == "" || email == "" {
+			continue
+		}
+		students = append(students, dto.CreateStudentWithCredentialsRequest{
+			FullName: fullName,
+			Email:    email,
+		})
+	}
+	return students, nil
+}
+
+// GenerateStudentTemplate создаёт Excel-шаблон для студентов
+func (s *ExcelService) GenerateStudentTemplate() ([]byte, error) {
+	f := excelize.NewFile()
+	defer f.Close()
+
+	sheet := "Студенты"
+	f.SetSheetName("Sheet1", sheet)
+
+	// Заголовки
+	f.SetCellStr(sheet, "A1", "full_name")
+	f.SetCellStr(sheet, "B1", "email")
+	f.SetCellStr(sheet, "C1", "group_name")
+
+	// Пример
+	f.SetCellStr(sheet, "A2", "Иванов Иван Иванович")
+	f.SetCellStr(sheet, "B2", "ivanov@example.com")
+	f.SetCellStr(sheet, "C2", "ИС-51")
+
+	f.SetColWidth(sheet, "A", "C", 25)
+
+	buf := new(bytes.Buffer)
+	if err := f.Write(buf); err != nil {
+		return nil, fmt.Errorf("write excel: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+// GenerateTeacherTemplate создаёт Excel-шаблон для преподавателей
+func (s *ExcelService) GenerateTeacherTemplate() ([]byte, error) {
+	f := excelize.NewFile()
+	defer f.Close()
+
+	sheet := "Преподаватели"
+	f.SetSheetName("Sheet1", sheet)
+
+	f.SetCellStr(sheet, "A1", "full_name")
+	f.SetCellStr(sheet, "B1", "email")
+
+	f.SetCellStr(sheet, "A2", "Петров Петр Петрович")
+	f.SetCellStr(sheet, "B2", "petrov@example.com")
+
+	f.SetColWidth(sheet, "A", "B", 30)
+
+	buf := new(bytes.Buffer)
+	if err := f.Write(buf); err != nil {
+		return nil, fmt.Errorf("write excel: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+// ParseStudentsFromExcel читает файл и возвращает список данных студентов с group_name
+func (s *ExcelService) ParseStudentsFromExcel(r io.Reader) ([]dto.StudentImport, error) {
+	f, err := excelize.OpenReader(r)
+	if err != nil {
+		return nil, fmt.Errorf("open excel: %w", err)
+	}
+	defer f.Close()
+
+	sheet := "Студенты"
+	rows, err := f.GetRows(sheet)
+	if err != nil {
+		return nil, fmt.Errorf("get rows: %w", err)
+	}
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("sheet must have header and at least one student")
+	}
+
+	var students []dto.StudentImport
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+		if len(row) < 3 {
+			continue
+		}
+		fullName := strings.TrimSpace(row[0])
+		email := strings.TrimSpace(row[1])
+		groupName := strings.TrimSpace(row[2])
+		if fullName == "" || email == "" || groupName == "" {
+			continue
+		}
+		students = append(students, dto.StudentImport{
+			FullName:  fullName,
+			Email:     email,
+			GroupName: groupName,
+		})
+	}
+	if len(students) == 0 {
+		return nil, fmt.Errorf("no valid student rows found")
+	}
+	return students, nil
+}
+
+// ParseTeachersFromExcel читает файл и возвращает список данных преподавателей
+func (s *ExcelService) ParseTeachersFromExcel(r io.Reader) ([]dto.TeacherImport, error) {
+	f, err := excelize.OpenReader(r)
+	if err != nil {
+		return nil, fmt.Errorf("open excel: %w", err)
+	}
+	defer f.Close()
+
+	sheet := "Преподаватели"
+	rows, err := f.GetRows(sheet)
+	if err != nil {
+		return nil, fmt.Errorf("get rows: %w", err)
+	}
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("sheet must have header and at least one teacher")
+	}
+
+	var teachers []dto.TeacherImport
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+		if len(row) < 2 {
+			continue
+		}
+		fullName := strings.TrimSpace(row[0])
+		email := strings.TrimSpace(row[1])
+		if fullName == "" || email == "" {
+			continue
+		}
+		teachers = append(teachers, dto.TeacherImport{
+			FullName: fullName,
+			Email:    email,
+		})
+	}
+	if len(teachers) == 0 {
+		return nil, fmt.Errorf("no valid teacher rows found")
+	}
+	return teachers, nil
+}
+
+// GenerateAudienceTemplate создаёт Excel-шаблон для аудиторий
+func (s *ExcelService) GenerateAudienceTemplate() ([]byte, error) {
+	f := excelize.NewFile()
+	defer f.Close()
+
+	sheet := "Аудитории"
+	f.SetSheetName("Sheet1", sheet)
+
+	f.SetCellStr(sheet, "A1", "name")
+	f.SetCellStr(sheet, "B1", "number")
+
+	f.SetCellStr(sheet, "A2", "Аудитория 101")
+	f.SetCellStr(sheet, "B2", "101")
+
+	f.SetColWidth(sheet, "A", "B", 25)
+
+	buf := new(bytes.Buffer)
+	if err := f.Write(buf); err != nil {
+		return nil, fmt.Errorf("write excel: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+// ParseAudiencesFromExcel читает файл и возвращает список аудиторий
+func (s *ExcelService) ParseAudiencesFromExcel(r io.Reader) ([]dto.AudienceImport, error) {
+	f, err := excelize.OpenReader(r)
+	if err != nil {
+		return nil, fmt.Errorf("open excel: %w", err)
+	}
+	defer f.Close()
+
+	sheet := "Аудитории"
+	rows, err := f.GetRows(sheet)
+	if err != nil {
+		return nil, fmt.Errorf("get rows: %w", err)
+	}
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("sheet must have header and at least one audience")
+	}
+
+	var audiences []dto.AudienceImport
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+		if len(row) < 2 {
+			continue
+		}
+		name := strings.TrimSpace(row[0])
+		number := strings.TrimSpace(row[1])
+		if name == "" || number == "" {
+			continue
+		}
+		audiences = append(audiences, dto.AudienceImport{
+			Name:   name,
+			Number: number,
+		})
+	}
+	if len(audiences) == 0 {
+		return nil, fmt.Errorf("no valid audience rows found")
+	}
+	return audiences, nil
+}
+
+// GeneratePlannerTemplate создаёт Excel-шаблон для генерации расписания
+func (s *ExcelService) GeneratePlannerTemplate(ctx context.Context, scheduleService *ScheduleService, period *models.AcademicPeriod) ([]byte, error) {
+	f := excelize.NewFile()
+	defer f.Close()
+
+	// 1. Лист "Параметры"
+	paramsSheet := "Параметры"
+	_, err := f.NewSheet(paramsSheet)
+	if err != nil {
+		return nil, fmt.Errorf("create params sheet: %w", err)
+	}
+	f.SetCellStr(paramsSheet, "A1", "academic_period_id")
+	f.SetCellStr(paramsSheet, "B1", "academic_period_name")
+	f.SetCellStr(paramsSheet, "C1", "days")
+	f.SetCellStr(paramsSheet, "D1", "slots")
+	f.SetCellStr(paramsSheet, "E1", "seed")
+
+	f.SetColWidth(paramsSheet, "A", "A", 20)
+	f.SetColWidth(paramsSheet, "B", "B", 30)
+
+	periodName := fmt.Sprintf("%s (%d семестр)", period.Year, period.Semester)
+	// Пример заполнения (можно оставить пустым, пользователь выберет)
+	f.SetCellInt(paramsSheet, "A2", int64(period.ID))
+	f.SetCellStr(paramsSheet, "B2", periodName)
+	f.SetCellInt(paramsSheet, "C2", 5)
+	f.SetCellInt(paramsSheet, "D2", 5)
+	f.SetCellStr(paramsSheet, "E2", "")
+	f.SetColVisible(paramsSheet, "A", false)
+
+	// 2. Лист "Данные" (основной)
+	dataSheet := "Данные"
+	_, err = f.NewSheet(dataSheet)
+	if err != nil {
+		return nil, fmt.Errorf("create data sheet: %w", err)
+	}
+	headers := []struct {
+		Text  string
+		Width float64
+	}{
+		{Text: "Группа", Width: 15},
+		{Text: "Дисциплина", Width: 40},
+		{Text: "Семестр", Width: 10},
+		{Text: "Преподаватель", Width: 40},
+		{Text: "Аудитория", Width: 12},
+		{Text: "Приоритет", Width: 12},
+		{Text: "Количество_пар", Width: 20},
+		{Text: "Subject_ID", Width: 10},
+		{Text: "Teacher_ID", Width: 10},
+		{Text: "Audience_ID", Width: 10},
+	}
+	for i, h := range headers {
+		col := string(rune('A' + i))
+		f.SetCellStr(dataSheet, col+"1", h.Text)
+		f.SetColWidth(dataSheet, col, col, h.Width)
+	}
+
+	subjects, err := scheduleService.GetSubjectsByDate(ctx, period.StartDate, period.EndDate)
+	if err != nil {
+		return nil, fmt.Errorf("get subject for academic period: %w", err)
+	}
+
+	for i, s := range subjects {
+		f.SetCellStr(dataSheet, fmt.Sprintf("A%d", i+2), s.Group.Name)
+		f.SetCellStr(dataSheet, fmt.Sprintf("B%d", i+2), s.Title)
+		f.SetCellInt(dataSheet, fmt.Sprintf("C%d", i+2), int64(s.Semester))
+
+		diff := s.EndDate.Sub(s.StartDate)
+		weeks := math.Ceil(diff.Hours() / 24 / 7)
+		lessonCount := math.Ceil(float64(s.HoursLoad) / weeks)
+
+		f.SetCellInt(dataSheet, fmt.Sprintf("G%d", i+2), int64(lessonCount))
+		f.SetCellInt(dataSheet, fmt.Sprintf("H%d", i+2), int64(s.ID))
+	}
+	f.SetColVisible(dataSheet, "H", false)
+	f.SetColVisible(dataSheet, "I", false)
+	f.SetColVisible(dataSheet, "J", false)
+
+	// Преподаватели
+	teachersSheet := "Справочник_преподавателей"
+	_, err = f.NewSheet(teachersSheet)
+	if err != nil {
+		return nil, fmt.Errorf("create teachers sheet: %w", err)
+	}
+	teachers, err := scheduleService.GetAllTeachers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get teachers: %w", err)
+	}
+	for i, t := range teachers {
+		f.SetCellStr(teachersSheet, fmt.Sprintf("A%d", i+1), t.User.FullName)
+		f.SetCellInt(teachersSheet, fmt.Sprintf("B%d", i+1), int64(t.User.ID))
+	}
+
+	dvT := excelize.NewDataValidation(true)
+	dvT.Sqref = "D2:D10000"
+	dvT.SetSqrefDropList(fmt.Sprintf("%s!A$1:A%d", teachersSheet, len(teachers)))
+	f.AddDataValidation(dataSheet, dvT)
+
+	for i := 2; i < 10000; i++ {
+		formula := fmt.Sprintf("=VLOOKUP(D%d, %s!A1:B%d, 2, FALSE)", i, teachersSheet, len(teachers))
+		f.SetCellFormula(dataSheet, fmt.Sprintf("I%d", i), formula)
+	}
+	f.SetSheetVisible(teachersSheet, false)
+
+	// Аудитории
+	audiencesSheet := "Справочник_аудиторий"
+	_, err = f.NewSheet(audiencesSheet)
+	if err != nil {
+		return nil, fmt.Errorf("create audiences sheet: %w", err)
+	}
+	audiences, err := scheduleService.GetAllAudience(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get audiences: %w", err)
+	}
+	for i, a := range audiences {
+		f.SetCellStr(audiencesSheet, fmt.Sprintf("A%d", i+1), a.Number)
+		f.SetCellInt(audiencesSheet, fmt.Sprintf("B%d", i+1), int64(a.ID))
+	}
+
+	symb := "@"
+	customStyle, err := f.NewStyle(&excelize.Style{
+		CustomNumFmt: &symb,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create style: %w", err)
+	}
+	dvA := excelize.NewDataValidation(true)
+	dvA.Sqref = "E2:E10000"
+	dvA.SetSqrefDropList(fmt.Sprintf("%s!A$1:A%d", audiencesSheet, len(audiences)))
+	f.AddDataValidation(dataSheet, dvA)
+	f.SetColStyle(dataSheet, "E", customStyle)
+
+	for i := 2; i < 10000; i++ {
+		formula := fmt.Sprintf("=VLOOKUP(E%d, %s!A1:B%d, 2, FALSE)", i, audiencesSheet, len(audiences))
+		f.SetCellFormula(dataSheet, fmt.Sprintf("J%d", i), formula)
+	}
+	f.SetSheetVisible(audiencesSheet, false)
+
+	// Удаляем дефолтный лист
+	f.DeleteSheet("Sheet1")
+
+	// Устанавливаем активный лист
+	f.SetActiveSheet(0) // данные
+
+	buf := new(bytes.Buffer)
+	if err := f.Write(buf); err != nil {
+		return nil, fmt.Errorf("write excel: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+// ParsePlannerTemplate читает заполненный Excel и возвращает запрос для планировщика
+func (s *ExcelService) ParsePlannerTemplate(r io.Reader, scheduleService *ScheduleService) (*dto.PlanScheduleRequest, error) {
+	f, err := excelize.OpenReader(r)
+	if err != nil {
+		return nil, fmt.Errorf("open excel: %w", err)
+	}
+	defer f.Close()
+
+	// Читаем параметры
+	paramsSheet := "Параметры"
+	academicPeriodID, err := s.getCellInt(f, paramsSheet, "A2")
+	if err != nil {
+		return nil, fmt.Errorf("academic_period_id: %w", err)
+	}
+	days, err := s.getCellInt(f, paramsSheet, "C2")
+	if err != nil {
+		days = 5
+	}
+	slots, err := s.getCellInt(f, paramsSheet, "D2")
+	if err != nil {
+		slots = 5
+	}
+	seed, err := s.getCellInt(f, paramsSheet, "E2")
+	if err != nil {
+		seed = 0
+	}
+
+	// Читаем данные
+	dataSheet := "Данные"
+	rows, err := f.GetRows(dataSheet)
+	if err != nil {
+		return nil, fmt.Errorf("get rows from data sheet: %w", err)
+	}
+	if len(rows) < 2 {
+		return nil, fmt.Errorf("data sheet must have at least one row")
+	}
+
+	var subjectRequests []dto.SubjectRequest
+	for i := 1; i < len(rows); i++ {
+		row := rows[i]
+		if len(row) < 10 {
+			return nil, fmt.Errorf("parse %d row: must be filled 10 columns", i+1)
+		}
+		priority, _ := strconv.Atoi(strings.TrimSpace(row[5]))
+		lessonsCount, _ := strconv.Atoi(strings.TrimSpace(row[6]))
+		subjectID, err := s.getCellInt(f, dataSheet, fmt.Sprintf("H%d", i+1))
+		if err != nil {
+			return nil, fmt.Errorf("parse subject id in row %d: %w", i+1, err)
+		}
+		if subjectID == 0 {
+			break
+		}
+		teacherID, err := s.getCellInt(f, dataSheet, fmt.Sprintf("I%d", i+1))
+		if err != nil {
+			return nil, fmt.Errorf("parse teacher id in row %d: %w", i+1, err)
+		}
+		audienceID, err := s.getCellInt(f, dataSheet, fmt.Sprintf("J%d", i+1))
+		if err != nil {
+			return nil, fmt.Errorf("parse audience id in row %d: %w", i+1, err)
+		}
+		subjectRequests = append(subjectRequests, dto.SubjectRequest{
+			SubjectID:    subjectID,
+			TeacherID:    teacherID,
+			AudienceID:   audienceID,
+			Priority:     priority,
+			LessonsCount: lessonsCount,
+		})
+	}
+
+	return &dto.PlanScheduleRequest{
+		AcademicPeriodID: academicPeriodID,
+		Days:             days,
+		Slots:            slots,
+		Seed:             seed,
+		SubjectList:      subjectRequests,
+	}, nil
+}
+
+// Вспомогательные методы для парсинга Excel
+func (s *ExcelService) getCellInt(f *excelize.File, sheet, cell string) (int, error) {
+	val, err := f.GetCellValue(sheet, cell)
+	if err != nil {
+		return 0, err
+	}
+	if val == "" {
+		return 0, nil
+	}
+	return strconv.Atoi(strings.TrimSpace(val))
+}
+
+func (s *ExcelService) GenerateGroupSchedule(sch *dto.WeeklySchedule) ([]byte, error) {
+	f := excelize.NewFile()
+	defer f.Close()
+
+	weekDays := map[int]string{
+		1: "Понедельник",
+		2: "Вторник",
+		3: "Среда",
+		4: "Четверг",
+		5: "Пятница",
+		6: "Суббота",
+	}
+
+	for _, group := range sch.Groups {
+		groupSheet := group.Name
+		_, err := f.NewSheet(groupSheet)
+		if err != nil {
+			return nil, fmt.Errorf("create params sheet: %w", err)
+		}
+
+		f.SetCellStr(groupSheet, "A1", "День недели")
+		f.SetCellStr(groupSheet, "B1", "Номер пары")
+		f.SetCellStr(groupSheet, "C1", "Предмет")
+		f.SetCellStr(groupSheet, "D1", "Аудитория")
+		f.SetCellStr(groupSheet, "E1", "Преподаватель")
+
+		f.SetColWidth(groupSheet, "A", "E", 20)
+
+		type SchRow struct {
+			WeekDay  string
+			Slot     int
+			Subject  string
+			Audience string
+			Teacher  string
+		}
+		schRows := []SchRow{}
+		for day, daySchedule := range sch.Grid {
+			for slot, data := range daySchedule {
+				for _, lesson := range data {
+					if lesson.Subject.GroupID == group.ID {
+						var subjectTitle string
+						if lesson.WeekType == 1 {
+							subjectTitle += "нечетная "
+						}
+						if lesson.WeekType == 2 {
+							subjectTitle += "четная"
+						}
+						schRows = append(schRows, SchRow{
+							WeekDay: weekDays[day],
+							Slot: slot,
+							Subject: subjectTitle + lesson.Subject.Title,
+							Audience: lesson.Audience.Number,
+							Teacher: lesson.Teacher.User.GetShortName(),
+						})
+					}
+				}
+			}
+		}
+
+		for i, row := range schRows {
+			f.SetCellStr(groupSheet, fmt.Sprintf("A%d", i+2), row.WeekDay)
+			f.SetCellInt(groupSheet, fmt.Sprintf("B%d", i+2), int64(row.Slot))
+			f.SetCellStr(groupSheet, fmt.Sprintf("C%d", i+2), row.Subject)
+			f.SetCellStr(groupSheet, fmt.Sprintf("D%d", i+2), row.Audience)
+			f.SetCellStr(groupSheet, fmt.Sprintf("E%d", i+2), row.Teacher)
+		}
+	}
+
+	// Удаляем дефолтный лист
+	f.DeleteSheet("Sheet1")
+
+	// Устанавливаем активный лист
+	f.SetActiveSheet(0) // данные
+
+	buf := new(bytes.Buffer)
+	if err := f.Write(buf); err != nil {
+		return nil, fmt.Errorf("write excel: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/core/internal/services/export.go
 package services
 
 import (
@@ -7707,7 +8807,7 @@ const tmplStr = `<!DOCTYPE html>
 </html>`
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/services/generate_user.go
+Файл: /home/admin/schedule-bot/services/core/internal/services/generate_user.go
 package services
 
 import (
@@ -7798,14 +8898,16 @@ func ensureUniqueUsername(ctx context.Context, userRepo *repository.UserRepo, ba
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/services/planner.go
+Файл: /home/admin/schedule-bot/services/core/internal/services/planner.go
 package services
 
 import (
 	"cmp"
 	"context"
 	"core/internal/dto"
+	"core/internal/models"
 	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
 	"slices"
@@ -7884,7 +8986,8 @@ func (s *PlannerService) PlanWeeklySchedule(ctx context.Context, req *dto.PlanSc
 		schedule.Grid[d] = make([][]*ScheduleCell, schedule.Slots)
 	}
 
-	if err := planSchedule(&schedule, lr, 0, req.Days, req.Slots); err != nil {
+	steps := 0
+	if err := planSchedule(&schedule, lr, 0, req.Days, req.Slots, &steps); err != nil {
 		return nil, fmt.Errorf("plan schedule: %w", err)
 	}
 
@@ -7909,9 +9012,22 @@ func (s *PlannerService) PlanWeeklySchedule(ctx context.Context, req *dto.PlanSc
 		}
 	}
 
+	var groups []models.Group
+	for _, r := range lr {
+		group, err := s.scheduleService.GetGroup(ctx, r.GroupID)
+		if err != nil {
+			return nil, fmt.Errorf("get group: %w", err)
+		}
+		if group == nil {
+			return nil, fmt.Errorf("group %d not found", r.GroupID)
+		}
+		groups = append(groups, *group)
+	}
+
 	resp := dto.WeeklySchedule{
-		Seed: req.Seed,
-		Grid: respGrid,
+		Seed:   req.Seed,
+		Grid:   respGrid,
+		Groups: groups,
 	}
 
 	return &resp, nil
@@ -7968,7 +9084,7 @@ func (s *PlannerService) generateLessonRequests(ctx context.Context, req *dto.Pl
 		if subj.LessonsCount%2 != 0 {
 			lessonRequests = append(lessonRequests, LessonRequest{
 				SubjectID:  subject.ID,
-				GroupID:    subj.SubjectID,
+				GroupID:    subject.GroupID,
 				AudienceID: audience.ID,
 				TeacherID:  teacher.User.ID,
 				Priority:   subj.Priority,
@@ -8019,8 +9135,8 @@ func getTimeSlots(sch *Schedule, req *LessonRequest, days, slots int) []TimeSlot
 	var resTimeSlots []TimeSlot
 
 	if days < 6 {
-		for slot := 0; slot < slots-1; slot++ {
-			for day := 0; day < days-1; day++ {
+		for slot := 0; slot < slots; slot++ {
+			for day := 0; day < days; day++ {
 				allTimeSlots = append(allTimeSlots, TimeSlot{
 					Day:  day,
 					Slot: slot,
@@ -8029,17 +9145,17 @@ func getTimeSlots(sch *Schedule, req *LessonRequest, days, slots int) []TimeSlot
 		}
 	}
 	if days == 6 {
-		for slot := 0; slot < slots-1; slot++ {
-			for day := 0; day < days-2; day++ {
+		for slot := 0; slot < slots; slot++ {
+			for day := 0; day < days-1; day++ {
 				allTimeSlots = append(allTimeSlots, TimeSlot{
 					Day:  day,
 					Slot: slot,
 				})
 			}
 		}
-		for slot := 0; slot < slots-1; slot++ {
+		for slot := 0; slot < slots; slot++ {
 			allTimeSlots = append(allTimeSlots, TimeSlot{
-				Day:  4,
+				Day:  5,
 				Slot: slot,
 			})
 
@@ -8115,7 +9231,7 @@ func getTimeSlots(sch *Schedule, req *LessonRequest, days, slots int) []TimeSlot
 	return resTimeSlots
 }
 
-func planSchedule(sch *Schedule, req []LessonRequest, idx int, days, slots int) error {
+func planSchedule(sch *Schedule, req []LessonRequest, idx int, days, slots int, steps *int) error {
 	if idx >= len(req) {
 		return nil
 	}
@@ -8139,13 +9255,18 @@ func planSchedule(sch *Schedule, req []LessonRequest, idx int, days, slots int) 
 		log.Printf("Подставили пару: день %d пара %d предмет %d преподаватель %d аудитория %d",
 			slot.Day, slot.Slot, cell.SubjectID, cell.TeacherID, cell.AudienceID)
 
-		if err := planSchedule(sch, req, idx+1, days, slots); err == nil {
+		*steps = 0
+		if err := planSchedule(sch, req, idx+1, days, slots, steps); err == nil {
 			return nil
+		} else {
+			log.Printf("Отменили пару: день %d пара %d предмет %d преподаватель %d аудитория %d",
+				slot.Day, slot.Slot, cell.SubjectID, cell.TeacherID, cell.AudienceID)
+			sch.Grid[slot.Day][slot.Slot] = sch.Grid[slot.Day][slot.Slot][:len(sch.Grid[slot.Day][slot.Slot])-1]
+			*steps++
+			if *steps < 5 {
+				return err
+			}
 		}
-		log.Printf("Отменили пару: день %d пара %d предмет %d преподаватель %d аудитория %d",
-			slot.Day, slot.Slot, cell.SubjectID, cell.TeacherID, cell.AudienceID)
-
-		sch.Grid[slot.Day][slot.Slot] = sch.Grid[slot.Day][slot.Slot][:len(sch.Grid[slot.Day][slot.Slot])-1]
 	}
 
 	return fmt.Errorf("not a single slot fit")
@@ -8185,8 +9306,18 @@ func checkTimeSlotSchedule(t WeekType, sch []*ScheduleCell, req *LessonRequest) 
 	}
 }
 
+func (s *PlannerService) GenerateScheduleFromExcel(ctx context.Context, r io.Reader) (*dto.WeeklySchedule, error) {
+	excelSvc := NewExcelService()
+	req, err := excelSvc.ParsePlannerTemplate(r, s.scheduleService)
+	if err != nil {
+		return nil, fmt.Errorf("parse planner template: %w", err)
+	}
+
+	return s.PlanWeeklySchedule(ctx, req)
+}
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/services/schedule.go
+Файл: /home/admin/schedule-bot/services/core/internal/services/schedule.go
 package services
 
 import (
@@ -8196,6 +9327,7 @@ import (
 	"core/internal/repository"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"slices"
 	"time"
@@ -8579,6 +9711,10 @@ func (s *ScheduleService) GetSubjectByID(ctx context.Context, id int) (*models.S
 
 func (s *ScheduleService) GetAllSubjects(ctx context.Context, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
 	return s.subjectRepo.GetAllSubjects(ctx, req)
+}
+
+func (s *ScheduleService) GetSubjectsByDate(ctx context.Context, startDate, endDate time.Time) ([]models.Subject, error) {
+	return s.subjectRepo.GetSubjectsByDate(ctx, startDate, endDate)
 }
 
 func (s *ScheduleService) GetSubjectsByGroupID(ctx context.Context, groupID int, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
@@ -9584,6 +10720,16 @@ func (s *ScheduleService) CreateGroupWithCurriculumAndStudents(ctx context.Conte
 	}, nil
 }
 
+// CreateGroupFromExcel создаёт группу, дисциплины и студентов из Excel файла
+func (s *ScheduleService) CreateGroupFromExcel(ctx context.Context, file io.Reader) (*dto.GroupWithCurriculumResponse, error) {
+	excelSvc := NewExcelService()
+	req, err := excelSvc.ParseGroupFromExcel(file)
+	if err != nil {
+		return nil, fmt.Errorf("parse excel: %w", err)
+	}
+	return s.CreateGroupWithCurriculumAndStudents(ctx, req)
+}
+
 // GetLessonStatistics возвращает статистику занятий с учётом фильтров
 func (s *ScheduleService) GetLessonStatistics(ctx context.Context, req *dto.StatisticsRequest) (*dto.StatisticsResponse, error) {
 	filters := repository.LessonLogFilters{
@@ -9680,8 +10826,170 @@ func (s *ScheduleService) GetLessonStatistics(ctx context.Context, req *dto.Stat
 	return resp, nil
 }
 
+// CreateStudentsFromExcel создаёт студентов из Excel-файла
+func (s *ScheduleService) CreateStudentsFromExcel(ctx context.Context, r io.Reader) ([]dto.StudentCreationResult, error) {
+	excelSvc := NewExcelService()
+	studentsData, err := excelSvc.ParseStudentsFromExcel(r)
+	if err != nil {
+		return nil, fmt.Errorf("parse excel: %w", err)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var results []dto.StudentCreationResult
+	for _, data := range studentsData {
+		// Найти группу по имени
+		group, err := s.groupRepo.GetByName(ctx, data.GroupName)
+		if err != nil {
+			return nil, fmt.Errorf("find group '%s': %w", data.GroupName, err)
+		}
+		if group == nil {
+			return nil, fmt.Errorf("group '%s' not found", data.GroupName)
+		}
+
+		// Генерация username
+		baseUsername := generateUsername(data.FullName, group.Name)
+		username, err := ensureUniqueUsername(ctx, s.userRepo, baseUsername)
+		if err != nil {
+			return nil, fmt.Errorf("generate username for %s: %w", data.FullName, err)
+		}
+
+		// Генерация пароля
+		plainPassword, err := generateRandomPassword()
+		if err != nil {
+			return nil, fmt.Errorf("generate password: %w", err)
+		}
+		passwordHash, err := hashPassword(plainPassword)
+		if err != nil {
+			return nil, fmt.Errorf("hash password: %w", err)
+		}
+
+		user := models.User{
+			Name:         username,
+			FullName:     data.FullName,
+			Email:        data.Email,
+			PasswordHash: passwordHash,
+		}
+
+		// Создаём в транзакции
+
+		if err := s.userRepo.CreateWithTx(ctx, tx, &user); err != nil {
+			return nil, fmt.Errorf("create user: %w", err)
+		}
+		if err := s.studentRepo.CreateStudentWithTx(ctx, tx, &user, group.ID); err != nil {
+			return nil, fmt.Errorf("create student profile: %w", err)
+		}
+
+		results = append(results, dto.StudentCreationResult{
+			User:     user,
+			Password: plainPassword,
+			GroupID:  group.ID,
+		})
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+
+	return results, nil
+}
+
+// CreateTeachersFromExcel создаёт преподавателей из Excel-файла
+func (s *ScheduleService) CreateTeachersFromExcel(ctx context.Context, r io.Reader) ([]dto.TeacherCreationResult, error) {
+	excelSvc := NewExcelService()
+	teachersData, err := excelSvc.ParseTeachersFromExcel(r)
+	if err != nil {
+		return nil, fmt.Errorf("parse excel: %w", err)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var results []dto.TeacherCreationResult
+	for _, data := range teachersData {
+		// Генерация username из ФИО (латиница)
+		baseUsername := generateUsername(data.FullName, "") // без группы
+		username, err := ensureUniqueUsername(ctx, s.userRepo, baseUsername)
+		if err != nil {
+			return nil, fmt.Errorf("generate username for %s: %w", data.FullName, err)
+		}
+
+		plainPassword, err := generateRandomPassword()
+		if err != nil {
+			return nil, fmt.Errorf("generate password: %w", err)
+		}
+		passwordHash, err := hashPassword(plainPassword)
+		if err != nil {
+			return nil, fmt.Errorf("hash password: %w", err)
+		}
+
+		user := models.User{
+			Name:         username,
+			FullName:     data.FullName,
+			Email:        data.Email,
+			PasswordHash: passwordHash,
+		}
+
+		if err := s.userRepo.CreateWithTx(ctx, tx, &user); err != nil {
+			return nil, fmt.Errorf("create user: %w", err)
+		}
+		if err := s.teacherRepo.CreateTeacherWithTx(ctx, tx, &user); err != nil { 
+			return nil, fmt.Errorf("create teacher profile: %w", err)
+		}
+
+		results = append(results, dto.TeacherCreationResult{
+			User:     user,
+			Password: plainPassword,
+		})
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+	return results, nil
+}
+
+// CreateAudiencesFromExcel создаёт аудитории из Excel-файла
+func (s *ScheduleService) CreateAudiencesFromExcel(ctx context.Context, r io.Reader) ([]models.Audience, error) {
+    excelSvc := NewExcelService()
+    audiencesData, err := excelSvc.ParseAudiencesFromExcel(r)
+    if err != nil {
+        return nil, fmt.Errorf("parse excel: %w", err)
+    }
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("create transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+    
+    var created []models.Audience
+    for _, data := range audiencesData {
+        audience := models.Audience{
+            Name:   data.Name,
+            Number: data.Number,
+        }
+        if err := s.audienceRepo.CreateWithTx(ctx, tx, &audience); err != nil {
+            return nil, fmt.Errorf("create audience %s: %w", data.Name, err)
+        }
+        created = append(created, audience)
+    }
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+    return created, nil
+}
+
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/services/tokens.go
+Файл: /home/admin/schedule-bot/services/core/internal/services/tokens.go
 package services
 
 import (
@@ -9756,7 +11064,7 @@ func (s *JWTService) GenerateRefreshToken() (string, error) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/services/user.go
+Файл: /home/admin/schedule-bot/services/core/internal/services/user.go
 package services
 
 import (
@@ -9992,7 +11300,7 @@ func (s *UserService) GetSessions(ctx context.Context) ([]models.Session, error)
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/internal/services/utils.go
+Файл: /home/admin/schedule-bot/services/core/internal/services/utils.go
 package services
 
 import "golang.org/x/crypto/bcrypt"
@@ -10008,7 +11316,80 @@ func checkPasswordHash(password, hash string) bool {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/pkg/postgres/postgres.go
+Файл: /home/admin/schedule-bot/services/core/internal/storage/memory.go
+package storage
+
+import (
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type MemoryStorage struct {
+	mu      sync.RWMutex
+	storage map[string]File
+	TTL     time.Duration
+}
+
+type File struct {
+	Data      []byte
+	Mime      string
+	Filename  string
+	ExpiresAt time.Time
+}
+
+func NewMemoryStorage(ttl, cleanupInterval time.Duration) *MemoryStorage {
+	storage := &MemoryStorage{
+		storage: map[string]File{},
+		TTL:     ttl,
+	}
+
+	go storage.gc(cleanupInterval)
+
+	return storage
+}
+
+func (s *MemoryStorage) PutFile(filename, mime string, data []byte) (string, time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id := uuid.New()
+	exiresAt := time.Now().Add(s.TTL)
+	s.storage[id.String()] = File{
+		Filename:  filename,
+		Mime:      mime,
+		Data:      data,
+		ExpiresAt: exiresAt,
+	}
+
+	return id.String(), exiresAt
+}
+
+func (s *MemoryStorage) GetFile(id string) (File, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	file, found := s.storage[id]
+	return file, found
+}
+
+func (s *MemoryStorage) gc(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	for range ticker.C {
+		s.mu.Lock()
+		now := time.Now()
+		for k, v := range s.storage {
+			if v.ExpiresAt.After(now) {
+				delete(s.storage, k)
+			}
+		}
+		s.mu.Unlock()
+	}
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/core/pkg/postgres/postgres.go
 package postgres
 
 import (
@@ -10050,7 +11431,7 @@ func NewPostgresPool(dsn string) (*pgxpool.Pool, error) {
 }
 
 --------------------------
-Файл: /home/quigon/schedule-bot/services/core/pkg/utils/response.go
+Файл: /home/admin/schedule-bot/services/core/pkg/utils/response.go
 package utils
 
 import (
