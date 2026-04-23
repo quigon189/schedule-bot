@@ -206,3 +206,7 @@ func (c *GigaChatClient) Generate(ctx context.Context, systemPrompt, userPrompt 
 func (c *GigaChatClient) GetModelName() string {
 	return c.model
 }
+
+func (c *GigaChatClient) Chat(ctx context.Context, messages []Message, opts Options) (*Message, error) {
+	return nil, fmt.Errorf("metod not implemented")
+}

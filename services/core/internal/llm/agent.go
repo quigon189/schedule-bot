@@ -15,6 +15,13 @@ type Options map[string]any
 
 type Client interface {
 	Generate(ctx context.Context, systemPrompt, userMessage string, opts Options) (string, error)
+	Chat(ctx context.Context, messages []Message, opts Options) (*Message, error)
+}
+
+type Message struct {
+	Role    string
+	Content string
+	Images  [][]byte
 }
 
 type LLMAgent struct {
