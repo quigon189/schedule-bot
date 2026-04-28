@@ -4,6 +4,7 @@ import (
 	"context"
 	"core/internal/models"
 	"core/internal/services"
+	"core/pkg/jsonschema"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -22,6 +23,15 @@ type Message struct {
 	Role    string
 	Content string
 	Images  [][]byte
+}
+
+type ToolDescription struct {
+	Type     string `json:"type"`
+	Function struct {
+		Name        string          `json:"name"`
+		Description string          `json:"description"`
+		Parameters  json.RawMessage `json:"parameters"`
+	} `json:"function"`
 }
 
 type LLMAgent struct {
@@ -46,7 +56,11 @@ func NewAgent(client Client, svc services.ScheduleService) *LLMAgent {
 func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (string, error) {
 	// 1. Формируем системный промпт с описанием инструментов
 
-	toolsJSON, _ := json.MarshalIndent(a.tools, "", "  ")
+	tools, err := getToolDescriptions(a.tools)
+	if err != nil {
+		return "", fmt.Errorf("generate tool descriptions: %w", err)
+	}
+	toolsJSON, _ := json.MarshalIndent(tools, "", "  ")
 
 	now := time.Now()
 	var userInfo strings.Builder
@@ -111,8 +125,8 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 	actionResp = strings.TrimSpace(actionResp)
 
 	var decision struct {
-		Action string         `json:"action"`
-		Params map[string]any `json:"params"`
+		Action string          `json:"action"`
+		Params json.RawMessage `json:"params"`
 	}
 	if err := json.Unmarshal([]byte(actionResp), &decision); err != nil {
 		// Если не распарсили, пробуем ответить напрямую через LLM
@@ -163,4 +177,23 @@ func (a *LLMAgent) formatResponse(ctx context.Context, userMessage string, data 
 
 	log.Printf("Системное сообщение для ответа пользователю:\n%s", systemPrompt)
 	return a.client.Generate(ctx, systemPrompt, userMessage, Options{"temperature": 0.2})
+}
+
+func getToolDescriptions(tools []Tool) ([]ToolDescription, error) {
+	var toolDescriptions []ToolDescription
+	for _, tool := range tools {
+		var td ToolDescription
+		td.Type = "function"
+		td.Function.Name = tool.Name
+		td.Function.Description = tool.Description
+		schema, err := jsonschema.GenerateSchema(tool.Parameters)
+		if err != nil {
+			return nil, err
+		}
+		td.Function.Parameters = schema
+
+		toolDescriptions = append(toolDescriptions, td)
+	}
+
+	return toolDescriptions, nil
 }
