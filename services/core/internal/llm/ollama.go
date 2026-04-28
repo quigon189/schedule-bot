@@ -23,6 +23,7 @@ type GenerateRequest struct {
 	Prompt  string         `json:"prompt"`
 	Stream  bool           `json:"stream"`
 	System  string         `json:"system,omitempty"`
+	Think   bool           `json:"think"`
 	Options map[string]any `json:"options,omitempty"`
 }
 
@@ -63,6 +64,7 @@ func (c *OllamaClient) Generate(ctx context.Context, systemPrompt, userMessage s
 		Prompt:  userMessage,
 		System:  systemPrompt,
 		Stream:  false,
+		Think:   false,
 		Options: opts,
 	}
 

@@ -47,9 +47,11 @@ services:
       GIGACHAT_BASE_URL: https://ngw.devices.sberbank.ru:9443/api/v2
       GIGACHAT_MODEL: GigaChat-2
 
-      OLLAMA_URL: ollama:11434
+      OLLAMA_URL: host.docker.internal:11434
       OLLAMA_MODEL: qwen3.5:9b
       OLLAMA_TIMEOUT: 36000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./services/core/migrations:/app/migrations
     depends_on:
