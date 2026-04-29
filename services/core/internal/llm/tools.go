@@ -32,11 +32,11 @@ func getScheduleTool(svc services.ScheduleService) Tool {
 		AudienceNumber string `json:"audience_number" jsonschema:"description=номер аудитории трехзначное число, может в конце содержать букву (например 409 или 502а)"`
 		DayOfWeek      int    `json:"day_of_week" jsonschema:"description=порядковый номер дня недели (например для понедельника - 1)"`
 		PeriodYear     string `json:"period_year" jsonschema:"description=учебный период указывающий года обучения в формате YYYY/YYYY (например 2025/2026); если не указан, то подставляется текущий активный период"`
-		PeriodSemester int    `json:"period_semester" jsonschema:"description=обязательный, если задан period_year, указывает семестр учебного года, принимает одно из двух значений: 1 или 2"`
+		PeriodSemester int    `json:"period_semester" jsonschema:"description=указывает семестр учебного года, принимает одно из двух значений: 1 или 2"`
 	}
 	return Tool{
 		Name:        "get_schedule",
-		Description: "Получить основное расписание занятий заданное на конкретный учебный период, сформированно заранее на чебную неделю для групп, преподавателей и аудиторий",
+		Description: "Получить основное расписание занятий заданное на конкретный учебный период, сформированно заранее на учебную неделю для групп, преподавателей и аудиторий",
 		Parameters:  getScheduleParams{},
 		Handler: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			var params getScheduleParams

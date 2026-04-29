@@ -71,8 +71,7 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 	var userInfo strings.Builder
 	user, ok := ctx.Value("user").(models.User)
 	if ok {
-		fmt.Fprintf(&userInfo, "Полное имя: %s\n", user.FullName)
-		fmt.Fprintf(&userInfo, "Роли:")
+		fmt.Fprintf(&userInfo, "%s ", user.FullName)
 		roles := map[string]string{
 			"user":    "Пользователь",
 			"student": "Студент",
@@ -81,7 +80,7 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 			"admin":   "Администратор",
 		}
 		for _, role := range user.Roles {
-			fmt.Fprintf(&userInfo, " %s", roles[role.Name])
+			fmt.Fprintf(&userInfo, "%s", roles[role.Name])
 		}
 		userInfo.WriteString("\n")
 	}
@@ -91,8 +90,10 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 
 	userPrompt := fmt.Sprintf(
 		`Текущая дата: %s
-Информация о пользователе: %s
-Сообщение: %s`,
+Информация о пользователе:
+%s
+Сообщение:
+%s`,
 		now.Format("2006-01-02"), userInfo.String(), userMessage)
 
 	log.Printf("Системная строка: %s", systemPrompt)
@@ -105,7 +106,7 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 		},
 		Message{
 			Role:    "user",
-			Content: userMessage,
+			Content: userPrompt,
 		},
 	}
 
@@ -117,7 +118,8 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 		if err != nil {
 			return "", fmt.Errorf("LLM get message failed: %w", err)
 		}
-		log.Printf("Сообщение от LLM: %v", respMessage)
+		jsonTC, _ := json.MarshalIndent(respMessage, "", "  ")
+		log.Printf("Сообщение от LLM:\n%s", jsonTC)
 
 		messages = append(messages, *respMessage)
 
@@ -138,7 +140,8 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 					Role:    "tool",
 					Content: content,
 				}
-				log.Printf("Tool message: %+v", toolMessage)
+				jsonToolMes, _ := json.MarshalIndent(toolMessage, "", "  ")
+				log.Printf("Tool message: %s", jsonToolMes)
 				messages = append(messages, toolMessage)
 			}
 		} else {

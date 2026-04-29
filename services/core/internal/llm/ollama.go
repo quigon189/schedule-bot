@@ -47,6 +47,7 @@ type ollamaChatRequest struct {
 	Stream   bool                    `json:"stream"`
 	Options  map[string]any          `json:"options,omitempty"`
 	Tools    []ollamaToolDescroption `json:"tools,omitempty"`
+	Think    bool                    `json:"think"`
 }
 
 type ollamaToolDescroption struct {
@@ -160,12 +161,20 @@ func (c *OllamaClient) Chat(ctx context.Context, messages []Message, opts Option
 		}
 	}
 
+	temperature, ok := opts["temperature"].(float64)
+	if !ok {
+		temperature = 0.1
+	}
+
 	reqBody := ollamaChatRequest{
 		Model:    c.model,
 		Messages: reqMessages,
 		Stream:   false,
-		Options:  opts,
-		Tools:    toolDescs,
+		Options: map[string]any{
+			"temperature": temperature,
+		},
+		Think: false,
+		Tools: toolDescs,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
