@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -91,7 +92,7 @@ func (c *GigaChatClient) getToken(ctx context.Context) (string, error) {
 
 	var tokenResp struct {
 		AccessToken string `json:"access_token"`
-		ExpiresAt   int64 `json:"expires_at"`
+		ExpiresAt   int64  `json:"expires_at"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
 		return "", fmt.Errorf("decode token response: %w", err)
@@ -110,21 +111,36 @@ func generateUUID() string {
 }
 
 type gigachatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role         string       `json:"role"`
+	Content      string       `json:"content"`
+	FunctionCall *functionCall `json:"function_call,omitempty"`
+}
+
+type functionCall struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
 }
 
 type gigachatRequest struct {
-	Model    string            `json:"model"`
-	Messages []gigachatMessage `json:"messages"`
-	Stream   bool              `json:"stream"`
-	Temp     float64           `json:"temperature,omitempty"`
+	Model     string                `json:"model"`
+	Messages  []gigachatMessage     `json:"messages"`
+	Stream    bool                  `json:"stream"`
+	Temp      float64               `json:"temperature,omitempty"`
+	Functions []functionDescription `json:"functions,omitempty"`
+}
+
+type functionDescription struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Parameters  json.RawMessage `json:"parameters"`
 }
 
 type gigachatResponse struct {
 	Choices []struct {
 		Message struct {
-			Content string `json:"content"`
+			Role         string       `json:"role"`
+			Content      string       `json:"content"`
+			FunctionCall functionCall `json:"function_call"`
 		} `json:"message"`
 	} `json:"choices"`
 	Error *struct {
@@ -208,5 +224,114 @@ func (c *GigaChatClient) GetModelName() string {
 }
 
 func (c *GigaChatClient) Chat(ctx context.Context, messages []Message, opts Options) (*Message, error) {
-	return nil, fmt.Errorf("metod not implemented")
+	token, err := c.getToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get token: %w", err)
+	}
+
+	var gigaMessages []gigachatMessage
+	for _, m := range messages {
+		gm := gigachatMessage{
+			Content: m.Content,
+		}
+		if m.Role == "tool"  {
+			gm.Role = "function"
+			content := map[string]string{
+				"answer": m.Content,
+			}
+			jsonContent, _ := json.Marshal(content)
+			gm.Content = string(jsonContent)
+		} else {
+			gm.Role = m.Role
+		}
+		if len(m.ToolCalls) > 0 {
+			tc := m.ToolCalls[0]
+			gm.FunctionCall = &functionCall{
+				Name:      tc.Name,
+				Arguments: tc.Arguments,
+			}
+		}
+		gigaMessages = append(gigaMessages, gm)
+	}
+
+	var funcDescs []functionDescription
+	if functions, ok := opts["tools"].([]ToolDescription); ok {
+		for _, f := range functions {
+			funcDescs = append(funcDescs, functionDescription{
+				Name:        f.Function.Name,
+				Description: f.Function.Description,
+				Parameters:  f.Function.Parameters,
+			})
+		}
+	}
+
+	var temp float64
+	temp, ok := opts["temperature"].(float64)
+	if !ok {
+		temp = 0.1
+	}
+
+	reqBody := gigachatRequest{
+		Model:     c.model,
+		Messages:  gigaMessages,
+		Stream:    false,
+		Temp:      temp,
+		Functions: funcDescs,
+	}
+
+	jsonData, err := json.MarshalIndent(reqBody, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	log.Printf("Gigachat request body: %s", jsonData)	
+
+	// другой url для запросов
+	url := "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("response status: %d body: %s", resp.StatusCode, string(body))
+	}
+
+	var chatResp gigachatResponse
+	if err := json.Unmarshal(body, &chatResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return nil, fmt.Errorf("no response from gigachat")
+	}
+
+	choice := chatResp.Choices[0]
+	m := &Message{
+		Role:    choice.Message.Role,
+		Content: choice.Message.Content,
+	}
+
+	if choice.Message.FunctionCall.Name != "" {
+		m.ToolCalls = append(m.ToolCalls, ToolCall{
+			Name:      choice.Message.FunctionCall.Name,
+			Arguments: choice.Message.FunctionCall.Arguments,
+		})
+	}
+
+	return m, nil
 }

@@ -20,9 +20,15 @@ type Client interface {
 }
 
 type Message struct {
-	Role    string
-	Content string
-	Images  [][]byte
+	Role      string
+	Content   string
+	Images    [][]byte
+	ToolCalls []ToolCall
+}
+
+type ToolCall struct {
+	Name      string
+	Arguments json.RawMessage
 }
 
 type ToolDescription struct {
@@ -60,7 +66,6 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 	if err != nil {
 		return "", fmt.Errorf("generate tool descriptions: %w", err)
 	}
-	toolsJSON, _ := json.MarshalIndent(tools, "", "  ")
 
 	now := time.Now()
 	var userInfo strings.Builder
@@ -81,80 +86,67 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 		userInfo.WriteString("\n")
 	}
 
-	systemPrompt := fmt.Sprintf(`Ты — ассистент по расписанию занятий. Твоя задача — понять, какую информацию хочет получить пользователь, и выбрать подходящий инструмент из списка ниже.
+	systemPrompt := fmt.Sprintf(`Ты — ассистент по расписанию занятий. Твоя задача — понять, какую информацию хочет получить пользователь, выбрать подходящий инструмент из списка и дать пользователю короткий ответ.
+Отвечай только на вопросы связанные с расписанием заняти.`)
 
-## Доступные инструменты:
-%s
-
-## Дополниетльная информация:
-- Текущая дата: %s
-- Подставляй фамилию преподавателя из информации о пользователе, только если тебя явно попросили (например в сообщении указано покажи мое расписание)
-
-## Правила:
-1. Если пользователь спрашивает о расписании (сегодня, завтра, на неделю), используй get_group_schedule
-2. Если вопрос не связан с расписанием, ответь: {"action": "none", "params": {}}
-
-## Важно:
-- Извлекай параметры из вопроса пользователя
-- Если параметр не указан, оставь его пустым
-- Для дат используй формат YYYY-MM-DD
-
-Ответь ТОЛЬКО JSON-объектом в формате:
-{"action": "имя_инструмента", "params": {"параметр": "значение"}}`, string(toolsJSON), now.Format("2006-01-02"))
-
-	userPrompt := fmt.Sprintf(`Информация о пользователе:
-%s
-Сообщение:
-%s`, userInfo.String(), userMessage)
+	userPrompt := fmt.Sprintf(
+		`Текущая дата: %s
+Информация о пользователе: %s
+Сообщение: %s`,
+		now.Format("2006-01-02"), userInfo.String(), userMessage)
 
 	log.Printf("Системная строка: %s", systemPrompt)
 	log.Printf("Запрос пользователя: %s", userPrompt)
 
-	// 2. Получаем решение от LLM
-	actionResp, err := a.client.Generate(ctx, systemPrompt, userPrompt, Options{"temperature": 0})
-	if err != nil {
-		return "", fmt.Errorf("LLM action selection failed: %w", err)
+	messages := []Message{
+		Message{
+			Role:    "system",
+			Content: systemPrompt,
+		},
+		Message{
+			Role:    "user",
+			Content: userMessage,
+		},
 	}
 
-	log.Printf("Полученые действия от LLM: %v", actionResp)
+	for i := 0; i < 10; i++ {
+		respMessage, err := a.client.Chat(ctx, messages, Options{
+			"temperature": 0,
+			"tools":       tools,
+		})
+		if err != nil {
+			return "", fmt.Errorf("LLM get message failed: %w", err)
+		}
+		log.Printf("Сообщение от LLM: %v", respMessage)
 
-	// Очищаем ответ
-	actionResp = strings.TrimSpace(actionResp)
-	actionResp = strings.TrimPrefix(actionResp, "```json")
-	actionResp = strings.TrimSuffix(actionResp, "```")
-	actionResp = strings.TrimSpace(actionResp)
+		messages = append(messages, *respMessage)
 
-	var decision struct {
-		Action string          `json:"action"`
-		Params json.RawMessage `json:"params"`
+		if len(respMessage.ToolCalls) > 0 {
+			for _, tc := range respMessage.ToolCalls {
+				var content string
+				tool, exists := a.toolsByName[tc.Name]
+				if exists {
+					content, err = tool.Handler(ctx, tc.Arguments)
+					if err != nil {
+						content = fmt.Sprintf("Ошибка при выполнении инструмента: %v", err)
+					}
+				} else {
+					content = fmt.Sprintf("Инструмент %s не найден", tc.Name)
+				}
+
+				toolMessage := Message{
+					Role:    "tool",
+					Content: content,
+				}
+				log.Printf("Tool message: %+v", toolMessage)
+				messages = append(messages, toolMessage)
+			}
+		} else {
+			return respMessage.Content, nil
+		}
 	}
-	if err := json.Unmarshal([]byte(actionResp), &decision); err != nil {
-		// Если не распарсили, пробуем ответить напрямую через LLM
-		return a.directAnswer(ctx, userMessage)
-	}
 
-	// 3. Если инструмент не выбран, отвечаем напрямую
-	if decision.Action == "none" {
-		return a.directAnswer(ctx, userMessage)
-	}
-
-	// 4. Находим и выполняем инструмент
-	tool, exists := a.toolsByName[decision.Action]
-	if !exists {
-		return a.directAnswer(ctx, userMessage)
-	}
-
-	// Выполняем инструмент
-	result, err := tool.Handler(ctx, decision.Params)
-	if err != nil {
-		// Если ошибка, дадим понятный ответ
-		return fmt.Sprintf("Извините, не удалось получить информацию: %v", err), nil
-	}
-
-	// 5. Формируем финальный ответ на основе полученных данных
-	return a.formatResponse(ctx, userPrompt, result)
-	// Тестово пробуем вернуть ответ пользователю
-	//return result, nil
+	return "Извените не удалось получить ответ", nil
 }
 
 // directAnswer - прямой ответ от LLM без вызова инструментов

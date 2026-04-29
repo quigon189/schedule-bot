@@ -28,22 +28,40 @@ type GenerateRequest struct {
 }
 
 type ollamaMessage struct {
-	Role    string   `json:"role"`
-	Content string   `json:"content"`
-	Images  []string `json:"images,omitempty"`
+	Role      string   `json:"role"`
+	Content   string   `json:"content"`
+	Images    []string `json:"images,omitempty"`
+	ToolCalls []struct {
+		Function ollamaFunctionCall `json:"function"`
+	} `json:"tool_calls"`
+}
+
+type ollamaFunctionCall struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
 }
 
 type ollamaChatRequest struct {
-	Model    string          `json:"model"`
-	Messages []ollamaMessage `json:"messages"`
-	Stream   bool            `json:"stream"`
-	Options  map[string]any  `json:"options,omitempty"`
+	Model    string                  `json:"model"`
+	Messages []ollamaMessage         `json:"messages"`
+	Stream   bool                    `json:"stream"`
+	Options  map[string]any          `json:"options,omitempty"`
+	Tools    []ollamaToolDescroption `json:"tools,omitempty"`
+}
+
+type ollamaToolDescroption struct {
+	Type     string `json:"type"`
+	Function struct {
+		Name        string          `json:"name"`
+		Description string          `json:"description"`
+		Parameters  json.RawMessage `json:"parameters"`
+	}
 }
 
 type ollamaChatResponse struct {
-	Message         Message `json:"message"`
-	PromptEvalCount int     `json:"prompt_eval_count"`
-	EvalCount       int     `json:"eval_count"`
+	Message         ollamaMessage `json:"message"`
+	PromptEvalCount int           `json:"prompt_eval_count"`
+	EvalCount       int           `json:"eval_count"`
 }
 
 type GenerateResponse struct {
@@ -109,13 +127,45 @@ func (c *OllamaClient) Chat(ctx context.Context, messages []Message, opts Option
 				images = append(images, base64Image)
 			}
 		}
+		if len(m.ToolCalls) > 0 {
+			for _, tc := range m.ToolCalls {
+				message.ToolCalls = append(message.ToolCalls, struct {
+					Function ollamaFunctionCall `json:"function"`
+				}{
+					ollamaFunctionCall{
+						Name:      tc.Name,
+						Arguments: tc.Arguments,
+					},
+				})
+			}
+		}
 		reqMessages = append(reqMessages, message)
 	}
+
+	var toolDescs []ollamaToolDescroption
+	if tools, ok := opts["tools"].([]ToolDescription); ok {
+		for _, t := range tools {
+			toolDescs = append(toolDescs, ollamaToolDescroption{
+				Type: t.Type,
+				Function: struct {
+					Name        string          `json:"name"`
+					Description string          `json:"description"`
+					Parameters  json.RawMessage `json:"parameters"`
+				}{
+					Name:        t.Function.Name,
+					Description: t.Function.Description,
+					Parameters:  t.Function.Parameters,
+				},
+			})
+		}
+	}
+
 	reqBody := ollamaChatRequest{
 		Model:    c.model,
 		Messages: reqMessages,
 		Stream:   false,
 		Options:  opts,
+		Tools:    toolDescs,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -147,5 +197,19 @@ func (c *OllamaClient) Chat(ctx context.Context, messages []Message, opts Option
 	log.Printf("Prompt tokens %d", chatResp.PromptEvalCount)
 	log.Printf("Answer tokens %d", chatResp.EvalCount)
 
-	return &chatResp.Message, nil
+	m := Message{
+		Role:    chatResp.Message.Role,
+		Content: chatResp.Message.Content,
+	}
+
+	if len(chatResp.Message.ToolCalls) > 0 {
+		for _, tc := range chatResp.Message.ToolCalls {
+			m.ToolCalls = append(m.ToolCalls, ToolCall{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
+			})
+		}
+	}
+
+	return &m, nil
 }
