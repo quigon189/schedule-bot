@@ -3,9 +3,11 @@ package handlers
 import (
 	"core/internal/dto"
 	"core/internal/services"
+	"core/pkg/fileparser"
 	"core/pkg/utils"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -171,4 +173,33 @@ func (h *GroupHandler) UploadGroupExcel(w http.ResponseWriter, r *http.Request) 
 	}
 
 	utils.SuccessResponse(w, "group with curriculum and students created from Excel", resp)
+}
+
+func (h *GroupHandler) AIGroupTemplate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "file too large or invalid form")
+		return
+	}
+
+	files := r.MultipartForm.File["files"]
+
+	for _, fileHeader := range files {
+		file, err := fileHeader.Open()
+		if err != nil {
+			continue
+		}
+		defer file.Close()
+
+		parsedContent, err := fileparser.Parse(file, fileHeader.Filename)
+		if err != nil {
+			log.Printf("%s error %v", fileHeader.Filename, err)
+		}
+
+		jsonContent, _ := json.MarshalIndent(parsedContent, "", "  ")
+
+		log.Printf("Parsed content: %+v", parsedContent)
+		log.Printf("JSON content:\n%s", jsonContent)
+	}
+
+	utils.SuccessResponse(w, "ok", nil)
 }

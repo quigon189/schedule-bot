@@ -25,7 +25,8 @@ RUN apk add --no-cache \
     libxrender \
     libssl3 \
     ttf-freefont \
-    ttf-liberation
+    ttf-liberation \
+	poppler-utils
 
 WORKDIR /app
 
