@@ -21,7 +21,7 @@ func NewExcelService() *ExcelService {
 	return &ExcelService{}
 }
 
-func (s *ExcelService) GenerateGroupTemplate() ([]byte, error) {
+func (s *ExcelService) GenerateGroupTemplate(req *dto.CreateGroupWithCurriculumRequest) ([]byte, error) {
 	f := excelize.NewFile()
 	defer func() { _ = f.Close() }()
 
@@ -34,12 +34,13 @@ func (s *ExcelService) GenerateGroupTemplate() ([]byte, error) {
 	f.SetCellStr(sheetInfo, "A1", "name")
 	f.SetCellStr(sheetInfo, "B1", "specialty")
 	f.SetCellStr(sheetInfo, "C1", "admission_year")
-	f.SetCellStr(sheetInfo, "A2", "Пример: ИС-51")
-	f.SetCellStr(sheetInfo, "B2", "Информационные системы")
-	f.SetCellStr(sheetInfo, "C2", "2025")
 	f.SetColWidth(sheetInfo, "A", "A", 20)
 	f.SetColWidth(sheetInfo, "B", "B", 30)
 	f.SetColWidth(sheetInfo, "C", "C", 15)
+
+	f.SetCellStr(sheetInfo, "A2", req.Group.Name)
+	f.SetCellStr(sheetInfo, "B2", req.Group.Specialty)
+	f.SetCellInt(sheetInfo, "C2", int64(req.Group.AdmissionYear))
 
 	// Лист 2: Дисциплины
 	sheetSubjects := "Дисциплины"
@@ -52,13 +53,24 @@ func (s *ExcelService) GenerateGroupTemplate() ([]byte, error) {
 		col := string(rune('A' + i))
 		f.SetCellStr(sheetSubjects, col+"1", h)
 	}
-	// Пример
-	f.SetCellStr(sheetSubjects, "A2", "Математика")
-	f.SetCellInt(sheetSubjects, "B2", 1)
-	f.SetCellInt(sheetSubjects, "C2", 72)
-	f.SetCellStr(sheetSubjects, "D2", "2025-09-01")
-	f.SetCellStr(sheetSubjects, "E2", "2025-12-31")
 	f.SetColWidth(sheetSubjects, "A", "E", 15)
+
+	if len(req.Subjects) > 0 {
+		for i, subj := range req.Subjects {
+			f.SetCellStr(sheetSubjects, fmt.Sprintf("A%d", i+2), subj.Title)
+			f.SetCellInt(sheetSubjects, fmt.Sprintf("B%d", i+2), int64(subj.Semester))
+			f.SetCellInt(sheetSubjects, fmt.Sprintf("C%d", i+2), int64(subj.HoursLoad))
+			f.SetCellStr(sheetSubjects, fmt.Sprintf("D%d", i+2), subj.StartDate)
+			f.SetCellStr(sheetSubjects, fmt.Sprintf("E%d", i+2), subj.EndDate)
+		}
+	} else {
+		// Пример
+		f.SetCellStr(sheetSubjects, "A2", "Математика")
+		f.SetCellInt(sheetSubjects, "B2", 1)
+		f.SetCellInt(sheetSubjects, "C2", 72)
+		f.SetCellStr(sheetSubjects, "D2", "2025-09-01")
+		f.SetCellStr(sheetSubjects, "E2", "2025-12-31")
+	}
 
 	// Лист 3: Студенты
 	sheetStudents := "Студенты"
@@ -66,11 +78,20 @@ func (s *ExcelService) GenerateGroupTemplate() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create sheet students: %w", err)
 	}
+
+	f.SetColWidth(sheetStudents, "A", "B", 25)
 	f.SetCellStr(sheetStudents, "A1", "full_name")
 	f.SetCellStr(sheetStudents, "B1", "email")
-	f.SetCellStr(sheetStudents, "A2", "Иванов Иван Иванович")
-	f.SetCellStr(sheetStudents, "B2", "ivanov@example.com")
-	f.SetColWidth(sheetStudents, "A", "B", 25)
+
+	if len(req.Students) > 0 {
+		for i, stud := range req.Students {
+			f.SetCellStr(sheetStudents, fmt.Sprintf("A%d", i+2), stud.FullName)
+			f.SetCellStr(sheetStudents, fmt.Sprintf("B%d", i+2), stud.Email)
+		}
+	} else {
+		f.SetCellStr(sheetStudents, "A2", "Иванов Иван Иванович")
+		f.SetCellStr(sheetStudents, "B2", "ivanov@example.com")
+	}
 
 	f.DeleteSheet("Sheet1")
 	// Устанавливаем активный лист
@@ -701,11 +722,11 @@ func (s *ExcelService) GenerateGroupSchedule(sch *dto.WeeklySchedule) ([]byte, e
 							subjectTitle += "четная"
 						}
 						schRows = append(schRows, SchRow{
-							WeekDay: weekDays[day],
-							Slot: slot,
-							Subject: subjectTitle + lesson.Subject.Title,
+							WeekDay:  weekDays[day],
+							Slot:     slot,
+							Subject:  subjectTitle + lesson.Subject.Title,
 							Audience: lesson.Audience.Number,
-							Teacher: lesson.Teacher.User.GetShortName(),
+							Teacher:  lesson.Teacher.User.GetShortName(),
 						})
 					}
 				}

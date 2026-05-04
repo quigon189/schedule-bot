@@ -7,6 +7,7 @@ import (
 	"core/internal/middlewares"
 	"core/internal/repository"
 	"core/internal/services"
+	"core/internal/storage"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -19,6 +20,7 @@ type Router struct {
 	tokenService    *services.JWTService
 	authService     *services.UserService
 	scheduleService *services.ScheduleService
+	fileStorage     *storage.MemoryStorage
 	llmClient       llm.Client
 	router          *chi.Mux
 }
@@ -31,6 +33,11 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (*Router, error) {
 	userService := services.NewUserService(userRepo, sessionRepo, tokenService)
 	scheduleService := services.NewScheduleService(pool)
 
+	fileStorage := storage.NewMemoryStorage(
+		time.Duration(cfg.FileStorage.TTL)*time.Second,
+		time.Duration(cfg.FileStorage.CleanUpInterval)*time.Second,
+	)
+
 	llmClient, err := llm.NewLLMClient(&cfg.LLM)
 	if err != nil {
 		return nil, err
@@ -41,6 +48,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (*Router, error) {
 		authService:     userService,
 		scheduleService: scheduleService,
 		llmClient:       llmClient,
+		fileStorage:     fileStorage,
 		router:          chi.NewRouter(),
 	}
 
@@ -52,10 +60,12 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (*Router, error) {
 func (r *Router) SetupRoutes() {
 	authMiddleware := middlewares.NewAuthMiddleware(r.authService)
 
+	fileHandler := handlers.NewFileHandler(r.fileStorage)
+
 	authHandler := handlers.NewAuthHandler(r.authService)
 	userHandler := handlers.NewUserHandler(r.authService)
 	audienceHandler := handlers.NewAudienceHandler(r.scheduleService)
-	groupHandler := handlers.NewGroupHandler(r.scheduleService, r.llmClient)
+	groupHandler := handlers.NewGroupHandler(r.scheduleService, r.llmClient, r.fileStorage)
 	teacherHandler := handlers.NewTeacherHandler(r.scheduleService)
 	studentHandler := handlers.NewStudentHandler(r.scheduleService)
 	roleHandler := handlers.NewRoleHandler(r.scheduleService)
@@ -63,7 +73,7 @@ func (r *Router) SetupRoutes() {
 	academicPeriodHandler := handlers.NewAcademicPeriodHandler(r.scheduleService)
 	scheduleHandler := handlers.NewScheduleHandler(r.scheduleService)
 	lessonLogHandler := handlers.NewLessonLogHandler(r.scheduleService)
-	plannerHandler := handlers.NewPlannerHandler(r.scheduleService)
+	plannerHandler := handlers.NewPlannerHandler(r.scheduleService, r.fileStorage)
 
 	chatHandler := handlers.NewChatHandler(r.llmClient, *r.scheduleService)
 
@@ -192,7 +202,6 @@ func (r *Router) SetupRoutes() {
 				r.Post("/semester", scheduleHandler.CreateSemesterSchedule)
 				r.Post("/generate", plannerHandler.GenerateWeeklySchedule)
 				r.Post("/generate/upload", plannerHandler.UploadPlannerExcel)
-				r.Get("/file/{uuid}", plannerHandler.GetScheduleFile)
 			})
 			r.Get("/", scheduleHandler.GetAllScheduleTemplates)
 			r.Get("/{id}", scheduleHandler.GetScheduleTemplate)
@@ -216,6 +225,10 @@ func (r *Router) SetupRoutes() {
 
 		r.Route("/chat", func(r chi.Router) {
 			r.Post("/", chatHandler.Handle)
+		})
+
+		r.Route("/files", func(r chi.Router) {
+			r.Get("/{file_id}", fileHandler.GetFile)
 		})
 	})
 }

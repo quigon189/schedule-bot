@@ -46,11 +46,17 @@ type LLMConfig struct {
 	GigaChat GigaChatConfig
 }
 
+type FileStorageConfig struct {
+	TTL             int
+	CleanUpInterval int
+}
+
 type Config struct {
-	DB     DBConfig
-	Server ServerConfig
-	JWT    JWTConfig
-	LLM    LLMConfig
+	DB          DBConfig
+	Server      ServerConfig
+	JWT         JWTConfig
+	LLM         LLMConfig
+	FileStorage FileStorageConfig
 }
 
 func Load() *Config {
@@ -97,11 +103,17 @@ func Load() *Config {
 		log.Fatal("DB_USER, DB_PASSWORD, DB_NAME, JWT_SECRET must be set")
 	}
 
+	fileStorage := FileStorageConfig{
+		TTL:             getIntEnv("FILE_STORAGE_TTL", 1800),
+		CleanUpInterval: getIntEnv("FILE_STORAGE_CLEAN_UP_INTERVAL", 60),
+	}
+
 	return &Config{
-		DB:     db,
-		Server: server,
-		JWT:    jwt,
-		LLM:    llm,
+		DB:          db,
+		Server:      server,
+		JWT:         jwt,
+		LLM:         llm,
+		FileStorage: fileStorage,
 	}
 }
 

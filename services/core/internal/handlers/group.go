@@ -4,6 +4,7 @@ import (
 	"core/internal/dto"
 	"core/internal/llm"
 	"core/internal/services"
+	"core/internal/storage"
 	"core/pkg/fileparser"
 	"core/pkg/utils"
 	"encoding/json"
@@ -18,12 +19,14 @@ import (
 type GroupHandler struct {
 	scheduleService *services.ScheduleService
 	llmAgent        *llm.LLMAgent
+	storage         *storage.MemoryStorage
 }
 
-func NewGroupHandler(scheduleService *services.ScheduleService, client llm.Client) *GroupHandler {
+func NewGroupHandler(scheduleService *services.ScheduleService, client llm.Client, stg *storage.MemoryStorage) *GroupHandler {
 	return &GroupHandler{
 		scheduleService: scheduleService,
 		llmAgent:        llm.NewAgent(client, *scheduleService, ""),
+		storage:         stg,
 	}
 }
 
@@ -148,14 +151,20 @@ func (h *GroupHandler) CreateGroupWtihCurriculum(w http.ResponseWriter, r *http.
 
 func (h *GroupHandler) DownloadTemplate(w http.ResponseWriter, r *http.Request) {
 	excelSvc := services.NewExcelService()
-	data, err := excelSvc.GenerateGroupTemplate()
+	var req dto.CreateGroupWithCurriculumRequest
+	data, err := excelSvc.GenerateGroupTemplate(&req)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate template: %v", err))
 		return
 	}
-	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-	w.Header().Set("Content-Disposition", "attachment; filename=group_template.xlsx")
-	w.Write(data)
+
+	id, expires := h.storage.PutFile("group_template.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
+
+	resp := dto.FileResponse{
+		Path:    fmt.Sprintf("/files/%s", id),
+		Expires: expires,
+	}
+	utils.SuccessResponse(w, "template generated", resp)
 }
 
 func (h *GroupHandler) UploadGroupExcel(w http.ResponseWriter, r *http.Request) {
@@ -209,9 +218,22 @@ func (h *GroupHandler) AIGroupTemplate(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateGroupWithCurriculumRequest
 
 	if err := h.llmAgent.GenerateStructuredData(r.Context(), "Ответь json структурой из системной строки", parsedContent, &req); err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, "fieled to generate llm response: " + err.Error())
+		utils.ErrorResponse(w, http.StatusInternalServerError, "fieled to generate llm response: "+err.Error())
 		return
 	}
 
-	utils.SuccessResponse(w, "ok", req)
+	excelSvc := services.NewExcelService()
+	data, err := excelSvc.GenerateGroupTemplate(&req)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("generate template: %v", err))
+		return
+	}
+
+	id, ttl := h.storage.PutFile("group_template.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", data)
+
+	resp := map[string]any{
+		"file_path":    fmt.Sprintf("/files/%s", id),
+		"file_expires": ttl,
+	}
+	utils.SuccessResponse(w, "template file generated", resp)
 }

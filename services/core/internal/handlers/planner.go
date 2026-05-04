@@ -8,9 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type PlannerHandler struct {
@@ -18,10 +15,10 @@ type PlannerHandler struct {
 	storage         *storage.MemoryStorage
 }
 
-func NewPlannerHandler(svc *services.ScheduleService) *PlannerHandler {
+func NewPlannerHandler(svc *services.ScheduleService, stg *storage.MemoryStorage) *PlannerHandler {
 	return &PlannerHandler{
 		plannderService: services.NewPlannerService(svc),
-		storage:         storage.NewMemoryStorage(5*time.Minute, 1*time.Minute),
+		storage:         stg,
 	}
 }
 
@@ -73,27 +70,9 @@ func (h *PlannerHandler) UploadPlannerExcel(w http.ResponseWriter, r *http.Reque
 
 	result := dto.GenerationResult{
 		Seed: schedule.Seed,
-		FilePath: fmt.Sprintf("/schedule/file/%s", id),
+		FilePath: fmt.Sprintf("/files/%s", id),
 		ExiresAt: exires,
 	}
 
 	utils.SuccessResponse(w, "schedule generated from Excel", result)
-}
-
-func (h *PlannerHandler) GetScheduleFile(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "uuid")
-	if id == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, "invalid file uuid")
-		return
-	}
-
-	file, exists := h.storage.GetFile(id)
-	if !exists {
-		utils.ErrorResponse(w, http.StatusNotFound, "file not found")
-	}
-
-    w.Header().Set("Content-Type", file.Mime)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", file.Filename))
-    w.Write(file.Data)
-
 }
