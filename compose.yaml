@@ -48,7 +48,7 @@ services:
       GIGACHAT_MODEL: GigaChat-2
 
       OLLAMA_URL: host.docker.internal:11434
-      OLLAMA_MODEL: qwen3.5:9b
+      OLLAMA_MODEL: qwen3.5:4b
       OLLAMA_TIMEOUT: 36000
     extra_hosts:
       - "host.docker.internal:host-gateway"

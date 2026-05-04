@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"core/internal/llm"
+	"core/internal/services"
 	"core/pkg/utils"
 )
 
@@ -12,7 +13,10 @@ type ChatHandler struct {
 	agent *llm.LLMAgent
 }
 
-func NewChatHandler(agent *llm.LLMAgent) *ChatHandler {
+func NewChatHandler(client llm.Client, svc services.ScheduleService) *ChatHandler {
+	systemPromt := `Ты — ассистент по расписанию занятий. Твоя задача — понять, какую информацию хочет получить пользователь, выбрать подходящий инструмент из списка и дать пользователю короткий ответ.
+Отвечай только на вопросы связанные с расписанием заняти.`
+	agent := llm.NewAgent(client, svc, systemPromt)
 	return &ChatHandler{agent: agent}
 }
 

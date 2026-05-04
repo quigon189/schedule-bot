@@ -19,7 +19,7 @@ type Router struct {
 	tokenService    *services.JWTService
 	authService     *services.UserService
 	scheduleService *services.ScheduleService
-	llmAgent        *llm.LLMAgent
+	llmClient       llm.Client
 	router          *chi.Mux
 }
 
@@ -35,13 +35,12 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (*Router, error) {
 	if err != nil {
 		return nil, err
 	}
-	agent := llm.NewAgent(llmClient, *scheduleService)
 
 	router := Router{
 		tokenService:    tokenService,
 		authService:     userService,
 		scheduleService: scheduleService,
-		llmAgent:        agent,
+		llmClient:       llmClient,
 		router:          chi.NewRouter(),
 	}
 
@@ -56,7 +55,7 @@ func (r *Router) SetupRoutes() {
 	authHandler := handlers.NewAuthHandler(r.authService)
 	userHandler := handlers.NewUserHandler(r.authService)
 	audienceHandler := handlers.NewAudienceHandler(r.scheduleService)
-	groupHandler := handlers.NewGroupHandler(r.scheduleService)
+	groupHandler := handlers.NewGroupHandler(r.scheduleService, r.llmClient)
 	teacherHandler := handlers.NewTeacherHandler(r.scheduleService)
 	studentHandler := handlers.NewStudentHandler(r.scheduleService)
 	roleHandler := handlers.NewRoleHandler(r.scheduleService)
@@ -66,7 +65,7 @@ func (r *Router) SetupRoutes() {
 	lessonLogHandler := handlers.NewLessonLogHandler(r.scheduleService)
 	plannerHandler := handlers.NewPlannerHandler(r.scheduleService)
 
-	chatHandler := handlers.NewChatHandler(r.llmAgent)
+	chatHandler := handlers.NewChatHandler(r.llmClient, *r.scheduleService)
 
 	r.router.Use(middleware.Logger)
 	r.router.Use(middleware.Recoverer)
@@ -152,6 +151,7 @@ func (r *Router) SetupRoutes() {
 				r.Post("/", groupHandler.CreateGroup)
 				r.Post("/with-curriculum", groupHandler.CreateGroupWtihCurriculum)
 				r.Get("/template", groupHandler.DownloadTemplate)
+				r.Post("/template/ai", groupHandler.AIGroupTemplate)
 				r.Post("/upload", groupHandler.UploadGroupExcel)
 				r.Patch("/{id}", groupHandler.UpdateGroup)
 				r.Delete("/{id}", groupHandler.DeleteGroup)

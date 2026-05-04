@@ -1,9 +1,11 @@
 package fileparser
 
 import (
+	"bytes"
 	"fmt"
 	"io"
-	"path/filepath"
+
+	"github.com/gabriel-vasile/mimetype"
 )
 
 type ImagePart struct {
@@ -26,14 +28,18 @@ func Register(ext string, p Parser) {
 	parsers[ext] = p
 }
 
-func Parse(r io.Reader, filename string) (*ParsedContent, error) {
-	ext := filepath.Ext(filename)
-	p, ok := parsers[ext]
+func Parse(r io.Reader) (*ParsedContent, error) {
+	header := bytes.NewBuffer(nil)
+	mtype, err := mimetype.DetectReader(io.TeeReader(r, header))
+	if err != nil {
+		return nil, fmt.Errorf("detect file type: %w", err)
+	}
+	p, ok := parsers[mtype.String()]
 	if !ok {
-		return nil, fmt.Errorf("unsupported format: %s", ext)
+		return nil, fmt.Errorf("unsupported format: %s", mtype.String())
 	}
 
-	return p.Parse(r)
+	return p.Parse(io.MultiReader(header, r))
 }
 
 func init() {
@@ -41,5 +47,13 @@ func init() {
 		PdftotextBin: "pdftotext",
 		PdfimagesBin: "pdfimages",
 	}
-	Register(".pdf", pdfParser)
+	Register("application/pdf", pdfParser)
+
+	Register("text/plain; charset=utf-8", &TextParser{})
+
+	imageParser := &ImageParser{}
+	Register("image/jpeg", imageParser)
+	Register("image/png", imageParser)
+	Register("image/gif", imageParser)
+	Register("image/bmp", imageParser)
 }

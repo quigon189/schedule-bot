@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"core/internal/dto"
+	"core/internal/llm"
 	"core/internal/services"
 	"core/pkg/fileparser"
 	"core/pkg/utils"
@@ -16,10 +17,14 @@ import (
 
 type GroupHandler struct {
 	scheduleService *services.ScheduleService
+	llmAgent        *llm.LLMAgent
 }
 
-func NewGroupHandler(scheduleService *services.ScheduleService) *GroupHandler {
-	return &GroupHandler{scheduleService: scheduleService}
+func NewGroupHandler(scheduleService *services.ScheduleService, client llm.Client) *GroupHandler {
+	return &GroupHandler{
+		scheduleService: scheduleService,
+		llmAgent:        llm.NewAgent(client, *scheduleService, ""),
+	}
 }
 
 func (h *GroupHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
@@ -183,6 +188,8 @@ func (h *GroupHandler) AIGroupTemplate(w http.ResponseWriter, r *http.Request) {
 
 	files := r.MultipartForm.File["files"]
 
+	var parsedContent []fileparser.ParsedContent
+
 	for _, fileHeader := range files {
 		file, err := fileHeader.Open()
 		if err != nil {
@@ -190,16 +197,21 @@ func (h *GroupHandler) AIGroupTemplate(w http.ResponseWriter, r *http.Request) {
 		}
 		defer file.Close()
 
-		parsedContent, err := fileparser.Parse(file, fileHeader.Filename)
+		pc, err := fileparser.Parse(file)
 		if err != nil {
 			log.Printf("%s error %v", fileHeader.Filename, err)
 		}
 
-		jsonContent, _ := json.MarshalIndent(parsedContent, "", "  ")
+		parsedContent = append(parsedContent, *pc)
 
-		log.Printf("Parsed content: %+v", parsedContent)
-		log.Printf("JSON content:\n%s", jsonContent)
 	}
 
-	utils.SuccessResponse(w, "ok", nil)
+	var req dto.CreateGroupWithCurriculumRequest
+
+	if err := h.llmAgent.GenerateStructuredData(r.Context(), "Ответь json структурой из системной строки", parsedContent, &req); err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "fieled to generate llm response: " + err.Error())
+		return
+	}
+
+	utils.SuccessResponse(w, "ok", req)
 }

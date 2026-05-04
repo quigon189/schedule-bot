@@ -122,10 +122,9 @@ func (c *OllamaClient) Chat(ctx context.Context, messages []Message, opts Option
 			Content: m.Content,
 		}
 		if len(m.Images) > 0 {
-			var images []string
 			for _, i := range m.Images {
 				base64Image := base64.StdEncoding.EncodeToString(i)
-				images = append(images, base64Image)
+				message.Images = append(message.Images, base64Image)
 			}
 		}
 		if len(m.ToolCalls) > 0 {
@@ -166,12 +165,18 @@ func (c *OllamaClient) Chat(ctx context.Context, messages []Message, opts Option
 		temperature = 0.1
 	}
 
+	numCtx, ok := opts["num_ctx"].(int)
+	if !ok {
+		numCtx = 4096
+	}
+
 	reqBody := ollamaChatRequest{
 		Model:    c.model,
 		Messages: reqMessages,
 		Stream:   false,
 		Options: map[string]any{
 			"temperature": temperature,
+			"num_ctx": numCtx,
 		},
 		Think: false,
 		Tools: toolDescs,

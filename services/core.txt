@@ -1,4 +1,4 @@
-Текущий каталог: /home/admin/schedule-bot/services/core
+Текущий каталог: /home/quigon/schedule-bot/services/core
 ├── Dockerfile
 ├── README.md
 ├── cmd
@@ -75,12 +75,19 @@
 |   ├── 001_init_auth_schema.sql
 |   └── 002_init_schedule.sql
 └── pkg
+    ├── fileparser
+    |   ├── fileparser.go
+    |   ├── images.go
+    |   ├── pdfparser.go
+    |   └── textparser.go
+    ├── jsonschema
+    |   └── jsonschema.go
     ├── postgres
     |   └── postgres.go
     └── utils
         └── response.go
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/README.md
+Файл: /home/quigon/schedule-bot/services/core/README.md
 ## Введение
 
 Сервис предоставляет REST API для управления пользователями, ролями, группами, аудиториями, предметами, расписанием и журналом занятий. Аутентификация осуществляется с помощью JWT токенов.
@@ -999,7 +1006,7 @@
 *Документация актуальна на основе исходного кода сервиса `core`.*
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/cmd/main.go
+Файл: /home/quigon/schedule-bot/services/core/cmd/main.go
 package main
 
 import (
@@ -1093,12 +1100,14 @@ func Migrations(pool *pgxpool.Pool, path string) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/go.mod
+Файл: /home/quigon/schedule-bot/services/core/go.mod
 module core
 
 go 1.25.0
 
 require (
+	github.com/disintegration/imaging v1.6.2
+	github.com/gabriel-vasile/mimetype v1.4.12
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/cors v1.2.2
 	github.com/go-playground/validator/v10 v10.30.1
@@ -1111,7 +1120,6 @@ require (
 )
 
 require (
-	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -1126,6 +1134,7 @@ require (
 	github.com/xuri/efp v0.0.1 // indirect
 	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/image v0.25.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
@@ -1133,7 +1142,7 @@ require (
 )
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/config/config.go
+Файл: /home/quigon/schedule-bot/services/core/internal/config/config.go
 package config
 
 import (
@@ -1258,7 +1267,7 @@ func getIntEnv(key string, defaultValue int) int {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/academic_year.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/academic_year.go
 package dto
 
 type CreateAcademicPeriodRequest struct {
@@ -1276,7 +1285,7 @@ type UpdateAcademicPeriodRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/audience.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/audience.go
 package dto
 
 type CreateAudienceRequest struct {
@@ -1295,7 +1304,7 @@ type AudienceImport struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/auth.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/auth.go
 package dto
 
 type LoginRequest struct {
@@ -1319,7 +1328,7 @@ type RefreshTokenRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/group.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/group.go
 package dto
 
 import "core/internal/models"
@@ -1371,7 +1380,7 @@ type StudentCreationResult struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/lesson_log.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/lesson_log.go
 package dto
 
 import "time"
@@ -1474,7 +1483,7 @@ type StatisticsResponse struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/planner.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/planner.go
 package dto
 
 import (
@@ -1518,7 +1527,7 @@ type GenerationResult struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/role.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/role.go
 package dto
 
 type AssignStudentRequest struct {
@@ -1541,7 +1550,7 @@ type RemoveRoleRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/schedule.go
 package dto
 
 type CreateStudentRequest struct {
@@ -1603,7 +1612,7 @@ type BulkDeleteScheduleRequest struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/subject.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/subject.go
 package dto
 
 import "core/internal/models"
@@ -1641,7 +1650,7 @@ type PaginatedSubjectsResponse struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/user.go
 package dto
 
 import (
@@ -1698,7 +1707,7 @@ type TeacherCreationResult struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/dto/validator.go
+Файл: /home/quigon/schedule-bot/services/core/internal/dto/validator.go
 package dto
 
 import (
@@ -1724,7 +1733,7 @@ func ValidateStruct(s any) error {
 
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/academic_year.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/academic_year.go
 package handlers
 
 import (
@@ -1840,7 +1849,7 @@ func (h *AcademicPeriodHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/audience.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/audience.go
 package handlers
 
 import (
@@ -1982,7 +1991,7 @@ func (h *AudienceHandler) UploadExcel(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/auth.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/auth.go
 package handlers
 
 import (
@@ -2080,7 +2089,7 @@ func (h *AuthHandler) GetSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/chat.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/chat.go
 package handlers
 
 import (
@@ -2088,6 +2097,7 @@ import (
 	"net/http"
 
 	"core/internal/llm"
+	"core/internal/services"
 	"core/pkg/utils"
 )
 
@@ -2095,7 +2105,10 @@ type ChatHandler struct {
 	agent *llm.LLMAgent
 }
 
-func NewChatHandler(agent *llm.LLMAgent) *ChatHandler {
+func NewChatHandler(client llm.Client, svc services.ScheduleService) *ChatHandler {
+	systemPromt := `Ты — ассистент по расписанию занятий. Твоя задача — понять, какую информацию хочет получить пользователь, выбрать подходящий инструмент из списка и дать пользователю короткий ответ.
+Отвечай только на вопросы связанные с расписанием заняти.`
+	agent := llm.NewAgent(client, svc, systemPromt)
 	return &ChatHandler{agent: agent}
 }
 
@@ -2129,15 +2142,17 @@ func (h *ChatHandler) Handle(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/group.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/group.go
 package handlers
 
 import (
 	"core/internal/dto"
 	"core/internal/services"
+	"core/pkg/fileparser"
 	"core/pkg/utils"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -2305,8 +2320,41 @@ func (h *GroupHandler) UploadGroupExcel(w http.ResponseWriter, r *http.Request) 
 	utils.SuccessResponse(w, "group with curriculum and students created from Excel", resp)
 }
 
+func (h *GroupHandler) AIGroupTemplate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "file too large or invalid form")
+		return
+	}
+
+	files := r.MultipartForm.File["files"]
+
+	for _, fileHeader := range files {
+		file, err := fileHeader.Open()
+		if err != nil {
+			continue
+		}
+		defer file.Close()
+
+		parsedContent, err := fileparser.Parse(file)
+		if err != nil {
+			log.Printf("%s error %v", fileHeader.Filename, err)
+		}
+
+		if parsedContent != nil {
+			log.Printf("Parsed text: %s", parsedContent.Text)
+		}
+		if len(parsedContent.Images) > 0 {
+			for _, img := range parsedContent.Images {
+				log.Printf("Parsed image: %s", img.ID)
+			}
+		}
+	}
+
+	utils.SuccessResponse(w, "ok", nil)
+}
+
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/lesson_log.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/lesson_log.go
 package handlers
 
 import (
@@ -2493,7 +2541,7 @@ func (h *LessonLogHandler) GetLessonStatistics(w http.ResponseWriter, r *http.Re
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/planner.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/planner.go
 package handlers
 
 import (
@@ -2595,7 +2643,7 @@ func (h *PlannerHandler) GetScheduleFile(w http.ResponseWriter, r *http.Request)
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/role.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/role.go
 package handlers
 
 import (
@@ -2681,7 +2729,7 @@ func (h *RoleHandler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/schedule.go
 package handlers
 
 import (
@@ -3081,7 +3129,7 @@ func (h *ScheduleHandler) DownloadPlannerTemplate(w http.ResponseWriter, r *http
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/student.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/student.go
 package handlers
 
 import (
@@ -3221,7 +3269,7 @@ func (h *StudentHandler) UploadExcel(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/subject.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/subject.go
 package handlers
 
 import (
@@ -3367,7 +3415,7 @@ func (h *SubjectHandler) DeleteSubject(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/teacher.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/teacher.go
 package handlers
 
 import (
@@ -3484,7 +3532,7 @@ func (h *TeacherHandler) UploadExcel(w http.ResponseWriter, r *http.Request) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/handlers/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/handlers/user.go
 package handlers
 
 import (
@@ -3648,13 +3696,14 @@ func (h *UserHandler) UpdateUserPassword(w http.ResponseWriter, r *http.Request)
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/agent.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/agent.go
 package llm
 
 import (
 	"context"
 	"core/internal/models"
 	"core/internal/services"
+	"core/pkg/jsonschema"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -3666,38 +3715,64 @@ type Options map[string]any
 
 type Client interface {
 	Generate(ctx context.Context, systemPrompt, userMessage string, opts Options) (string, error)
+	Chat(ctx context.Context, messages []Message, opts Options) (*Message, error)
+}
+
+type Message struct {
+	Role      string
+	Content   string
+	Images    [][]byte
+	ToolCalls []ToolCall
+}
+
+type ToolCall struct {
+	Name      string
+	Arguments json.RawMessage
+}
+
+type ToolDescription struct {
+	Type     string `json:"type"`
+	Function struct {
+		Name        string          `json:"name"`
+		Description string          `json:"description"`
+		Parameters  json.RawMessage `json:"parameters"`
+	} `json:"function"`
 }
 
 type LLMAgent struct {
-	client      Client
-	tools       []Tool
-	toolsByName map[string]Tool
+	client       Client
+	systemPrompt string
+	tools        []Tool
+	toolsByName  map[string]Tool
 }
 
-func NewAgent(client Client, svc services.ScheduleService) *LLMAgent {
+func NewAgent(client Client, svc services.ScheduleService, systemPrompt string) *LLMAgent {
 	tools := initTools(svc)
 	toolsByName := make(map[string]Tool)
 	for _, t := range tools {
 		toolsByName[t.Name] = t
 	}
 	return &LLMAgent{
-		client:      client,
-		tools:       tools,
-		toolsByName: toolsByName,
+		client:       client,
+		systemPrompt: systemPrompt,
+		tools:        tools,
+		toolsByName:  toolsByName,
 	}
 }
 
 func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (string, error) {
 	// 1. Формируем системный промпт с описанием инструментов
 
-	toolsJSON, _ := json.MarshalIndent(a.tools, "", "  ")
+	tools, err := getToolDescriptions(a.tools)
+	if err != nil {
+		return "", fmt.Errorf("generate tool descriptions: %w", err)
+	}
 
 	now := time.Now()
 	var userInfo strings.Builder
 	user, ok := ctx.Value("user").(models.User)
 	if ok {
-		fmt.Fprintf(&userInfo, "Полное имя: %s\n", user.FullName)
-		fmt.Fprintf(&userInfo, "Роли:")
+		fmt.Fprintf(&userInfo, "%s ", user.FullName)
 		roles := map[string]string{
 			"user":    "Пользователь",
 			"student": "Студент",
@@ -3706,85 +3781,73 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 			"admin":   "Администратор",
 		}
 		for _, role := range user.Roles {
-			fmt.Fprintf(&userInfo, " %s", roles[role.Name])
+			fmt.Fprintf(&userInfo, "%s", roles[role.Name])
 		}
 		userInfo.WriteString("\n")
 	}
 
-	systemPrompt := fmt.Sprintf(`Ты — ассистент по расписанию занятий. Твоя задача — понять, какую информацию хочет получить пользователь, и выбрать подходящий инструмент из списка ниже.
-
-## Доступные инструменты:
-%s
-
-## Дополниетльная информация:
-- Текущая дата: %s
-- Подставляй фамилию преподавателя из информации о пользователе, только если тебя явно попросили (например в сообщении указано покажи мое расписание)
-
-## Правила:
-1. Если пользователь спрашивает о расписании (сегодня, завтра, на неделю), используй get_group_schedule
-2. Если вопрос не связан с расписанием, ответь: {"action": "none", "params": {}}
-
-## Важно:
-- Извлекай параметры из вопроса пользователя
-- Если параметр не указан, оставь его пустым
-- Для дат используй формат YYYY-MM-DD
-
-Ответь ТОЛЬКО JSON-объектом в формате:
-{"action": "имя_инструмента", "params": {"параметр": "значение"}}`, string(toolsJSON), now.Format("2006-01-02"))
-
-	userPrompt := fmt.Sprintf(`Информация о пользователе:
+	userPrompt := fmt.Sprintf(
+		`Текущая дата: %s
+Информация о пользователе:
 %s
 Сообщение:
-%s`, userInfo.String(), userMessage)
+%s`,
+		now.Format("2006-01-02"), userInfo.String(), userMessage)
 
-	log.Printf("Системная строка: %s", systemPrompt)
+	log.Printf("Системная строка: %s", a.systemPrompt)
 	log.Printf("Запрос пользователя: %s", userPrompt)
 
-	// 2. Получаем решение от LLM
-	actionResp, err := a.client.Generate(ctx, systemPrompt, userPrompt, Options{"temperature": 0})
-	if err != nil {
-		return "", fmt.Errorf("LLM action selection failed: %w", err)
+	messages := []Message{
+		Message{
+			Role:    "system",
+			Content: a.systemPrompt,
+		},
+		Message{
+			Role:    "user",
+			Content: userPrompt,
+		},
 	}
 
-	log.Printf("Полученые действия от LLM: %v", actionResp)
+	for i := 0; i < 10; i++ {
+		respMessage, err := a.client.Chat(ctx, messages, Options{
+			"temperature": 0,
+			"tools":       tools,
+		})
+		if err != nil {
+			return "", fmt.Errorf("LLM get message failed: %w", err)
+		}
+		jsonTC, _ := json.MarshalIndent(respMessage, "", "  ")
+		log.Printf("Сообщение от LLM:\n%s", jsonTC)
 
-	// Очищаем ответ
-	actionResp = strings.TrimSpace(actionResp)
-	actionResp = strings.TrimPrefix(actionResp, "```json")
-	actionResp = strings.TrimSuffix(actionResp, "```")
-	actionResp = strings.TrimSpace(actionResp)
+		messages = append(messages, *respMessage)
 
-	var decision struct {
-		Action string         `json:"action"`
-		Params map[string]any `json:"params"`
+		if len(respMessage.ToolCalls) > 0 {
+			for _, tc := range respMessage.ToolCalls {
+				var content string
+				tool, exists := a.toolsByName[tc.Name]
+				if exists {
+					content, err = tool.Handler(ctx, tc.Arguments)
+					if err != nil {
+						content = fmt.Sprintf("Ошибка при выполнении инструмента: %v", err)
+					}
+				} else {
+					content = fmt.Sprintf("Инструмент %s не найден", tc.Name)
+				}
+
+				toolMessage := Message{
+					Role:    "tool",
+					Content: content,
+				}
+				jsonToolMes, _ := json.MarshalIndent(toolMessage, "", "  ")
+				log.Printf("Tool message: %s", jsonToolMes)
+				messages = append(messages, toolMessage)
+			}
+		} else {
+			return respMessage.Content, nil
+		}
 	}
-	if err := json.Unmarshal([]byte(actionResp), &decision); err != nil {
-		// Если не распарсили, пробуем ответить напрямую через LLM
-		return a.directAnswer(ctx, userMessage)
-	}
 
-	// 3. Если инструмент не выбран, отвечаем напрямую
-	if decision.Action == "none" {
-		return a.directAnswer(ctx, userMessage)
-	}
-
-	// 4. Находим и выполняем инструмент
-	tool, exists := a.toolsByName[decision.Action]
-	if !exists {
-		return a.directAnswer(ctx, userMessage)
-	}
-
-	// Выполняем инструмент
-	result, err := tool.Handler(ctx, decision.Params)
-	if err != nil {
-		// Если ошибка, дадим понятный ответ
-		return fmt.Sprintf("Извините, не удалось получить информацию: %v", err), nil
-	}
-
-	// 5. Формируем финальный ответ на основе полученных данных
-	return a.formatResponse(ctx, userPrompt, result)
-	// Тестово пробуем вернуть ответ пользователю
-	//return result, nil
+	return "Извените не удалось получить ответ", nil
 }
 
 // directAnswer - прямой ответ от LLM без вызова инструментов
@@ -3809,8 +3872,27 @@ func (a *LLMAgent) formatResponse(ctx context.Context, userMessage string, data 
 	return a.client.Generate(ctx, systemPrompt, userMessage, Options{"temperature": 0.2})
 }
 
+func getToolDescriptions(tools []Tool) ([]ToolDescription, error) {
+	var toolDescriptions []ToolDescription
+	for _, tool := range tools {
+		var td ToolDescription
+		td.Type = "function"
+		td.Function.Name = tool.Name
+		td.Function.Description = tool.Description
+		schema, err := jsonschema.GenerateSchema(tool.Parameters)
+		if err != nil {
+			return nil, err
+		}
+		td.Function.Parameters = schema
+
+		toolDescriptions = append(toolDescriptions, td)
+	}
+
+	return toolDescriptions, nil
+}
+
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/factory.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/factory.go
 package llm
 
 import (
@@ -3840,7 +3922,7 @@ func NewLLMClient(cfg *config.LLMConfig) (Client, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/giga.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/giga.go
 package llm
 
 import (
@@ -3851,6 +3933,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -3934,7 +4017,7 @@ func (c *GigaChatClient) getToken(ctx context.Context) (string, error) {
 
 	var tokenResp struct {
 		AccessToken string `json:"access_token"`
-		ExpiresAt   int64 `json:"expires_at"`
+		ExpiresAt   int64  `json:"expires_at"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
 		return "", fmt.Errorf("decode token response: %w", err)
@@ -3953,21 +4036,36 @@ func generateUUID() string {
 }
 
 type gigachatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role         string       `json:"role"`
+	Content      string       `json:"content"`
+	FunctionCall *functionCall `json:"function_call,omitempty"`
+}
+
+type functionCall struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
 }
 
 type gigachatRequest struct {
-	Model    string            `json:"model"`
-	Messages []gigachatMessage `json:"messages"`
-	Stream   bool              `json:"stream"`
-	Temp     float64           `json:"temperature,omitempty"`
+	Model     string                `json:"model"`
+	Messages  []gigachatMessage     `json:"messages"`
+	Stream    bool                  `json:"stream"`
+	Temp      float64               `json:"temperature,omitempty"`
+	Functions []functionDescription `json:"functions,omitempty"`
+}
+
+type functionDescription struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Parameters  json.RawMessage `json:"parameters"`
 }
 
 type gigachatResponse struct {
 	Choices []struct {
 		Message struct {
-			Content string `json:"content"`
+			Role         string       `json:"role"`
+			Content      string       `json:"content"`
+			FunctionCall functionCall `json:"function_call"`
 		} `json:"message"`
 	} `json:"choices"`
 	Error *struct {
@@ -4050,14 +4148,128 @@ func (c *GigaChatClient) GetModelName() string {
 	return c.model
 }
 
+func (c *GigaChatClient) Chat(ctx context.Context, messages []Message, opts Options) (*Message, error) {
+	token, err := c.getToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get token: %w", err)
+	}
+
+	var gigaMessages []gigachatMessage
+	for _, m := range messages {
+		gm := gigachatMessage{
+			Content: m.Content,
+		}
+		if m.Role == "tool"  {
+			gm.Role = "function"
+			content := map[string]string{
+				"answer": m.Content,
+			}
+			jsonContent, _ := json.Marshal(content)
+			gm.Content = string(jsonContent)
+		} else {
+			gm.Role = m.Role
+		}
+		if len(m.ToolCalls) > 0 {
+			tc := m.ToolCalls[0]
+			gm.FunctionCall = &functionCall{
+				Name:      tc.Name,
+				Arguments: tc.Arguments,
+			}
+		}
+		gigaMessages = append(gigaMessages, gm)
+	}
+
+	var funcDescs []functionDescription
+	if functions, ok := opts["tools"].([]ToolDescription); ok {
+		for _, f := range functions {
+			funcDescs = append(funcDescs, functionDescription{
+				Name:        f.Function.Name,
+				Description: f.Function.Description,
+				Parameters:  f.Function.Parameters,
+			})
+		}
+	}
+
+	var temp float64
+	temp, ok := opts["temperature"].(float64)
+	if !ok {
+		temp = 0.1
+	}
+
+	reqBody := gigachatRequest{
+		Model:     c.model,
+		Messages:  gigaMessages,
+		Stream:    false,
+		Temp:      temp,
+		Functions: funcDescs,
+	}
+
+	jsonData, err := json.MarshalIndent(reqBody, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	log.Printf("Gigachat request body: %s", jsonData)	
+
+	// другой url для запросов
+	url := "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("response status: %d body: %s", resp.StatusCode, string(body))
+	}
+
+	var chatResp gigachatResponse
+	if err := json.Unmarshal(body, &chatResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return nil, fmt.Errorf("no response from gigachat")
+	}
+
+	choice := chatResp.Choices[0]
+	m := &Message{
+		Role:    choice.Message.Role,
+		Content: choice.Message.Content,
+	}
+
+	if choice.Message.FunctionCall.Name != "" {
+		m.ToolCalls = append(m.ToolCalls, ToolCall{
+			Name:      choice.Message.FunctionCall.Name,
+			Arguments: choice.Message.FunctionCall.Arguments,
+		})
+	}
+
+	return m, nil
+}
+
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/ollama.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/ollama.go
 package llm
 
 import (
 	"bytes"
 	"context"
 	"core/internal/config"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -4076,7 +4288,46 @@ type GenerateRequest struct {
 	Prompt  string         `json:"prompt"`
 	Stream  bool           `json:"stream"`
 	System  string         `json:"system,omitempty"`
+	Think   bool           `json:"think"`
 	Options map[string]any `json:"options,omitempty"`
+}
+
+type ollamaMessage struct {
+	Role      string   `json:"role"`
+	Content   string   `json:"content"`
+	Images    []string `json:"images,omitempty"`
+	ToolCalls []struct {
+		Function ollamaFunctionCall `json:"function"`
+	} `json:"tool_calls"`
+}
+
+type ollamaFunctionCall struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+}
+
+type ollamaChatRequest struct {
+	Model    string                  `json:"model"`
+	Messages []ollamaMessage         `json:"messages"`
+	Stream   bool                    `json:"stream"`
+	Options  map[string]any          `json:"options,omitempty"`
+	Tools    []ollamaToolDescroption `json:"tools,omitempty"`
+	Think    bool                    `json:"think"`
+}
+
+type ollamaToolDescroption struct {
+	Type     string `json:"type"`
+	Function struct {
+		Name        string          `json:"name"`
+		Description string          `json:"description"`
+		Parameters  json.RawMessage `json:"parameters"`
+	}
+}
+
+type ollamaChatResponse struct {
+	Message         ollamaMessage `json:"message"`
+	PromptEvalCount int           `json:"prompt_eval_count"`
+	EvalCount       int           `json:"eval_count"`
 }
 
 type GenerateResponse struct {
@@ -4097,6 +4348,7 @@ func (c *OllamaClient) Generate(ctx context.Context, systemPrompt, userMessage s
 		Prompt:  userMessage,
 		System:  systemPrompt,
 		Stream:  false,
+		Think:   false,
 		Options: opts,
 	}
 
@@ -4127,14 +4379,124 @@ func (c *OllamaClient) Generate(ctx context.Context, systemPrompt, userMessage s
 	return genResp.Response, nil
 }
 
+func (c *OllamaClient) Chat(ctx context.Context, messages []Message, opts Options) (*Message, error) {
+	reqMessages := []ollamaMessage{}
+	for _, m := range messages {
+		message := ollamaMessage{
+			Role:    m.Role,
+			Content: m.Content,
+		}
+		if len(m.Images) > 0 {
+			var images []string
+			for _, i := range m.Images {
+				base64Image := base64.StdEncoding.EncodeToString(i)
+				images = append(images, base64Image)
+			}
+		}
+		if len(m.ToolCalls) > 0 {
+			for _, tc := range m.ToolCalls {
+				message.ToolCalls = append(message.ToolCalls, struct {
+					Function ollamaFunctionCall `json:"function"`
+				}{
+					ollamaFunctionCall{
+						Name:      tc.Name,
+						Arguments: tc.Arguments,
+					},
+				})
+			}
+		}
+		reqMessages = append(reqMessages, message)
+	}
+
+	var toolDescs []ollamaToolDescroption
+	if tools, ok := opts["tools"].([]ToolDescription); ok {
+		for _, t := range tools {
+			toolDescs = append(toolDescs, ollamaToolDescroption{
+				Type: t.Type,
+				Function: struct {
+					Name        string          `json:"name"`
+					Description string          `json:"description"`
+					Parameters  json.RawMessage `json:"parameters"`
+				}{
+					Name:        t.Function.Name,
+					Description: t.Function.Description,
+					Parameters:  t.Function.Parameters,
+				},
+			})
+		}
+	}
+
+	temperature, ok := opts["temperature"].(float64)
+	if !ok {
+		temperature = 0.1
+	}
+
+	reqBody := ollamaChatRequest{
+		Model:    c.model,
+		Messages: reqMessages,
+		Stream:   false,
+		Options: map[string]any{
+			"temperature": temperature,
+		},
+		Think: false,
+		Tools: toolDescs,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.url+"/api/chat", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("post request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("response status %s", resp.Status)
+	}
+
+	var chatResp ollamaChatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+		return nil, err
+	}
+
+	log.Printf("Prompt tokens %d", chatResp.PromptEvalCount)
+	log.Printf("Answer tokens %d", chatResp.EvalCount)
+
+	m := Message{
+		Role:    chatResp.Message.Role,
+		Content: chatResp.Message.Content,
+	}
+
+	if len(chatResp.Message.ToolCalls) > 0 {
+		for _, tc := range chatResp.Message.ToolCalls {
+			m.ToolCalls = append(m.ToolCalls, ToolCall{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
+			})
+		}
+	}
+
+	return &m, nil
+}
+
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/llm/tools.go
+Файл: /home/quigon/schedule-bot/services/core/internal/llm/tools.go
 package llm
 
 import (
 	"context"
 	"core/internal/dto"
 	"core/internal/services"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -4142,245 +4504,249 @@ import (
 )
 
 type Tool struct {
-	Name        string                                                           `json:"name"`
-	Description string                                                           `json:"description"`
-	Parameters  map[string]string                                                `json:"parameters"`
-	Handler     func(ctx context.Context, params map[string]any) (string, error) `json:"-"`
+	Name        string                                                            `json:"name"`
+	Description string                                                            `json:"description"`
+	Parameters  any                                                               `json:"parameters"`
+	Handler     func(ctx context.Context, params json.RawMessage) (string, error) `json:"-"`
 }
 
 func initTools(svc services.ScheduleService) []Tool {
 	return []Tool{
-		{
-			Name:        "get_schedule",
-			Description: "Получить основное расписание занятий заданное на конкретный учебный период, сформированно заранее на чебную неделю для групп, преподавателей и аудиторий",
-			Parameters: map[string]string{
-				"group_name":      "string, опциональный, трехзначное число (например 501)",
-				"teacher_name":    "string, опциональный, только фамилия преподавателя (может содержать имя или первую букву имени)",
-				"audience_number": "string, опциональный, номер аудитории трехзначное число, может в конце содержать букву (например 409 или 502а)",
-				"day_of_week":     "int, опциональный, порядковый номер дня недели (например для понедельника - 1)",
-				"period_year":     "string, опциональный, учебный период указывающий года обучения в формате YYYY/YYYY (например 2025/2026); если не указан, то подставляется текущий активный период",
-				"period_semester": "int, опциональный (должен быть задан, если задан period_year), указывает семестр учебного года, принимает одно из двух значений: 1 или 2",
-			},
-			Handler: func(ctx context.Context, params map[string]any) (string, error) {
-				filter := dto.ScheduleFiltersRequest{}
-				if groupName, ok := params["group_name"].(string); ok && groupName != "" {
-					group, err := svc.GetGroupByName(ctx, groupName)
-					if err != nil {
-						return "", fmt.Errorf("get group with name %s: %w", groupName, err)
-					}
-					if group != nil {
-						filter.GroupID = &group.ID
-					}
-				}
-				if teacherName, ok := params["teacher_name"].(string); ok && teacherName != "" {
-					parts := strings.Fields(teacherName)
-					name := parts[0]
-					if len(parts) >= 2 {
-						name += string([]rune(parts[1])[0])
-					}
-					teacher, err := svc.GetTeacherByName(ctx, name)
-					if err != nil {
-						return "", fmt.Errorf("get teacher with name %s: %w", teacherName, err)
-					}
-					if teacher != nil {
-						filter.TeacherID = &teacher.User.ID
-					}
-				}
-				if audienceNumber, ok := params["audience_number"].(string); ok && audienceNumber != "" {
-					audience, err := svc.GetAudienceByNumber(ctx, audienceNumber)
-					if err != nil {
-						return "", fmt.Errorf("get audience with number %s: %w", audienceNumber, err)
-					}
-					if audience != nil {
-						filter.AudienceID = &audience.ID
-					}
-				}
-				if dayOfWeek, ok := params["day_of_week"].(float64); ok && int(dayOfWeek) != 0 {
-					intDay := int(dayOfWeek)
-					filter.DayOfWeek = &intDay
-				}
-				periodYear, _ := params["period_year"].(string)
-				periodSemester, _ := params["period_semester"].(float64)
-				if periodYear != "" && int(periodSemester) != 0 {
-					period, err := svc.GetAcademicPeriodByYear(ctx, periodYear, int(periodSemester))
-					if err == nil {
-						filter.AcademicPeriodID = &period.ID
-					}
-				}
+		getScheduleTool(svc),
+		getLessonsTool(svc),
+	}
+}
 
-				schedule, err := svc.GetAllScheduleTemplates(ctx, &filter)
+func getScheduleTool(svc services.ScheduleService) Tool {
+	type getScheduleParams struct {
+		GroupName      string `json:"group_name" jsonschema:"description=трехзначное число (например 501)"`
+		TeacherName    string `json:"teacher_name" jsonschema:"description=только фамилия преподавателя (может содержать имя или первую букву имени)"`
+		AudienceNumber string `json:"audience_number" jsonschema:"description=номер аудитории трехзначное число, может в конце содержать букву (например 409 или 502а)"`
+		DayOfWeek      int    `json:"day_of_week" jsonschema:"description=порядковый номер дня недели (например для понедельника - 1)"`
+		PeriodYear     string `json:"period_year" jsonschema:"description=учебный период указывающий года обучения в формате YYYY/YYYY (например 2025/2026); если не указан, то подставляется текущий активный период"`
+		PeriodSemester int    `json:"period_semester" jsonschema:"description=указывает семестр учебного года, принимает одно из двух значений: 1 или 2"`
+	}
+	return Tool{
+		Name:        "get_schedule",
+		Description: "Получить основное расписание занятий заданное на конкретный учебный период, сформированно заранее на учебную неделю для групп, преподавателей и аудиторий",
+		Parameters:  getScheduleParams{},
+		Handler: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			var params getScheduleParams
+			if err := json.Unmarshal(raw, &params); err != nil {
+				return "", fmt.Errorf("unmarshal params: %w", err)
+			}
+			filter := dto.ScheduleFiltersRequest{}
+			if params.GroupName != "" {
+				group, err := svc.GetGroupByName(ctx, params.GroupName)
 				if err != nil {
-					return "", fmt.Errorf("get schedule: %w", err)
+					return "", fmt.Errorf("get group with name %s: %w", params.GroupName, err)
 				}
-
-				var builder strings.Builder
-				builder.WriteString("Расписание:\n\n")
-
-				dayOfWeek := map[int]string{
-					1: "Понедельник",
-					2: "Вторник",
-					3: "Среда",
-					4: "Четверг",
-					5: "Пятница",
-					6: "Суббота",
-					7: "Воскресенье",
+				if group != nil {
+					filter.GroupID = &group.ID
 				}
-
-				if len(schedule) > 0 {
-					for _, s := range schedule {
-						fmt.Fprintf(&builder, "%s: ", dayOfWeek[s.DayOfWeek])
-						fmt.Fprintf(&builder, "Пара №%d: ", s.Number)
-						fmt.Fprintf(&builder, "Предмет: %s ", s.Subject.Title)
-						fmt.Fprintf(&builder, "| Аудитория: %s ", s.Audience.Number)
-						fmt.Fprintf(&builder, "| Преподаватель: %s ", s.Teacher.User.FullName)
-						fmt.Fprintf(&builder, "| Группа: %s\n", s.Subject.Group.Name)
-					}
-				} else {
-					fmt.Fprintf(&builder, "Расписание отсутствует")
+			}
+			if params.TeacherName != "" {
+				parts := strings.Fields(params.TeacherName)
+				name := parts[0]
+				if len(parts) >= 2 {
+					name += string([]rune(parts[1])[0])
 				}
-
-				return builder.String(), nil
-
-			},
-		},
-		{
-			Name:        "get_lessons",
-			Description: "Получить спискок занятий по заданным фильтрам, используй когда пользователь хочет узнать занятия или расписание на определенную дату",
-			Parameters: map[string]string{
-				"date_from":       "string, опциональный, начальная дата в формате ГГГГ-ММ-ДД",
-				"date_to":         "string, опциональный, конечная дата в формате ГГГГ-ММ-ДД",
-				"status":          "string, опциональный, одно из 4 значений planned - запланировано на основе расписания, canceled - отменено, rescheduled - подставлено, completed - проведено",
-				"number":          "int, опциональный, номер занятия (пары)",
-				"group_name":      "string, опциональный, трехзначное число (например 501)",
-				"teacher_name":    "string, опциональный, только фамилия преподавателя (может содержать имя или первую букву имени)",
-				"audience_number": "string, опциональный, номер аудитории трехзначное число, может в конце содержать букву (например 409 или 502а)",
-			},
-			Handler: func(ctx context.Context, params map[string]any) (string, error) {
-				filter := dto.LessonLogFiltersRequest{}
-				if dateF, ok := params["date_from"].(string); ok && dateF != "" {
-					dateFrom, err := time.Parse("2006-01-02", dateF)
-					if err != nil {
-						return "", fmt.Errorf("parse date_from: %w", err)
-					}
-					filter.DateFrom = &dateFrom
-				}
-				if dateT, ok := params["date_to"].(string); ok && dateT != "" {
-					dateTo, err := time.Parse("2006-01-02", dateT)
-					if err != nil {
-						return "", fmt.Errorf("parse date_to: %w", err)
-					}
-					filter.DateTo = &dateTo
-				} else {
-					if dateF, ok := params["date_from"].(string); ok && dateF != "" {
-						dateFrom, err := time.Parse("2006-01-02", dateF)
-						if err != nil {
-							return "", fmt.Errorf("parse date_from: %w", err)
-						}
-						filter.DateTo = &dateFrom
-					}
-				}
-
-				if status, ok := params["status"].(string); ok && status != "" {
-					statuses := []string{"planned", "canceled", "rescheduled", "completed"}
-					if slices.Contains(statuses, status) {
-						filter.Status = &status
-					}
-				}
-				if number, ok := params["number"].(float64); ok && number != 0 {
-					intNumber := int(number)
-					filter.Number = &intNumber
-				}
-				if groupName, ok := params["group_name"].(string); ok && groupName != "" {
-					group, err := svc.GetGroupByName(ctx, groupName)
-					if err != nil {
-						return "", fmt.Errorf("get group with name %s: %w", groupName, err)
-					}
-					if group != nil {
-						filter.GroupID = &group.ID
-					}
-				}
-				if teacherName, ok := params["teacher_name"].(string); ok && teacherName != "" {
-					parts := strings.Fields(teacherName)
-					name := parts[0]
-					// if len(parts) >= 2 {
-					// 	name += string([]rune(parts[1])[0])
-					// }
-					teacher, err := svc.GetTeacherByName(ctx, name)
-					if err != nil {
-						return "", fmt.Errorf("get teacher with name %s: %w", teacherName, err)
-					}
-					if teacher != nil {
-						filter.TeacherID = &teacher.User.ID
-					}
-				}
-				if audienceNumber, ok := params["audience_number"].(string); ok && audienceNumber != "" {
-					audience, err := svc.GetAudienceByNumber(ctx, audienceNumber)
-					if err != nil {
-						return "", fmt.Errorf("get audience with number %s: %w", audienceNumber, err)
-					}
-					if audience != nil {
-						filter.AudienceID = &audience.ID
-					}
-				}
-
-				periodYear, _ := params["period_year"].(string)
-				periodSemester, _ := params["period_semester"].(float64)
-				if periodYear != "" && int(periodSemester) != 0 {
-					period, err := svc.GetAcademicPeriodByYear(ctx, periodYear, int(periodSemester))
-					if err == nil {
-						filter.AcademicPeriodID = &period.ID
-					}
-				}
-
-				lessons, err := svc.GetLessonLogs(ctx, &filter)
+				teacher, err := svc.GetTeacherByName(ctx, name)
 				if err != nil {
-					return "", fmt.Errorf("get lessons: %w", err)
+					return "", fmt.Errorf("get teacher with name %s: %w", params.TeacherName, err)
 				}
-
-				var builder strings.Builder
-				dayOfWeek := map[int]string{
-					1: "Понедельник",
-					2: "Вторник",
-					3: "Среда",
-					4: "Четверг",
-					5: "Пятница",
-					6: "Суббота",
-					7: "Воскресенье",
+				if teacher != nil {
+					filter.TeacherID = &teacher.User.ID
 				}
-
-				lessonStatus := map[string]string{
-					"planned":     "По расписанию",
-					"canceled":    "Отменена",
-					"rescheduled": "Подставлена",
-					"completed":   "Проведена",
+			}
+			if params.AudienceNumber != "" {
+				audience, err := svc.GetAudienceByNumber(ctx, params.AudienceNumber)
+				if err != nil {
+					return "", fmt.Errorf("get audience with number %s: %w", params.AudienceNumber, err)
 				}
-
-				fmt.Fprintf(&builder, "Расписание занятий\n")
-
-				if len(lessons) > 0 {
-					for _, l := range lessons {
-						fmt.Fprintf(&builder, "Дата: %s | %s | ", l.Date.Format("02.01.2006"), dayOfWeek[int(l.Date.Weekday())])
-						fmt.Fprintf(&builder, "Пара №%d: ", l.Number)
-						fmt.Fprintf(&builder, "Предмет: %s ", l.Subject.Title)
-						fmt.Fprintf(&builder, "| Аудитория: %s ", l.Audience.Number)
-						fmt.Fprintf(&builder, "| Преподаватель: %s ", l.Teacher.User.FullName)
-						fmt.Fprintf(&builder, "| Группа: %s ", l.Subject.Group.Name)
-						fmt.Fprintf(&builder, "| Стутус занятия: %s\n", lessonStatus[l.Status])
-					}
-					builder.WriteString("\n")
-				} else {
-					fmt.Fprintf(&builder, "Занятия отсутствуют")
+				if audience != nil {
+					filter.AudienceID = &audience.ID
 				}
+			}
+			if params.DayOfWeek != 0 {
+				filter.DayOfWeek = &params.DayOfWeek
+			}
+			if params.PeriodYear != "" && params.PeriodSemester != 0 {
+				period, err := svc.GetAcademicPeriodByYear(ctx, params.PeriodYear, params.PeriodSemester)
+				if err == nil {
+					filter.AcademicPeriodID = &period.ID
+				}
+			}
 
-				return builder.String(), nil
+			schedule, err := svc.GetAllScheduleTemplates(ctx, &filter)
+			if err != nil {
+				return "", fmt.Errorf("get schedule: %w", err)
+			}
 
-			},
+			var builder strings.Builder
+			builder.WriteString("Расписание:\n\n")
+
+			dayOfWeek := map[int]string{
+				1: "Понедельник",
+				2: "Вторник",
+				3: "Среда",
+				4: "Четверг",
+				5: "Пятница",
+				6: "Суббота",
+				7: "Воскресенье",
+			}
+
+			if len(schedule) > 0 {
+				for _, s := range schedule {
+					fmt.Fprintf(&builder, "%s: ", dayOfWeek[s.DayOfWeek])
+					fmt.Fprintf(&builder, "Пара №%d: ", s.Number)
+					fmt.Fprintf(&builder, "Предмет: %s ", s.Subject.Title)
+					fmt.Fprintf(&builder, "| Аудитория: %s ", s.Audience.Number)
+					fmt.Fprintf(&builder, "| Преподаватель: %s ", s.Teacher.User.FullName)
+					fmt.Fprintf(&builder, "| Группа: %s\n", s.Subject.Group.Name)
+				}
+			} else {
+				fmt.Fprintf(&builder, "Расписание отсутствует")
+			}
+
+			return builder.String(), nil
+
 		},
 	}
 }
 
+func getLessonsTool(svc services.ScheduleService) Tool {
+	type getLessonsParams struct {
+		DateFrom       string `json:"date_from" jsonschema:"description=начальная дата в формате ГГГГ-ММ-ДД"`
+		DateTo         string `json:"date_to" jsonschema:"description=конечная дата в формате ГГГГ-ММ-ДД"`
+		Status         string `json:"status" jsonschema:"description=одно из 4 значений planned - запланировано на основе расписания, canceled - отменено, rescheduled - подставлено, completed - проведено"`
+		Number         int    `json:"number" jsonschema:"description=номер занятия (пары)"`
+		GroupName      string `json:"group_name" jsonschema:"description=трехзначное число (например 501)"`
+		TeacherName    string `json:"teacher_name" jsonschema:"description=только фамилия преподавателя (может содержать имя или первую букву имени)"`
+		AudienceNumber string `json:"audience_number" jsonschema:"description=номер аудитории трехзначное число, может в конце содержать букву (например 409 или 502а)"`
+	}
+
+	return Tool{
+		Name:        "get_lessons",
+		Description: "Получить спискок занятий по заданным фильтрам, используй когда пользователь хочет узнать занятия или расписание на определенную дату",
+		Parameters:  getLessonsParams{},
+		Handler: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			var params getLessonsParams
+			if err := json.Unmarshal(raw, &params); err != nil {
+				return "", fmt.Errorf("unmarshal params: %w", err)
+			}
+			filter := dto.LessonLogFiltersRequest{}
+			if params.DateFrom != "" {
+				dateFrom, err := time.Parse("2006-01-02", params.DateFrom)
+				if err != nil {
+					return "", fmt.Errorf("parse date_from: %w", err)
+				}
+				filter.DateFrom = &dateFrom
+			}
+			if params.DateTo != "" {
+				dateTo, err := time.Parse("2006-01-02", params.DateTo)
+				if err != nil {
+					return "", fmt.Errorf("parse date_to: %w", err)
+				}
+				filter.DateTo = &dateTo
+			} else {
+				if params.DateFrom != "" {
+					dateFrom, err := time.Parse("2006-01-02", params.DateFrom)
+					if err != nil {
+						return "", fmt.Errorf("parse date_from: %w", err)
+					}
+					filter.DateTo = &dateFrom
+				}
+			}
+
+			if params.Status != "" {
+				statuses := []string{"planned", "canceled", "rescheduled", "completed"}
+				if slices.Contains(statuses, params.Status) {
+					filter.Status = &params.Status
+				}
+			}
+			if params.Number != 0 {
+				filter.Number = &params.Number
+			}
+			if params.GroupName != "" {
+				group, err := svc.GetGroupByName(ctx, params.GroupName)
+				if err != nil {
+					return "", fmt.Errorf("get group with name %s: %w", params.GroupName, err)
+				}
+				if group != nil {
+					filter.GroupID = &group.ID
+				}
+			}
+			if params.TeacherName != "" {
+				parts := strings.Fields(params.TeacherName)
+				name := parts[0]
+				teacher, err := svc.GetTeacherByName(ctx, name)
+				if err != nil {
+					return "", fmt.Errorf("get teacher with name %s: %w", params.TeacherName, err)
+				}
+				if teacher != nil {
+					filter.TeacherID = &teacher.User.ID
+				}
+			}
+			if params.AudienceNumber != "" {
+				audience, err := svc.GetAudienceByNumber(ctx, params.AudienceNumber)
+				if err != nil {
+					return "", fmt.Errorf("get audience with number %s: %w", params.AudienceNumber, err)
+				}
+				if audience != nil {
+					filter.AudienceID = &audience.ID
+				}
+			}
+
+			lessons, err := svc.GetLessonLogs(ctx, &filter)
+			if err != nil {
+				return "", fmt.Errorf("get lessons: %w", err)
+			}
+
+			var builder strings.Builder
+			dayOfWeek := map[int]string{
+				1: "Понедельник",
+				2: "Вторник",
+				3: "Среда",
+				4: "Четверг",
+				5: "Пятница",
+				6: "Суббота",
+				7: "Воскресенье",
+			}
+
+			lessonStatus := map[string]string{
+				"planned":     "По расписанию",
+				"canceled":    "Отменена",
+				"rescheduled": "Подставлена",
+				"completed":   "Проведена",
+			}
+
+			fmt.Fprintf(&builder, "Расписание занятий\n")
+
+			if len(lessons) > 0 {
+				for _, l := range lessons {
+					fmt.Fprintf(&builder, "Дата: %s | %s | ", l.Date.Format("02.01.2006"), dayOfWeek[int(l.Date.Weekday())])
+					fmt.Fprintf(&builder, "Пара №%d: ", l.Number)
+					fmt.Fprintf(&builder, "Предмет: %s ", l.Subject.Title)
+					fmt.Fprintf(&builder, "| Аудитория: %s ", l.Audience.Number)
+					fmt.Fprintf(&builder, "| Преподаватель: %s ", l.Teacher.User.FullName)
+					fmt.Fprintf(&builder, "| Группа: %s ", l.Subject.Group.Name)
+					fmt.Fprintf(&builder, "| Стутус занятия: %s\n", lessonStatus[l.Status])
+				}
+				builder.WriteString("\n")
+			} else {
+				fmt.Fprintf(&builder, "Занятия отсутствуют")
+			}
+
+			return builder.String(), nil
+
+		},
+	}
+
+}
+
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/middlewares/tokens.go
+Файл: /home/quigon/schedule-bot/services/core/internal/middlewares/tokens.go
 package middlewares
 
 import (
@@ -4435,7 +4801,7 @@ func (m *AuthMiddleware) AdminRequire(next http.Handler) http.Handler {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/models/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/models/schedule.go
 package models
 
 import "time"
@@ -4525,7 +4891,7 @@ type SubjectProgress struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/models/session.go
+Файл: /home/quigon/schedule-bot/services/core/internal/models/session.go
 package models
 
 import (
@@ -4544,7 +4910,7 @@ type Session struct {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/models/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/models/user.go
 package models
 
 import (
@@ -4617,7 +4983,7 @@ func (u *User) RequireRole(role string) bool {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/academic_period.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/academic_period.go
 package repository
 
 import (
@@ -4790,7 +5156,7 @@ func (r *AcademicPeriodRepo) Delete(ctx context.Context, id int) error {
 
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/audience.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/audience.go
 package repository
 
 import (
@@ -4919,7 +5285,7 @@ func (r *AudienceRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/group.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/group.go
 package repository
 
 import (
@@ -5075,7 +5441,7 @@ func (r *GroupRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/lesson_logs.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/lesson_logs.go
 package repository
 
 import (
@@ -5482,7 +5848,7 @@ func (r *LessonLogRepo) UpdateStatusWithTx(ctx context.Context, tx pgx.Tx, id in
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/role.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/role.go
 package repository
 
 import (
@@ -5592,7 +5958,7 @@ func (r *RoleRepo) GetRoles(ctx context.Context) ([]models.Role, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/schedule.go
 package repository
 
 import (
@@ -5964,7 +6330,7 @@ func (r *ScheduleRepo) DeleteWithTx(ctx context.Context, tx pgx.Tx, id int) erro
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/session.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/session.go
 package repository
 
 import (
@@ -6127,7 +6493,7 @@ func (r *SessionRepo) Delete(ctx context.Context, id pgtype.UUID) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/student.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/student.go
 package repository
 
 import (
@@ -6363,7 +6729,7 @@ func (r *StudentRepo) IsStudent(ctx context.Context, userID int) (bool, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/subject.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/subject.go
 package repository
 
 import (
@@ -6693,7 +7059,7 @@ func (r *SubjectRepo) DeleteSubject(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/teacher.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/teacher.go
 package repository
 
 import (
@@ -6907,7 +7273,7 @@ func (r *TeacherRepo) IsTeacher(ctx context.Context, userID int) (bool, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/repository/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/repository/user.go
 package repository
 
 import (
@@ -7259,7 +7625,7 @@ func (r *UserRepo) Delete(ctx context.Context, id int) error {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/router/router.go
+Файл: /home/quigon/schedule-bot/services/core/internal/router/router.go
 package router
 
 import (
@@ -7281,7 +7647,7 @@ type Router struct {
 	tokenService    *services.JWTService
 	authService     *services.UserService
 	scheduleService *services.ScheduleService
-	llmAgent        *llm.LLMAgent
+	llmClient       llm.Client
 	router          *chi.Mux
 }
 
@@ -7297,13 +7663,12 @@ func New(cfg *config.Config, pool *pgxpool.Pool) (*Router, error) {
 	if err != nil {
 		return nil, err
 	}
-	agent := llm.NewAgent(llmClient, *scheduleService)
 
 	router := Router{
 		tokenService:    tokenService,
 		authService:     userService,
 		scheduleService: scheduleService,
-		llmAgent:        agent,
+		llmClient:       llmClient,
 		router:          chi.NewRouter(),
 	}
 
@@ -7328,7 +7693,7 @@ func (r *Router) SetupRoutes() {
 	lessonLogHandler := handlers.NewLessonLogHandler(r.scheduleService)
 	plannerHandler := handlers.NewPlannerHandler(r.scheduleService)
 
-	chatHandler := handlers.NewChatHandler(r.llmAgent)
+	chatHandler := handlers.NewChatHandler(r.llmClient, *r.scheduleService)
 
 	r.router.Use(middleware.Logger)
 	r.router.Use(middleware.Recoverer)
@@ -7414,6 +7779,7 @@ func (r *Router) SetupRoutes() {
 				r.Post("/", groupHandler.CreateGroup)
 				r.Post("/with-curriculum", groupHandler.CreateGroupWtihCurriculum)
 				r.Get("/template", groupHandler.DownloadTemplate)
+				r.Post("/template/ai", groupHandler.AIGroupTemplate)
 				r.Post("/upload", groupHandler.UploadGroupExcel)
 				r.Patch("/{id}", groupHandler.UpdateGroup)
 				r.Delete("/{id}", groupHandler.DeleteGroup)
@@ -7487,7 +7853,7 @@ func (r *Router) Router() *chi.Mux {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/excel.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/excel.go
 package services
 
 import (
@@ -8225,7 +8591,7 @@ func (s *ExcelService) GenerateGroupSchedule(sch *dto.WeeklySchedule) ([]byte, e
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/export.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/export.go
 package services
 
 import (
@@ -8807,7 +9173,7 @@ const tmplStr = `<!DOCTYPE html>
 </html>`
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/generate_user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/generate_user.go
 package services
 
 import (
@@ -8898,7 +9264,7 @@ func ensureUniqueUsername(ctx context.Context, userRepo *repository.UserRepo, ba
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/planner.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/planner.go
 package services
 
 import (
@@ -9317,7 +9683,7 @@ func (s *PlannerService) GenerateScheduleFromExcel(ctx context.Context, r io.Rea
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/schedule.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/schedule.go
 package services
 
 import (
@@ -10989,7 +11355,7 @@ func (s *ScheduleService) CreateAudiencesFromExcel(ctx context.Context, r io.Rea
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/tokens.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/tokens.go
 package services
 
 import (
@@ -11064,7 +11430,7 @@ func (s *JWTService) GenerateRefreshToken() (string, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/user.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/user.go
 package services
 
 import (
@@ -11300,7 +11666,7 @@ func (s *UserService) GetSessions(ctx context.Context) ([]models.Session, error)
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/services/utils.go
+Файл: /home/quigon/schedule-bot/services/core/internal/services/utils.go
 package services
 
 import "golang.org/x/crypto/bcrypt"
@@ -11316,7 +11682,7 @@ func checkPasswordHash(password, hash string) bool {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/internal/storage/memory.go
+Файл: /home/quigon/schedule-bot/services/core/internal/storage/memory.go
 package storage
 
 import (
@@ -11389,7 +11755,422 @@ func (s *MemoryStorage) gc(interval time.Duration) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/pkg/postgres/postgres.go
+Файл: /home/quigon/schedule-bot/services/core/pkg/fileparser/fileparser.go
+package fileparser
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+
+	"github.com/gabriel-vasile/mimetype"
+)
+
+type ImagePart struct {
+	ID string
+	Data []byte
+}
+
+type ParsedContent struct {
+	Text string
+	Images []ImagePart
+}
+
+type Parser interface {
+	Parse(r io.Reader) (*ParsedContent, error)
+}
+
+var parsers = map[string]Parser{}
+
+func Register(ext string, p Parser) {
+	parsers[ext] = p
+}
+
+func Parse(r io.Reader) (*ParsedContent, error) {
+	header := bytes.NewBuffer(nil)
+	mtype, err := mimetype.DetectReader(io.TeeReader(r, header))
+	if err != nil {
+		return nil, fmt.Errorf("detect file type: %w", err)
+	}
+	p, ok := parsers[mtype.String()]
+	if !ok {
+		return nil, fmt.Errorf("unsupported format: %s", mtype.String())
+	}
+
+	return p.Parse(io.MultiReader(header, r))
+}
+
+func init() {
+	pdfParser := &PDFParser{
+		PdftotextBin: "pdftotext",
+		PdfimagesBin: "pdfimages",
+	}
+	Register("application/pdf", pdfParser)
+
+	Register("text/plain; charset=utf-8", &TextParser{})
+
+	imageParser := &ImageParser{}
+	Register("image/jpeg", imageParser)
+	Register("image/png", imageParser)
+	Register("image/gif", imageParser)
+	Register("image/bmp", imageParser)
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/pkg/fileparser/images.go
+package fileparser
+
+import (
+	"bytes"
+	"image"
+	"image/jpeg"
+	"io"
+
+	"github.com/disintegration/imaging"
+)
+
+type ImageParser struct {}
+
+func (p *ImageParser) Parse(r io.Reader) (*ParsedContent, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+
+	_, _, err = image.DecodeConfig(bytes.NewBuffer(data))
+	if err != nil {
+		return nil, err
+	}
+
+	comressedData, err := CompressImage(data, maxImageSize, jpegQuality)
+	if err != nil {
+		return nil, err
+	}
+
+	imagePart := ImagePart{
+		ID: "image.jpeg",
+		Data: comressedData,
+	}
+
+	return &ParsedContent{
+		Text: "",
+		Images: []ImagePart{imagePart},
+	}, nil
+}
+
+func CompressImage(data []byte, maxSize int, quality int) ([]byte, error) {
+	img, _, err := image.Decode(bytes.NewBuffer(data))
+	if err != nil {
+		return nil, err
+	}
+
+	bounds := img.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	if width > height && width > maxSize {
+		height = height * maxSize / width
+		width = maxSize
+	} else if height > maxSize {
+		width = width * maxSize / height
+		height = maxSize
+	}
+
+	resized := imaging.Resize(img, width, height, imaging.Lanczos)
+
+	buf := new(bytes.Buffer)
+	err = jpeg.Encode(buf, resized, &jpeg.Options{Quality: quality})
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/pkg/fileparser/pdfparser.go
+package fileparser
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+const maxImageSize = 512
+const jpegQuality = 80
+
+type PDFParser struct {
+	PdftotextBin string
+	PdfimagesBin string
+}
+
+func (p *PDFParser) Parse(r io.Reader) (*ParsedContent, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("reading pdf: %w", err)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "pdfparse")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	pdfPath := filepath.Join(tmpDir, "input.pdf")
+	if err := os.WriteFile(pdfPath, data, 0644); err != nil {
+		return nil, err
+	}
+
+	textCmd := exec.Command(p.PdftotextBin, "-layout", pdfPath, "-")
+	textOut, err := textCmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("pdftotext: %w", err)
+	}
+	fullText := string(textOut)
+
+	pagesText := strings.Split(fullText, "\f")
+
+	imgDir := filepath.Join(tmpDir, "images")
+	if err := os.Mkdir(imgDir, 0755); err != nil {
+		return nil, err
+	}
+	imgPrefix := filepath.Join(imgDir, "img")
+	imgCmd := exec.Command(p.PdfimagesBin, "-j", "-p", pdfPath, imgPrefix)
+	if out, err := imgCmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("pdfimages: %w output: %s", err, string(out))
+	}
+
+	imgFiles, _ := filepath.Glob(imgPrefix + "*")
+	sort.Strings(imgFiles)
+
+	var imagesByPage = make(map[int][]string)
+	globalImages := make([]ImagePart, 0)
+	for _, fpath := range imgFiles {
+		base := filepath.Base(fpath)
+		parts := strings.SplitN(base, "-", 3)
+		if len(parts) < 2 {
+			continue
+		}
+
+		pageNum, err := strconv.Atoi(parts[1])
+		if err != nil {
+			continue
+		}
+
+		imgData, err := os.ReadFile(fpath)
+		if err != nil {
+			continue
+		}
+
+		compressedData, err := CompressImage(imgData, maxImageSize, jpegQuality)
+		if err != nil {
+			continue
+		}
+
+		imagesByPage[pageNum] = append(imagesByPage[pageNum], base)
+		globalImages = append(globalImages, ImagePart{ID: base, Data: compressedData})
+	}
+
+	var resultText strings.Builder
+
+	for i, pageText := range pagesText {
+		pageNum := i + 1
+		pagePrifix := fmt.Sprintf("Страница %d:\n", pageNum)
+		resultText.WriteString(pagePrifix)
+		resultText.WriteString(pageText)
+		if imgs, ok := imagesByPage[pageNum]; ok {
+			resultText.WriteString("Страница содержит изображения:")
+			for _, imgID := range imgs {
+				text := fmt.Sprintf(" %s", imgID)
+				resultText.WriteString(text)	
+			}
+			resultText.WriteString("\n")
+		}
+	}
+
+	return &ParsedContent{
+		Text: resultText.String(),
+		Images: globalImages,
+	}, nil
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/pkg/fileparser/textparser.go
+package fileparser
+
+import (
+	"fmt"
+	"io"
+)
+
+type TextParser struct{}
+
+func (p *TextParser) Parse(r io.Reader) (*ParsedContent, error) {
+	content, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+
+	return &ParsedContent{
+		Text: string(content),
+	}, nil
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/pkg/jsonschema/jsonschema.go
+package jsonschema
+
+import (
+	"encoding/json"
+	"errors"
+	"reflect"
+	"strings"
+	"time"
+)
+
+// GenerateSchema создаёт JSON Schema для переданного значения v,
+// используя рефлексию и тег jsonschema.
+// Возвращает схему в виде json.RawMessage.
+func GenerateSchema(v any) (json.RawMessage, error) {
+	if v == nil {
+		return nil, errors.New("input is nil")
+	}
+	t := reflect.TypeOf(v)
+	schema := buildSchema(t)
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(raw), nil
+}
+
+// buildSchema рекурсивно строит JSON-схему для типа t.
+func buildSchema(t reflect.Type) map[string]any {
+	// Разыменовываем указатели
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+
+	// Специальная обработка времени
+	if t == reflect.TypeOf(time.Time{}) {
+		return map[string]any {
+			"type":   "string",
+			"format": "date-time",
+		}
+	}
+
+	schema := make(map[string]any)
+
+	switch t.Kind() {
+	case reflect.String:
+		schema["type"] = "string"
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		schema["type"] = "integer"
+
+	case reflect.Float32, reflect.Float64:
+		schema["type"] = "number"
+
+	case reflect.Bool:
+		schema["type"] = "boolean"
+
+	case reflect.Struct:
+		schema["type"] = "object"
+		props := make(map[string]any)
+		required := []string{}
+
+		for i := 0; i < t.NumField(); i++ {
+			field := t.Field(i)
+			// Пропускаем неэкспортируемые поля
+			if field.PkgPath != "" {
+				continue
+			}
+
+			jsonName := jsonFieldName(field)
+			if jsonName == "" {
+				continue // помечено json:"-"
+			}
+
+			// Читаем тег jsonschema
+			isRequired, desc := parseJsonschemaTag(field.Tag.Get("jsonschema"))
+
+			// Схема для типа поля
+			fieldSchema := buildSchema(field.Type)
+			if desc != "" {
+				fieldSchema["description"] = desc
+			}
+			props[jsonName] = fieldSchema
+
+			if isRequired {
+				required = append(required, jsonName)
+			}
+		}
+
+		schema["properties"] = props
+		schema["required"] = required
+
+	case reflect.Slice, reflect.Array:
+		schema["type"] = "array"
+		schema["items"] = buildSchema(t.Elem())
+
+	case reflect.Map:
+		// JSON Schema поддерживает только строковые ключи
+		if t.Key().Kind() == reflect.String {
+			schema["type"] = "object"
+			schema["additionalProperties"] = buildSchema(t.Elem())
+		}
+		// Для нестроковых ключей оставляем пустую схему (любое значение)
+
+	case reflect.Interface:
+		// interface{} — допустим любой тип
+		// Оставляем schema пустым (допускает всё)
+	}
+
+	return schema
+}
+
+// jsonFieldName возвращает имя поля в JSON на основе тега json.
+// Для `json:"-"` возвращает пустую строку, для `json:",omitempty"` — имя поля структуры.
+func jsonFieldName(field reflect.StructField) string {
+	tag := field.Tag.Get("json")
+	if tag == "" {
+		return field.Name
+	}
+	parts := strings.Split(tag, ",")
+	name := parts[0]
+	if name == "-" {
+		return ""
+	}
+	if name == "" {
+		return field.Name
+	}
+	return name
+}
+
+// parseJsonschemaTag разбирает тег jsonschema и извлекает флаг required и описание.
+// Формат: `required,description=Some text`
+func parseJsonschemaTag(tag string) (required bool, description string) {
+	if tag == "" {
+		return false, ""
+	}
+	parts := strings.Split(tag, ",")
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "required" {
+			required = true
+		} else if strings.HasPrefix(p, "description=") {
+			description = strings.TrimPrefix(p, "description=")
+		}
+	}
+	return
+}
+
+--------------------------
+Файл: /home/quigon/schedule-bot/services/core/pkg/postgres/postgres.go
 package postgres
 
 import (
@@ -11431,7 +12212,7 @@ func NewPostgresPool(dsn string) (*pgxpool.Pool, error) {
 }
 
 --------------------------
-Файл: /home/admin/schedule-bot/services/core/pkg/utils/response.go
+Файл: /home/quigon/schedule-bot/services/core/pkg/utils/response.go
 package utils
 
 import (

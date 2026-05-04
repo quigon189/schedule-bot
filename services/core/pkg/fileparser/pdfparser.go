@@ -47,7 +47,7 @@ func (p *PDFParser) Parse(r io.Reader) (*ParsedContent, error) {
 		return nil, err
 	}
 	imgPrefix := filepath.Join(imgDir, "img")
-	imgCmd := exec.Command(p.PdfimagesBin, "-j", "-p", imgPrefix)
+	imgCmd := exec.Command(p.PdfimagesBin, "-j", "-p", pdfPath, imgPrefix)
 	if out, err := imgCmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("pdfimages: %w output: %s", err, string(out))
 	}
@@ -74,27 +74,34 @@ func (p *PDFParser) Parse(r io.Reader) (*ParsedContent, error) {
 			continue
 		}
 
+		compressedData, err := CompressImage(imgData, maxImageSize, jpegQuality)
+		if err != nil {
+			continue
+		}
+
 		imagesByPage[pageNum] = append(imagesByPage[pageNum], base)
-		globalImages = append(globalImages, ImagePart{ID: base, Data: imgData})
+		globalImages = append(globalImages, ImagePart{ID: base, Data: compressedData})
 	}
 
 	var resultText strings.Builder
 
 	for i, pageText := range pagesText {
-		resultText.WriteString(pageText)
 		pageNum := i + 1
+		pagePrifix := fmt.Sprintf("Страница %d:\n", pageNum)
+		resultText.WriteString(pagePrifix)
+		resultText.WriteString(pageText)
 		if imgs, ok := imagesByPage[pageNum]; ok {
 			resultText.WriteString("Страница содержит изображения:")
 			for _, imgID := range imgs {
 				text := fmt.Sprintf(" %s", imgID)
-				resultText.WriteString(text)	
+				resultText.WriteString(text)
 			}
 			resultText.WriteString("\n")
 		}
 	}
 
 	return &ParsedContent{
-		Text: resultText.String(),
+		Text:   resultText.String(),
 		Images: globalImages,
 	}, nil
 }

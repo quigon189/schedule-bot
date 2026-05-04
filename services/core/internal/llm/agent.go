@@ -4,6 +4,7 @@ import (
 	"context"
 	"core/internal/models"
 	"core/internal/services"
+	"core/pkg/fileparser"
 	"core/pkg/jsonschema"
 	"encoding/json"
 	"fmt"
@@ -41,21 +42,23 @@ type ToolDescription struct {
 }
 
 type LLMAgent struct {
-	client      Client
-	tools       []Tool
-	toolsByName map[string]Tool
+	client       Client
+	systemPrompt string
+	tools        []Tool
+	toolsByName  map[string]Tool
 }
 
-func NewAgent(client Client, svc services.ScheduleService) *LLMAgent {
+func NewAgent(client Client, svc services.ScheduleService, systemPrompt string) *LLMAgent {
 	tools := initTools(svc)
 	toolsByName := make(map[string]Tool)
 	for _, t := range tools {
 		toolsByName[t.Name] = t
 	}
 	return &LLMAgent{
-		client:      client,
-		tools:       tools,
-		toolsByName: toolsByName,
+		client:       client,
+		systemPrompt: systemPrompt,
+		tools:        tools,
+		toolsByName:  toolsByName,
 	}
 }
 
@@ -85,9 +88,6 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 		userInfo.WriteString("\n")
 	}
 
-	systemPrompt := fmt.Sprintf(`Ты — ассистент по расписанию занятий. Твоя задача — понять, какую информацию хочет получить пользователь, выбрать подходящий инструмент из списка и дать пользователю короткий ответ.
-Отвечай только на вопросы связанные с расписанием заняти.`)
-
 	userPrompt := fmt.Sprintf(
 		`Текущая дата: %s
 Информация о пользователе:
@@ -96,13 +96,13 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 %s`,
 		now.Format("2006-01-02"), userInfo.String(), userMessage)
 
-	log.Printf("Системная строка: %s", systemPrompt)
+	log.Printf("Системная строка: %s", a.systemPrompt)
 	log.Printf("Запрос пользователя: %s", userPrompt)
 
 	messages := []Message{
 		Message{
 			Role:    "system",
-			Content: systemPrompt,
+			Content: a.systemPrompt,
 		},
 		Message{
 			Role:    "user",
@@ -152,26 +152,85 @@ func (a *LLMAgent) ProcessMessage(ctx context.Context, userMessage string) (stri
 	return "Извените не удалось получить ответ", nil
 }
 
-// directAnswer - прямой ответ от LLM без вызова инструментов
-func (a *LLMAgent) directAnswer(ctx context.Context, userMessage string) (string, error) {
-	systemPrompt := `Ты — дружелюбный ассистент. Ответь пользователю на его вопрос, но только если он связан с учёбой, расписанием или учебным процессом. Если вопрос не по теме, вежливо скажи, что ты помогаешь только с расписанием.`
-	return a.client.Generate(ctx, systemPrompt, userMessage, Options{"temperature": 0.2})
-}
+func (a *LLMAgent) GenerateStructuredData(ctx context.Context, userMessage string, parsedContent []fileparser.ParsedContent, target any) error {
+	targetSchema, err := jsonschema.GenerateSchema(target)
+	if err != nil {
+		return fmt.Errorf("generate jsonschema: %w", err)
+	}
 
-// formatResponse - форматирует результат работы инструмента в понятный ответ
-func (a *LLMAgent) formatResponse(ctx context.Context, userMessage string, data string) (string, error) {
-	systemPrompt := fmt.Sprintf(`Ты — ассистент по расписанию.
-На запрос пользователя система предоставила следующие данные:
-%s
+	systemPrompt := fmt.Sprintf(`Ты – помощник по заполнению шаблона расписания. Из предоставленных данных (текст или изображения) извлеки информацию о группе, дисциплинах и студентах.
+Обязательно используй инструмент set_group_info!
+Если каких-то данных нет, оставь пустой массив или пустую строку. Для дат используй формат YYYY-MM-DD.`, string(targetSchema))
 
-Задача: сформулируй краткий, понятный и дружелюбный ответ для пользователя на русском языке.
-- Не упоминай ID, JSON или технические детали
-- Если данных много, выдели самое важное
-- Если данных нет, скажи об этом вежливо
-- Форматируй ответ для удобного чтения (можно использовать переносы строк)`, data)
+	var userPrompt strings.Builder
+	var images [][]byte
+	userPrompt.WriteString("Сообщение от пользователя:\n")
+	userPrompt.WriteString(userMessage + "\n")
+	for i, pc := range parsedContent {
+		userPrompt.WriteString(fmt.Sprintf("Файл %d:\n", i+1))
+		userPrompt.WriteString(pc.Text)
+		for _, img := range pc.Images {
+			images = append(images, img.Data)
+		}
+	}
+	userPrompt.WriteString("Обязательно выфзови инструмент set_group_info!!!")
 
-	log.Printf("Системное сообщение для ответа пользователю:\n%s", systemPrompt)
-	return a.client.Generate(ctx, systemPrompt, userMessage, Options{"temperature": 0.2})
+	var messages []Message
+	messages = append(messages, Message{
+		Role: "system",
+		Content: systemPrompt,
+	})
+	messages = append(messages, Message{
+		Role: "user",
+		Content: userPrompt.String(),
+		Images: images,
+	})
+
+	log.Printf("Messages: %+v", messages)
+
+	tool := Tool{
+		Name: "set_group_info",
+		Description: "Обязательно вызови эту функцию, для отправки данных пользователю",
+		Parameters: target,
+		Handler: func(ctx context.Context, params json.RawMessage) (string, error) {
+			if err := json.Unmarshal(params, &target); err != nil {
+				return "", err
+			}
+			return "ok", nil
+		},
+	}
+
+	tools := []Tool{tool}
+	td, err := getToolDescriptions(tools)
+	if err != nil {
+		return err
+	}
+
+	respMessage, err := a.client.Chat(ctx, messages, Options{
+		"temperature": 0,
+		"tools" : td,
+		"num_ctx": 32768,
+	})
+	if err != nil {
+		return fmt.Errorf("generate llm response: %w", err)
+	}
+
+	log.Printf("LLM answer: %s", respMessage.Content)
+
+	if len(respMessage.ToolCalls) > 0 {
+		for _, tc := range respMessage.ToolCalls {
+			if tc.Name == "set_group_info" {
+				_, err := tool.Handler(ctx, tc.Arguments)
+				if err != nil {
+					return err
+				} else {
+					return nil
+				}
+			}
+		}
+	}
+
+	return fmt.Errorf("tool call error")
 }
 
 func getToolDescriptions(tools []Tool) ([]ToolDescription, error) {
