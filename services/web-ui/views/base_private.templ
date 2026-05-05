@@ -1,12 +1,6 @@
 package views
 
-import (
-	"fmt"
-
-	"web-ui/internal/middlewares"
-    "web-ui/internal/models"
-    "web-ui/views/components"
-)
+import "fmt"
 
 templ BasePrivate(title string, csrfToken string, navbar, content templ.Component) {
     <!DOCTYPE html>

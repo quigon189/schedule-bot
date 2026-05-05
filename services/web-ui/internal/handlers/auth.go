@@ -1,23 +1,24 @@
 package handlers
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"web-ui/internal/api"
+	"web-ui/internal/session"
 	"web-ui/views/components"
 	"web-ui/views/pages"
 )
 
 type AuthHandler struct {
-	coreClient *api.CoreClient
+	coreClient     *api.CoreClient
+	sessionManager *session.SessionManager
 }
 
-func NewAuthHandler(client *api.CoreClient) *AuthHandler {
-	return &AuthHandler{coreClient: client}
+func NewAuthHandler(client *api.CoreClient, sm *session.SessionManager) *AuthHandler {
+	return &AuthHandler{coreClient: client, sessionManager: sm}
 }
 
-//GET /login - отображает страницу входа
+// GET /login - отображает страницу входа
 func (h *AuthHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 	pages.LoginPage("").Render(r.Context(), w)
 }
@@ -33,7 +34,7 @@ func (h *AuthHandler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.coreClient.Login(r.Context(), username, password)
+	token, err := h.coreClient.Login(r, username, password)
 	if err != nil {
 		log.Printf("error: %v", err)
 		errorMsg := "Неверный логин или пароль"
@@ -41,32 +42,16 @@ func (h *AuthHandler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonJWT, _ := json.Marshal(token)
-
-	http.SetCookie(w, &http.Cookie{
-        Name:     "jwt",
-        Value:    string(jsonJWT),
-        HttpOnly: true,
-        Path:     "/",
-        MaxAge:   86400,
-        SameSite: http.SameSiteLaxMode,
-        Secure:   false,
-    })
+	h.sessionManager.Set(w, r, "jwt", token)
 
 	w.Header().Set("HX-Redirect", "/")
-    w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusOK)
 }
 
 // POST /logout — выход (удаляем cookie)
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-    http.SetCookie(w, &http.Cookie{
-        Name:     "jwt",
-        Value:    "",
-        HttpOnly: true,
-        Path:     "/",
-        MaxAge:   -1,
-    })
-    // Для HTMX редиректим на логин
-    w.Header().Set("HX-Redirect", "/login")
-    w.WriteHeader(http.StatusOK)
+	h.sessionManager.Logout(w, r)
+	// Для HTMX редиректим на логин
+	w.Header().Set("HX-Redirect", "/login")
+	w.WriteHeader(http.StatusOK)
 }

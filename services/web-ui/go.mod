@@ -6,6 +6,7 @@ require (
 	github.com/a-h/templ v0.3.1001
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/gorilla/csrf v1.7.3
+	github.com/gorilla/sessions v1.4.0
 )
 
 require github.com/gorilla/securecookie v1.1.2 // indirect
