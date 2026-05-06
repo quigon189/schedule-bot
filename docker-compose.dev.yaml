@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: docker.io/postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_ADMIN}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: core
+    ports:
+      - "5431:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U core"]
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  core:
+    build:
+      context: ./services/core
+      dockerfile: Dockerfile.dev   # специальный Dockerfile для разработки
+    ports:
+      - "8088:8080"
+    volumes:
+      - ./services/core:/app       # монтируем исходники
+      - /app/tmp                   # исключаем временную папку air
+    environment:
+      GO_ENV: development
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_SECONDS: 36000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_ADMIN}
+      DB_PASSWORD: ${DB_PASS}
+      DB_NAME: core
+      PORT: 8080
+
+      LLM_PROVIDER: ${LLM_PROVIDER}
+
+      GIGACHAT_CLIENT_ID: ${GIGACHAT_CLIENT_ID}
+      GIGACHAT_CLIENT_SECRET: ${GIGACHAT_CLIENT_SECRET}
+      GIGACHAT_AUTHORIZATION_KEY: ${GIGACHAT_AUTHORIZATION_KEY}
+      GIGACHAT_BASE_URL: https://ngw.devices.sberbank.ru:9443/api/v2
+      GIGACHAT_MODEL: GigaChat-2
+
+      OLLAMA_URL: host.docker.internal:11434
+      OLLAMA_MODEL: qwen3.5:4b
+      OLLAMA_TIMEOUT: 36000
+
+    command: air -c .air.toml      # запуск air с конфигом
+    entrypoint: ""                  # сбрасываем entrypoint из базового образа
+
+volumes:
+  db_data:

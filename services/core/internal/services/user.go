@@ -201,7 +201,7 @@ func (s *UserService) GetPaginatedUsers(ctx context.Context, req *dto.PagiantedU
 		sortBy = "id"
 	}
 
-	return s.userRepo.GetUsersPaginated(ctx, page, perPage, sortBy, sortOrder)
+	return s.userRepo.GetUsersPaginated(ctx, &req.Filters, page, perPage, sortBy, sortOrder)
 }
 
 func (s *UserService) GetUser(ctx context.Context, userID int) (*models.User, error) {

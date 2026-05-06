@@ -20,10 +20,11 @@ type PaginatedUsers struct {
 }
 
 type PagiantedUserRequest struct {
-	Page      int    `json:"page"`
-	PerPage   int    `json:"per_page"`
-	SortBy    string `json:"sort_by"`
-	SortOrder string `json:"sort_order"`
+	Page      int        `json:"page"`
+	PerPage   int        `json:"per_page"`
+	SortBy    string     `json:"sort_by"`
+	SortOrder string     `json:"sort_order"`
+	Filters   UserFilter `json:"filetrs"`
 }
 
 type UpdateUserPasswordRequest struct {
@@ -33,8 +34,11 @@ type UpdateUserPasswordRequest struct {
 }
 
 type UserFilter struct {
-	FullName *string
-	Username *string
+	FullName  *string
+	Username  *string
+	Role      *string
+	Email     *string
+	GroupName *string
 }
 
 type StudentImport struct {
@@ -49,6 +53,6 @@ type TeacherImport struct {
 }
 
 type TeacherCreationResult struct {
-    User     models.User `json:"user"`
-    Password string      `json:"password"`
+	User     models.User `json:"user"`
+	Password string      `json:"password"`
 }

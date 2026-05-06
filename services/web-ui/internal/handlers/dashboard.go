@@ -34,9 +34,8 @@ func (h *DashboardHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		pages.AdminDashboardPage(csrfToken, user).Render(r.Context(), w)
 	} else if user.HasRole("student") {
 		var props components.ScheduleViewProps
-		student, err := h.coreClient.GetStudent(w, r, user)
-		if err == nil {
-			scheduleData, err := h.coreClient.GetGroupSchedule(w, r, student.Group.ID, nil)
+		if user.Group != nil {
+			scheduleData, err := h.coreClient.GetGroupSchedule(w, r, user.Group.ID, nil)
 			if err == nil {
 				props.Data = *scheduleData
 			}

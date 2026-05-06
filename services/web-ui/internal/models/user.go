@@ -14,6 +14,7 @@ type User struct {
 	FullName string `json:"full_name"`
 	Email    string `json:"email"`
 	Roles    []Role `json:"roles"`
+	Group    *Group `json:"group"`
 }
 
 func (u *User) HasRole(role string) bool {

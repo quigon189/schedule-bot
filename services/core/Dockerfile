@@ -1,5 +1,7 @@
 FROM docker.io/golang:1.25.4-alpine AS builder
 
+RUN go install github.com/air-verse/air@latest
+
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -43,4 +45,5 @@ USER app
 
 EXPOSE ${PORT:-8080}
 
+#CMD ["air", "-c", ".air.toml"]
 ENTRYPOINT ["./core"]

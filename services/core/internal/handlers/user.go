@@ -48,6 +48,15 @@ func (h *UserHandler) GetPaginatedUsers(w http.ResponseWriter, r *http.Request) 
 	req.PerPage, _ = strconv.Atoi(r.URL.Query().Get("per_page"))
 	req.SortBy = r.URL.Query().Get("sort_by")
 	req.SortOrder = r.URL.Query().Get("sort_order")
+	if fullName := r.URL.Query().Get("full_name"); fullName != "" {
+		req.Filters.FullName = &fullName
+	}
+	if username := r.URL.Query().Get("username"); username != "" {
+		req.Filters.Username = &username
+	}
+	if email := r.URL.Query().Get("email"); email != "" {
+		req.Filters.Email = &email
+	}
 
 	users, err := h.userService.GetPaginatedUsers(r.Context(), &req)
 	if err != nil {

@@ -1,0 +1,16 @@
+FROM golang:1.25-alpine AS builder
+
+# Устанавливаем air (live reload)
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app
+
+# Копируем go.mod и go.sum для кеширования зависимостей
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Копируем весь исходный код
+COPY . .
+
+# Команда по умолчанию (запуск air)
+CMD ["air", "-c", ".air.toml"]

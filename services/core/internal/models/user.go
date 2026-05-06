@@ -14,15 +14,16 @@ type Role struct {
 }
 
 type User struct {
-	ID           int       `json:"id"`
-	Email        string    `json:"email"`
-	Name         string    `json:"username"`
-	FullName     string    `json:"full_name"`
-	PasswordHash string    `json:"-"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           int       `json:"id" db:"id"`
+	Email        string    `json:"email" db:"email"`
+	Name         string    `json:"username" db:"username"`
+	FullName     string    `json:"full_name" db:"full_name"`
+	PasswordHash string    `json:"-" db:"password_hash"`
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+	Group        *Group    `json:"group,omitempty" db:"group"`
 
-	Roles []Role `json:"roles"`
+	Roles []Role `json:"roles" db:"roles"` 
 }
 
 type Group struct {

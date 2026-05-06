@@ -4,7 +4,6 @@ import (
 	"context"
 	"core/internal/dto"
 	"core/internal/models"
-	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -109,42 +108,37 @@ func (r *UserRepo) CreateWithTx(ctx context.Context, tx pgx.Tx, user *models.Use
 func (r *UserRepo) GetByID(ctx context.Context, id int) (*models.User, error) {
 	var user models.User
 	query := `
-	SELECT id, username, full_name, email, password_hash, created_at, updated_at
-	FROM auth.users
+	SELECT u.id, u.username, u.full_name, u.email, u.created_at, u.updated_at, u.password_hash,
+	COALESCE(
+        (SELECT json_agg(json_build_object('id', r.id, 'name', r.name, "description", r.description))
+         FROM auth.roles r
+         JOIN auth.user_roles ur ON ur.role_id = r.id
+         WHERE ur.user_id = u.id), 
+        '[]'
+    ) as roles,
+    (SELECT json_build_object('id', g.id, 'name', g.name, 'specialty', g.specialty, 'admission_year', g.admission_year)
+     FROM auth.groups g
+     JOIN auth.student_profiles s ON s.group_id = g.id
+     WHERE s.user_id = u.id
+     -- Проверка на наличие роли student (опционально, если логика БД это гарантирует)
+     AND EXISTS (
+         SELECT 1 FROM auth.roles r 
+         JOIN auth.user_roles ur ON ur.role_id = r.id 
+         WHERE ur.user_id = u.id AND r.name = 'student'
+     )
+     LIMIT 1
+    ) as "group"
+	FROM auth.users u
 	WHERE id = $1
 	`
-	err := r.db.QueryRow(ctx, query, id).Scan(
-		&user.ID,
-		&user.Name,
-		&user.FullName,
-		&user.Email,
-		&user.PasswordHash,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-	)
+	rows, err := r.db.Query(ctx, query, id)
 	if err != nil {
 		return nil, err
 	}
 
-	query = `
-	SELECT r.id, r.name, r.description
-	FROM auth.roles r
-	JOIN auth.user_roles ur ON ur.role_id = r.id
-	WHERE ur.user_id = $1
-	`
-	row, err := r.db.Query(ctx, query, id)
+	user, err = pgx.CollectOneRow(rows, pgx.RowToStructByName[models.User])
 	if err != nil {
 		return nil, err
-	}
-	defer row.Close()
-
-	for row.Next() {
-		var role models.Role
-		err = row.Scan(&role.ID, &role.Name, &role.Description)
-		if err != nil {
-			return nil, err
-		}
-		user.Roles = append(user.Roles, role)
 	}
 
 	return &user, nil
@@ -153,57 +147,48 @@ func (r *UserRepo) GetByID(ctx context.Context, id int) (*models.User, error) {
 func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.User, error) {
 	var user models.User
 	query := `
-	SELECT id, username, full_name, email, password_hash, created_at, updated_at
-	FROM auth.users
+	SELECT u.id, u.username, u.full_name, u.email, u.created_at, u.updated_at, u.password_hash,
+	COALESCE(
+        (SELECT json_agg(json_build_object('id', r.id, 'name', r.name, "description", r.description))
+         FROM auth.roles r
+         JOIN auth.user_roles ur ON ur.role_id = r.id
+         WHERE ur.user_id = u.id), 
+        '[]'
+    ) as roles,
+    (SELECT json_build_object('id', g.id, 'name', g.name, 'specialty', g.specialty, 'admission_year', g.admission_year)
+     FROM auth.groups g
+     JOIN auth.student_profiles s ON s.group_id = g.id
+     WHERE s.user_id = u.id
+     -- Проверка на наличие роли student (опционально, если логика БД это гарантирует)
+     AND EXISTS (
+         SELECT 1 FROM auth.roles r 
+         JOIN auth.user_roles ur ON ur.role_id = r.id 
+         WHERE ur.user_id = u.id AND r.name = 'student'
+     )
+     LIMIT 1
+    ) as "group"
+	FROM auth.users u
 	WHERE username = $1
 	`
-	err := r.db.QueryRow(ctx, query, username).Scan(
-		&user.ID,
-		&user.Name,
-		&user.FullName,
-		&user.Email,
-		&user.PasswordHash,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	query = `
-	SELECT r.id, r.name, r.description
-	FROM auth.roles r
-	JOIN auth.user_roles ur ON ur.role_id = r.id
-	WHERE ur.user_id = $1
-	`
-	row, err := r.db.Query(ctx, query, user.ID)
+	
+	rows, err := r.db.Query(ctx, query, username)
 	if err != nil {
 		return nil, err
 	}
-	defer row.Close()
-
-	for row.Next() {
-		var role models.Role
-		err = row.Scan(&role.ID, &role.Name, &role.Description)
-		if err != nil {
-			return nil, err
-		}
-		user.Roles = append(user.Roles, role)
+	user, err = pgx.CollectOneRow(rows, pgx.RowToStructByName[models.User])
+	if err != nil {
+		return nil, err
 	}
-
 	return &user, nil
 }
 
-func (r *UserRepo) GetUsersPaginated(ctx context.Context, page, perPage int, sortBy, sortOrder string) (*dto.PaginatedUsers, error) {
+func (r *UserRepo) GetUsersPaginated(ctx context.Context, filters *dto.UserFilter, page, perPage int, sortBy, sortOrder string) (*dto.PaginatedUsers, error) {
 	if page < 1 {
 		page = 1
 	}
 
-	if perPage < 1 {
-		page = 1
+	if perPage < 10 {
+		page = 10
 	}
 
 	if sortBy == "" || !r.allowedSortFields[sortBy] {
@@ -218,39 +203,81 @@ func (r *UserRepo) GetUsersPaginated(ctx context.Context, page, perPage int, sor
 	offset := (page - 1) * perPage
 	orderClause := fmt.Sprintf("%s %s", sortBy, sortOrder)
 
-	query := fmt.Sprintf(`
-	SELECT id, username, full_name, email, created_at, updated_at
-	FROM auth.users
-	ORDER BY %s
-	LIMIT $1 OFFSET $2
-	`, orderClause)
+	query := `
+	SELECT u.id, u.username, u.full_name, u.email, u.created_at, u.updated_at, u.password_hash,
+	COALESCE(
+        (SELECT json_agg(json_build_object('id', r.id, 'name', r.name, "description", r.description))
+         FROM auth.roles r
+         JOIN auth.user_roles ur ON ur.role_id = r.id
+         WHERE ur.user_id = u.id), 
+        '[]'
+    ) as roles,
+    (SELECT json_build_object('id', g.id, 'name', g.name, 'specialty', g.specialty, 'admission_year', g.admission_year)
+     FROM auth.groups g
+     JOIN auth.student_profiles s ON s.group_id = g.id
+     WHERE s.user_id = u.id
+     -- Проверка на наличие роли student (опционально, если логика БД это гарантирует)
+     AND EXISTS (
+         SELECT 1 FROM auth.roles r 
+         JOIN auth.user_roles ur ON ur.role_id = r.id 
+         WHERE ur.user_id = u.id AND r.name = 'student'
+     )
+     LIMIT 1
+    ) as "group"
+	FROM auth.users u`
+	
+	var conditions []string
+	var args []any
+	argIndex := 1
 
-	rows, err := r.db.Query(ctx, query, perPage, offset)
+	if filters.FullName != nil {
+		conditions = append(conditions, fmt.Sprintf("full_name ILIKE '%%' || $%d || '%%'", argIndex))
+		args = append(args, *filters.FullName)
+		argIndex++
+	}
+
+	if filters.Username != nil {
+		conditions = append(conditions, fmt.Sprintf("username ILIKE '%%' || $%d || '%%'", argIndex))
+		args = append(args, *filters.Username)
+		argIndex++
+	}
+
+	if filters.Email != nil {
+		conditions = append(conditions, fmt.Sprintf("email ILIKE '%%' || $%d || '%%'", argIndex))
+		args = append(args, *filters.Email)
+		argIndex++
+	}
+
+	if len(conditions) > 0 {
+		query += "\nWHERE " + strings.Join(conditions, " AND ")
+	}
+
+	query = query + fmt.Sprintf(`
+	ORDER BY %s
+	LIMIT $%d OFFSET $%d`, orderClause, argIndex, argIndex+1)
+	args = append(args, perPage)
+	args = append(args, offset)
+
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query users: %w", err)
 	}
 	defer rows.Close()
 
-	var users []models.User
-	for rows.Next() {
-		var user models.User
-		err := rows.Scan(
-			&user.ID,
-			&user.Name,
-			&user.FullName,
-			&user.Email,
-			&user.CreatedAt,
-			&user.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("scan user: %w", err)
-		}
-
-		users = append(users, user)
+	users, err := pgx.CollectRows(rows, pgx.RowToStructByName[models.User])	
+	if err != nil {
+		return nil, fmt.Errorf("collect rows: %w")
 	}
 
+	query = `SELECT COUNT(*) FROM auth.users`
+	if len(conditions) > 0 {
+		query += "\nWHERE " + strings.Join(conditions, " AND ")
+	}
+	query = query + fmt.Sprintf(`
+	LIMIT $%d OFFSET $%d`, argIndex, argIndex+1)
+
 	var total int
-	err = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM auth.users`).Scan(&total)
+	err = r.db.QueryRow(ctx, query, args...).Scan(&total)
 	if err != nil {
 		return nil, fmt.Errorf("count users: %w", err)
 	}
@@ -274,8 +301,27 @@ func (r *UserRepo) GetAll(ctx context.Context, filters *dto.UserFilter) ([]model
 	var users []models.User
 
 	query := `
-	SELECT id, username, full_name, email, created_at, updated_at
-	FROM auth.users 
+	SELECT u.id, u.username, u.full_name, u.email, u.created_at, u.updated_at, u.password_hash,
+	COALESCE(
+        (SELECT json_agg(json_build_object('id', r.id, 'name', r.name, "description", r.description))
+         FROM auth.roles r
+         JOIN auth.user_roles ur ON ur.role_id = r.id
+         WHERE ur.user_id = u.id), 
+        '[]'
+    ) as roles,
+    (SELECT json_build_object('id', g.id, 'name', g.name, 'specialty', g.specialty, 'admission_year', g.admission_year)
+     FROM auth.groups g
+     JOIN auth.student_profiles s ON s.group_id = g.id
+     WHERE s.user_id = u.id
+     -- Проверка на наличие роли student (опционально, если логика БД это гарантирует)
+     AND EXISTS (
+         SELECT 1 FROM auth.roles r 
+         JOIN auth.user_roles ur ON ur.role_id = r.id 
+         WHERE ur.user_id = u.id AND r.name = 'student'
+     )
+     LIMIT 1
+    ) as "group"
+	FROM auth.users u
 	`
 
 	if filters.FullName != nil {
@@ -285,8 +331,14 @@ func (r *UserRepo) GetAll(ctx context.Context, filters *dto.UserFilter) ([]model
 	}
 
 	if filters.Username != nil {
-		conditions = append(conditions, fmt.Sprintf("username = $%d", argIndex))
+		conditions = append(conditions, fmt.Sprintf("username ILIKE '%%' || $%d || '%%'", argIndex))
 		args = append(args, *filters.Username)
+		argIndex++
+	}
+
+	if filters.Email != nil {
+		conditions = append(conditions, fmt.Sprintf("email ILIKE '%%' || $%d || '%%'", argIndex))
+		args = append(args, *filters.Email)
 		argIndex++
 	}
 
@@ -300,22 +352,26 @@ func (r *UserRepo) GetAll(ctx context.Context, filters *dto.UserFilter) ([]model
 	}
 	defer row.Close()
 
-	for row.Next() {
-		var user models.User
-		err := row.Scan(
-			&user.ID,
-			&user.Name,
-			&user.FullName,
-			&user.Email,
-			&user.CreatedAt,
-			&user.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		users = append(users, user)
+	users, err = pgx.CollectRows(row, pgx.RowToStructByName[models.User])
+	if err != nil {
+		return nil, fmt.Errorf("collect rows: %w", err)
 	}
+	// for row.Next() {
+	// 	var user models.User
+	// 	err := row.Scan(
+	// 		&user.ID,
+	// 		&user.Name,
+	// 		&user.FullName,
+	// 		&user.Email,
+	// 		&user.CreatedAt,
+	// 		&user.UpdatedAt,
+	// 	)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	//
+	// 	users = append(users, user)
+	// }
 
 	return users, nil
 }
