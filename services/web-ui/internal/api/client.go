@@ -1,11 +1,11 @@
 package api
 
-import (
-	"bytes"
+import ( "bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"web-ui/internal/models"
@@ -16,6 +16,14 @@ type CoreClient struct {
 	baseURL        string
 	httpClient     *http.Client
 	sessionManager *session.SessionManager
+}
+
+type request struct {
+	method  string
+	path    string
+	headers map[string]string
+	query   map[string]string
+	body    any
 }
 
 func NewCoreClient(baseURL string, timeout time.Duration, sm *session.SessionManager) *CoreClient {
@@ -52,8 +60,10 @@ func (c *CoreClient) doRequest(ctx context.Context, method, path string, headers
 	defer resp.Body.Close()
 
 	var res models.Result
-	if err = json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return fmt.Errorf("decode response body: %w", err)
+	json.NewDecoder(resp.Body).Decode(&res)
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("api return status %s: %s", resp.Status, res.Error)
 	}
 
 	if !res.Success {
@@ -78,7 +88,7 @@ func (c *CoreClient) getAccessToken(w http.ResponseWriter, r *http.Request) (str
 	if !ok {
 		return "", fmt.Errorf("failed to get jwt from session")
 	}
-	exiresAt :=  time.Unix(jwt.ExpiresAt, 0)
+	exiresAt := time.Unix(jwt.ExpiresAt, 0)
 	if time.Now().After(exiresAt) {
 		if err := c.refreshToken(r.Context(), &jwt); err != nil {
 			return "", err
@@ -99,8 +109,8 @@ func (c *CoreClient) Login(r *http.Request, username, password string) (*models.
 		clientIP = strings.TrimSpace(ips[0])
 	}
 	headers := map[string]string{
-		"User-Agent": r.Header.Get("User-Agent"),
-		"clientIP": clientIP,
+		"User-Agent":      r.Header.Get("User-Agent"),
+		"X-Forwarded-For": clientIP,
 	}
 	if err := c.doRequest(r.Context(), "POST", "/login", headers, body, &jwt); err != nil {
 		return nil, err
@@ -109,4 +119,40 @@ func (c *CoreClient) Login(r *http.Request, username, password string) (*models.
 	return &jwt, nil
 }
 
+func (c *CoreClient) Logout(w http.ResponseWriter, r *http.Request) error {
+	req := request {
+		method: "GET",
+		path: "/logout",
+	}
 
+	c.sessionManager.Logout(w, r)
+
+	return c.Do(w, r, req, nil)
+}
+
+func (c *CoreClient) Do(w http.ResponseWriter, r *http.Request, req request, result any) error {
+	accessToken, err := c.getAccessToken(w, r)
+	if err != nil {
+		return fmt.Errorf("get access token: %w", err)
+	}
+
+	headers := make(map[string]string)
+	headers["Authorization"] = fmt.Sprintf("Bearer %s", accessToken)
+
+	for key, value := range req.headers {
+		headers[key] = value
+	}
+
+	u, err := url.Parse(req.path)
+	if err != nil {
+		return fmt.Errorf("parse path: %w", err)
+	}
+
+	q := u.Query()
+	for key, value := range req.query {
+		q.Set(key, value)
+	}
+	u.RawQuery = q.Encode()
+
+	return c.doRequest(r.Context(), req.method, req.path, headers, req.body, result)
+}

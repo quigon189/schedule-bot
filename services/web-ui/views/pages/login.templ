@@ -18,8 +18,7 @@ templ LoginForm(errorMsg string) {
 					<i class="bi bi-calendar-check"></i> Учебный портал
 				</h3>
 
-				<form hx-post="/login" hx-target="#loginError" hx-indicator="#spinner"
-					hx-on::after-request="if (event.detail.successful) { window.location.href = '/' }">
+				<form hx-post="/login" hx-target="#loginError" hx-indicator="#spinner">
 					<div class="mb-3">
 						<label for="username" class="form-label">Логин</label>
 						<input type="text" class="form-control" id="username" name="username" autocomplete="username"

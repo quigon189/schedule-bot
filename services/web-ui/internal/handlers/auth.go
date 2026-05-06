@@ -42,7 +42,9 @@ func (h *AuthHandler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.sessionManager.Set(w, r, "jwt", token)
+	if err := h.sessionManager.Set(w, r, "jwt", token); err != nil {
+		log.Printf("failed to set jwt in session: %v", err)
+	}
 
 	w.Header().Set("HX-Redirect", "/")
 	w.WriteHeader(http.StatusOK)
@@ -50,7 +52,7 @@ func (h *AuthHandler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 
 // POST /logout — выход (удаляем cookie)
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	h.sessionManager.Logout(w, r)
+	h.coreClient.Logout(w, r)
 	// Для HTMX редиректим на логин
 	w.Header().Set("HX-Redirect", "/login")
 	w.WriteHeader(http.StatusOK)

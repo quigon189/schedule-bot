@@ -129,7 +129,7 @@ func (r *SubjectRepo) GetAllSubjects(ctx context.Context, req *dto.PaginatedSubj
 	       g.id, g.name, g.specialty, g.admission_year
 	FROM schedule.subjects s
 	LEFT JOIN auth.groups g ON s.group_id = g.id
-	ORDER BY %s
+	ORDER BY s.%s
 	LIMIT $1 OFFSET $2
 	`, orderClause)
 

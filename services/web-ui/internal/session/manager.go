@@ -1,7 +1,9 @@
 package session
 
 import (
+	"encoding/gob"
 	"net/http"
+	"web-ui/internal/models"
 
 	"github.com/gorilla/sessions"
 )
@@ -12,6 +14,7 @@ type SessionManager struct {
 }
 
 func NewSessionManager(store sessions.Store, name string) *SessionManager {
+	gob.Register(models.JWT{})
 	return &SessionManager{
 		store: store,
 		name: name,

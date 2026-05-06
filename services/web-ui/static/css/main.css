@@ -1,0 +1,288 @@
+/* static/css/main.css */
+
+/* ----- Sidebar (вертикальное меню) ----- */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 260px;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #ecf0f1;
+    transition: width 0.3s ease;
+    z-index: 1030;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+}
+
+.sidebar.collapsed {
+    width: 60px;
+}
+
+/* Заголовок + кнопка в одной строке */
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0.75rem 0.75rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    min-height: 56px;
+}
+
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.sidebar-brand i {
+    font-size: 1.3rem;
+    flex-shrink: 0;
+}
+
+.sidebar.collapsed .sidebar-brand span {
+    display: none;
+}
+
+/* Кнопка сворачивания */
+.btn-toggle {
+    background: transparent;
+    border: none;
+    color: #ecf0f1;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.2s;
+    flex-shrink: 0;
+}
+
+.btn-toggle:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+.sidebar.collapsed .btn-toggle i {
+    transform: rotate(180deg);
+}
+
+/* Навигация */
+.sidebar .nav {
+    flex: 1;
+    padding: 1rem 0;
+}
+
+.sidebar .nav-link {
+    color: #ecf0f1;
+    padding: 0.65rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    white-space: nowrap;
+    transition: background 0.2s;
+    border-radius: 0;
+}
+
+.sidebar .nav-link i {
+    font-size: 1.2rem;
+    min-width: 24px;
+    text-align: center;
+}
+
+.sidebar .nav-link span {
+    transition: opacity 0.2s;
+}
+
+.sidebar.collapsed .nav-link span {
+    opacity: 0;
+    width: 0;
+    display: none;
+}
+
+.sidebar .nav-link:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.sidebar .nav-link.active {
+    background: rgba(255,255,255,0.2);
+    border-left: 3px solid #f39c12;
+}
+
+/* Footer сайдбара (информация о пользователе) */
+.sidebar-footer {
+    padding: 0.75rem;
+    font-size: 0.85rem;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.sidebar-footer .user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.sidebar-footer .user-info i {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+
+.sidebar-footer .user-details {
+    overflow: hidden;
+}
+
+.sidebar-footer .user-name {
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.sidebar-footer .user-role {
+    font-size: 0.7rem;
+    opacity: 0.8;
+}
+
+.sidebar-footer .user-actions {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sidebar-footer .user-actions a {
+    color: #ecf0f1;
+    text-decoration: none;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sidebar-footer .user-actions a:hover {
+    text-decoration: underline;
+}
+
+.sidebar.collapsed .sidebar-footer .user-details,
+.sidebar.collapsed .sidebar-footer .user-actions span {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-footer .user-info i {
+    margin: 0 auto;
+}
+
+/* Основной контент */
+.main-content {
+    margin-left: 260px;
+    transition: margin-left 0.3s ease;
+    padding: 1rem;
+    min-height: 100vh;
+}
+
+.main-content.expanded {
+    margin-left: 70px;
+}
+
+/* Breadcrumbs */
+.breadcrumb-container {
+    background: #f8f9fa;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.breadcrumb {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.breadcrumb-item a {
+    text-decoration: none;
+    color: #6c757d;
+}
+
+.breadcrumb-item.active {
+    color: #2c3e50;
+}
+
+/* Адаптивность: на маленьких экранах меню сворачивается автоматически */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 70px;
+    }
+    .sidebar .sidebar-brand span,
+    .sidebar .nav-link span,
+    .sidebar-footer .user-details,
+    .sidebar-footer .user-actions span {
+        display: none;
+    }
+    .main-content {
+        margin-left: 70px;
+    }
+    .btn-toggle i {
+        transform: rotate(180deg);
+    }
+}
+
+/* ... предыдущие стили ... */
+
+/* Кнопка сворачивания — показывается только в развёрнутом состоянии */
+.btn-toggle {
+    background: transparent;
+    border: none;
+    color: #ecf0f1;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.2s;
+    flex-shrink: 0;
+}
+
+.btn-toggle:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+/* В свёрнутом сайдбаре кнопка скрывается */
+.sidebar.collapsed .btn-toggle {
+    display: none;
+}
+
+/* Поворот иконки (не влияет, так как кнопка скрыта, но оставим) */
+.sidebar.collapsed .btn-toggle i {
+    transform: rotate(180deg);
+}
+
+/* Стили для расписания */
+.schedule-table td {
+    vertical-align: top;
+    padding: 8px;
+}
+.schedule-cell {
+    min-width: 120px;
+}
+.lesson-entry {
+    border-bottom: 1px solid #eee;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+}
+.lesson-entry:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+.day-header {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}

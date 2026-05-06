@@ -30,6 +30,9 @@ func (s *UserService) Login(ctx context.Context, req dto.LoginRequest) (*dto.Log
 	if err != nil {
 		return nil, err
 	}
+	if user == nil {
+		return nil, errors.New("user not found")
+	}
 
 	if !checkPasswordHash(req.Password, user.PasswordHash) {
 		return nil, errors.New("invalid password")

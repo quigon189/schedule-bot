@@ -1,0 +1,21 @@
+package pages
+
+import (
+	"web-ui/internal/models"
+	"web-ui/views"
+	"web-ui/views/components"
+)
+
+templ StudentDashboardPage(csrf string, user *models.User, props components.ScheduleViewProps) {
+	@views.BasePrivate("Моё расписание", csrf, components.StudentSidebar(user, "/"), StudentDashboardContent(props))
+}
+
+templ StudentDashboardContent(props components.ScheduleViewProps) {
+	<div class="container-fluid">
+		<h1 class="h3 mb-3">Расписание</h1>
+		
+		<div id="filters-container">
+			@components.ScheduleView(props)
+		</div>
+	</div>
+}

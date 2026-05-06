@@ -9,12 +9,11 @@ import (
 	"web-ui/internal/session"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/gorilla/csrf"
+	//"github.com/gorilla/csrf"
 	"github.com/gorilla/sessions"
 )
 
 func main() {
-	coreClient := api.NewCoreClient("http://localhost:8088", 30*time.Second)
 	cookieStore := sessions.NewCookieStore([]byte("secret-key-from-config"))
 	cookieStore.Options = &sessions.Options{
 		Path: "/",
@@ -23,16 +22,17 @@ func main() {
 		SameSite: http.SameSiteLaxMode,
 	}
 	sessionManager := session.NewSessionManager(cookieStore, "user-session")
+	coreClient := api.NewCoreClient("http://localhost:8088", 30*time.Second, sessionManager)
 
 	authHandler := handlers.NewAuthHandler(coreClient, sessionManager)
-	
+	dashboardHandler := handlers.NewDashboardHandler(coreClient, sessionManager)
 
-	csrfMiddleware := csrf.Protect(
-		[]byte("secret-key-from-config"),
-		csrf.Secure(false), // true для https
-		csrf.Path("/"),
-		csrf.RequestHeader("X-CSRF-Token"),
-	)
+	// csrfMiddleware := csrf.Protect(
+	// 	[]byte("secret-key-from-config"),
+	// 	csrf.Secure(false), // true для https
+	// 	csrf.Path("/"),
+	// 	csrf.RequestHeader("X-CSRF-Token"),
+	// )
 
 	r := chi.NewRouter()
 
@@ -40,12 +40,13 @@ func main() {
 	r.Post("/login", authHandler.LoginSubmit)
 
 	r.Group(func(r chi.Router) {
-		r.Use(csrfMiddleware)
+		//r.Use(csrfMiddleware)
 		r.Use(middlewares.AuthMiddleware(sessionManager))
-		r.Get("/home", func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("Hello!"))
-		})
+		r.Get("/", dashboardHandler.Dashboard)
+		r.Post("/logout", authHandler.Logout)
 	})
+
+	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	http.ListenAndServe(":8181", r)
 }

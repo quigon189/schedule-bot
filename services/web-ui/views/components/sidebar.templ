@@ -1,0 +1,114 @@
+package components
+
+import "fmt"
+import "web-ui/internal/models"
+
+templ AdminSidebar(user *models.User, currentPath string) {
+    <div class="sidebar">
+        <div class="sidebar-header">
+			<div class="sidebar-brand">
+                <i class="bi bi-calendar-week"></i> <span>Учебный портал</span>
+            </div>
+            <button id="toggleSidebarBtn" class="btn-toggle" aria-label="Свернуть/развернуть">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+        </div>
+        <ul class="nav flex-column">
+			<li class="nav-item">
+				<a class={fmt.Sprintf("nav-link %s", isActive(currentPath, "/")) } href="/">
+					<i class="bi bi-speedometer2"></i> <span>Дашборд</span>
+				</a>
+			</li>
+			<li class="nav-item">
+				<a class={ fmt.Sprintf("nav-link %s", isActive(currentPath, "/admin/users")) } href="/admin/users">
+					<i class="bi bi-people"></i> <span>Пользователи</span>
+				</a>
+			</li>
+			<li class="nav-item">
+				<a class={ fmt.Sprintf("nav-link %s", isActive(currentPath, "/admin/groups")) } href="/admin/groups">
+					<i class="bi bi-people-fill"></i> <span>Группы</span>
+				</a>
+			</li>
+			<li class="nav-item">
+				<a class={ fmt.Sprintf("nav-link %s", isActive(currentPath, "/admin/subjects")) } href="/admin/subjects">
+					<i class="bi bi-book"></i> <span>Предметы</span>
+				</a>
+			</li>
+			<li class="nav-item">
+				<a class={ fmt.Sprintf("nav-link %s", isActive(currentPath, "/admin/audiences")) } href="/admin/audiences">
+					<i class="bi bi-door-closed"></i> <span>Аудитории</span>
+				</a>
+			</li>
+			<li class="nav-item">
+				<a class={ fmt.Sprintf("nav-link %s", isActive(currentPath, "/admin/schedule")) } href="/admin/schedule">
+					<i class="bi bi-calendar-event"></i> <span>Расписание</span>
+				</a>
+			</li>
+        </ul>
+
+        <!-- Нижняя часть с информацией о пользователе -->
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <i class="bi bi-person-circle"></i>
+                <div class="user-details">
+                    <div class="user-name">{ user.FullName }</div>
+                </div>
+            </div>
+            <div class="user-actions">
+                <a href="/profile">
+                    <i class="bi bi-gear"></i> <span>Профиль</span>
+                </a>
+                <a href="#" hx-post="/logout">
+                    <i class="bi bi-box-arrow-right"></i> <span>Выйти</span>
+                </a>
+            </div>
+        </div>
+    </div>
+}
+
+templ StudentSidebar(user *models.User, currentPath string) {
+    <div class="sidebar">
+        <div class="sidebar-header">
+			<div class="sidebar-brand">
+                <i class="bi bi-calendar-week"></i> <span>Учебный портал</span>
+            </div>
+            <button id="toggleSidebarBtn" class="btn-toggle" aria-label="Свернуть/развернуть">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+        </div>
+        <ul class="nav flex-column">
+			<li class="nav-item">
+				<a class={fmt.Sprintf("nav-link %s", isActive(currentPath, "/")) } href="/">
+					<i class="bi bi-speedometer2"></i> <span>Дашборд</span>
+				</a>
+			</li>
+		</ul>
+
+        <!-- Нижняя часть с информацией о пользователе -->
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <i class="bi bi-person-circle"></i>
+                <div class="user-details">
+                    <div class="user-name">{ user.FullName }</div>
+                </div>
+            </div>
+            <div class="user-actions">
+                <a href="/profile">
+                    <i class="bi bi-gear"></i> <span>Профиль</span>
+                </a>
+                <a href="#" hx-post="/logout">
+                    <i class="bi bi-box-arrow-right"></i> <span>Выйти</span>
+                </a>
+            </div>
+        </div>
+    </div>
+}
+
+
+func isActive(currentPath, linkPath string) string {
+    if currentPath == linkPath {
+        return "active"
+    }
+    // Можно добавить поддержку вложенных путей
+    return ""
+}
