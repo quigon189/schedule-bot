@@ -286,3 +286,7 @@
     background-color: #f8f9fa;
     font-weight: 600;
 }
+
+.no-transition {
+    transition: none !important;
+}

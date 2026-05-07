@@ -15,12 +15,12 @@ templ AdminSidebar(user *models.User, currentPath string) {
         </div>
         <ul class="nav flex-column">
 			<li class="nav-item">
-				<a class={fmt.Sprintf("nav-link %s", isActive(currentPath, "/")) } href="/">
+				<a class={fmt.Sprintf("nav-link %s", isActive(currentPath, "/")) } href="/" hx-boost="true">
 					<i class="bi bi-speedometer2"></i> <span>Дашборд</span>
 				</a>
 			</li>
 			<li class="nav-item">
-				<a class={ fmt.Sprintf("nav-link %s", isActive(currentPath, "/admin/users")) } href="/admin/users">
+				<a class={ fmt.Sprintf("nav-link %s", isActive(currentPath, "/admin/users")) } href="/admin/users" hx-boost="true">
 					<i class="bi bi-people"></i> <span>Пользователи</span>
 				</a>
 			</li>

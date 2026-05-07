@@ -28,7 +28,7 @@ templ AdminUsersContent(paginated *models.PaginatedUsers, params models.Paginate
         <!-- Фильтры -->
         <div class="card mb-3">
             <div class="card-body">
-                <form hx-get="/admin/users/table" hx-target="#usersTableContainer" hx-push-url="true">
+                <form hx-get="/admin/users/table" hx-target="#usersTableContainer">
                     <div class="row g-3">
                         <div class="col-md-3">
                             <input type="text" name="full_name" class="form-control" placeholder="ФИО" value={ selectedOrEmpty(params.FullName) }>
@@ -67,16 +67,6 @@ templ AdminUsersContent(paginated *models.PaginatedUsers, params models.Paginate
         document.body.addEventListener('htmx:afterSwap', function(evt) {
             if (evt.detail.target.id === 'userModalContent') {
                 new bootstrap.Modal(document.getElementById('userModal')).show();
-            }
-            if (evt.detail.target.id === 'usersTableContainer' && evt.detail.xhr.status === 200) {
-                // обновить URL с параметрами фильтрации
-                const url = new URL(window.location.href);
-                const formData = new FormData(document.querySelector('#usersTableContainer form'));
-                for (let [key, value] of formData.entries()) {
-                    if (value) url.searchParams.set(key, value);
-                    else url.searchParams.delete(key);
-                }
-                window.history.pushState({}, '', url);
             }
         });
         // закрыть модалку после успешного сохранения
