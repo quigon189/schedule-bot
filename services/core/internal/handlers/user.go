@@ -75,6 +75,9 @@ func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	if username := r.URL.Query().Get("username"); username != "" {
 		req.Username = &username
 	}
+	if email := r.URL.Query().Get("email"); email != "" {
+		req.Email = &email
+	}
 
 	users, err := h.userService.GetAllUsers(r.Context(), &req)
 	if err != nil {

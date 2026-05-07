@@ -13,20 +13,20 @@ help:
 	@echo "  make clean - остановить и удалить контейнеры + volumes"
 
 dev:
-	docker-compose -f docker-compose.dev.yaml up -d
+	docker compose -f docker-compose.dev.yaml up -d
 	@echo "✓ Сервисы запущены в режиме разработки. Логи core: docker-compose logs -f core"
 
 up:
-	docker-compose -f compose.yaml up -d
+	docker compose -f compose.yaml up -d
 
 down:
-	docker-compose $(COMPOSE_FILES) down
+	docker compose $(COMPOSE_FILES) down
 
 logs:
-	docker-compose $(COMPOSE_FILES) logs -f
+	docker compose $(COMPOSE_FILES) logs -f
 
 build:
-	docker-compose $(COMPOSE_FILES) build --no-cache
+	docker compose $(COMPOSE_FILES) build --no-cache
 
 clean:
-	docker-compose $(COMPOSE_FILES) down -v
+	docker compose $(COMPOSE_FILES) down -v

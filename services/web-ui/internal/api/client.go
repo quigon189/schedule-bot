@@ -154,5 +154,5 @@ func (c *CoreClient) Do(w http.ResponseWriter, r *http.Request, req request, res
 	}
 	u.RawQuery = q.Encode()
 
-	return c.doRequest(r.Context(), req.method, req.path, headers, req.body, result)
+	return c.doRequest(r.Context(), req.method, u.String(), headers, req.body, result)
 }

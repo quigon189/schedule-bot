@@ -4,7 +4,7 @@ import "fmt"
 import "web-ui/internal/models"
 
 templ AdminSidebar(user *models.User, currentPath string) {
-    <div class="sidebar">
+    <div class="sidebar" hx-boost="false">
         <div class="sidebar-header">
 			<div class="sidebar-brand">
                 <i class="bi bi-calendar-week"></i> <span>Учебный портал</span>

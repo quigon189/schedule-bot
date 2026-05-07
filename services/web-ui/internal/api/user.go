@@ -1,7 +1,7 @@
 package api
 
 import (
-	"fmt"
+	"encoding/json"
 	"net/http"
 	"web-ui/internal/models"
 )
@@ -20,16 +20,22 @@ func (c *CoreClient) GetCurrentUser(w http.ResponseWriter, r *http.Request) (*mo
 	return &user, nil
 }
 
-func (c *CoreClient) GetStudent(w http.ResponseWriter, r *http.Request, user *models.User) (*models.Student, error) {
-	var student models.Student
+func (c *CoreClient) GetPaginatedUsers(w http.ResponseWriter, r *http.Request, params models.PaginatedUsersQuery) (*models.PaginatedUsers, error) {
+	var paginatedUsers models.PaginatedUsers
+	var query map[string]string
+	data, _ := json.Marshal(params)
+	if err := json.Unmarshal(data, &query); err != nil {
+		return nil, err
+	}
 	req := request{
 		method: "GET",
-		path:   fmt.Sprintf("/students/%d", user.ID),
+		path:   "/admin/users/paginated",
+		query: query,
 	}
 
-	if err := c.Do(w, r, req, &student); err != nil {
+	if err := c.Do(w, r, req, &paginatedUsers); err != nil {
 		return nil, err
 	}
 
-	return &student, nil
+	return &paginatedUsers, nil
 }

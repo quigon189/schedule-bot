@@ -17,6 +17,13 @@ type User struct {
 	Group    *Group `json:"group"`
 }
 
+type Group struct {
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	Specialty     string `json:"specialty"`
+	AdmissionYear int    `json:"admission_year"`
+}
+
 func (u *User) HasRole(role string) bool {
 	return slices.ContainsFunc(u.Roles, func(r Role) bool {
 		return r.Name == role

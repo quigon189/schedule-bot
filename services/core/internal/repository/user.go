@@ -273,8 +273,7 @@ func (r *UserRepo) GetUsersPaginated(ctx context.Context, filters *dto.UserFilte
 	if len(conditions) > 0 {
 		query += "\nWHERE " + strings.Join(conditions, " AND ")
 	}
-	query = query + fmt.Sprintf(`
-	LIMIT $%d OFFSET $%d`, argIndex, argIndex+1)
+	args = args[:len(args)-2]
 
 	var total int
 	err = r.db.QueryRow(ctx, query, args...).Scan(&total)
@@ -356,23 +355,7 @@ func (r *UserRepo) GetAll(ctx context.Context, filters *dto.UserFilter) ([]model
 	if err != nil {
 		return nil, fmt.Errorf("collect rows: %w", err)
 	}
-	// for row.Next() {
-	// 	var user models.User
-	// 	err := row.Scan(
-	// 		&user.ID,
-	// 		&user.Name,
-	// 		&user.FullName,
-	// 		&user.Email,
-	// 		&user.CreatedAt,
-	// 		&user.UpdatedAt,
-	// 	)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	//
-	// 	users = append(users, user)
-	// }
-
+	
 	return users, nil
 }
 

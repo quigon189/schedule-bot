@@ -1,0 +1,100 @@
+package pages
+
+import (
+    "fmt"
+    "web-ui/internal/models"
+    "web-ui/views"
+    "web-ui/views/components"
+)
+
+templ AdminUsersPage(currentUser *models.User, paginated *models.PaginatedUsers, params models.PaginatedUsersQuery) {
+    @views.BasePrivate("Управление пользователями", "", components.AdminSidebar(currentUser, "/admin/users"), AdminUsersContent(paginated, params))
+}
+
+templ AdminUsersContent(paginated *models.PaginatedUsers, params models.PaginatedUsersQuery) {
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="h3">Пользователи</h1>
+            <button class="btn btn-primary"
+                hx-get="/admin/users/new"
+                hx-target="body"
+                hx-swap="beforeend"
+                data-bs-toggle="modal"
+                data-bs-target="#userModal">
+                <i class="bi bi-plus-circle"></i> Создать
+            </button>
+        </div>
+
+        <!-- Фильтры -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <form hx-get="/admin/users/table" hx-target="#usersTableContainer" hx-push-url="true">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <input type="text" name="full_name" class="form-control" placeholder="ФИО" value={ selectedOrEmpty(params.FullName) }>
+                        </div>
+                        <div class="col-md-3">
+                            <input type="text" name="username" class="form-control" placeholder="Логин" value={ selectedOrEmpty(params.Username) }>
+                        </div>
+                        <div class="col-md-3">
+                            <input type="text" name="email" class="form-control" placeholder="Email" value={ selectedOrEmpty(params.Email) }>
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-secondary w-100">Применить</button>
+                        </div>
+                    </div>
+                    <input type="hidden" name="per_page" value={ fmt.Sprintf("%d", *params.PerPage) }>
+                </form>
+            </div>
+        </div>
+
+        <!-- Таблица с пагинацией -->
+        <div id="usersTableContainer">
+            @components.UsersTable(paginated, params)
+        </div>
+    </div>
+
+    <!-- Модальное окно для формы -->
+    <div class="modal fade" id="userModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog">
+            <div class="modal-content" id="userModalContent">
+                <!-- сюда загрузится форма -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (evt.detail.target.id === 'userModalContent') {
+                new bootstrap.Modal(document.getElementById('userModal')).show();
+            }
+            if (evt.detail.target.id === 'usersTableContainer' && evt.detail.xhr.status === 200) {
+                // обновить URL с параметрами фильтрации
+                const url = new URL(window.location.href);
+                const formData = new FormData(document.querySelector('#usersTableContainer form'));
+                for (let [key, value] of formData.entries()) {
+                    if (value) url.searchParams.set(key, value);
+                    else url.searchParams.delete(key);
+                }
+                window.history.pushState({}, '', url);
+            }
+        });
+        // закрыть модалку после успешного сохранения
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.successful && evt.detail.target && evt.detail.target.closest('.modal')) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('userModal'));
+                if (modal) modal.hide();
+                // обновить таблицу
+                htmx.trigger('#usersTableContainer', 'refresh');
+            }
+        });
+        htmx.on('refresh', function() {
+            htmx.trigger('#usersTableContainer', 'load');
+        });
+    </script>
+}
+
+func selectedOrEmpty(s *string) string {
+    if s == nil { return "" }
+    return *s
+}

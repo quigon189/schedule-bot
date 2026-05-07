@@ -26,6 +26,7 @@ func main() {
 
 	authHandler := handlers.NewAuthHandler(coreClient, sessionManager)
 	dashboardHandler := handlers.NewDashboardHandler(coreClient, sessionManager)
+	adminUsersHandler := handlers.NewAdminUsersHandler(coreClient, sessionManager)
 
 	// csrfMiddleware := csrf.Protect(
 	// 	[]byte("secret-key-from-config"),
@@ -44,6 +45,8 @@ func main() {
 		r.Use(middlewares.AuthMiddleware(sessionManager))
 		r.Get("/", dashboardHandler.Dashboard)
 		r.Post("/logout", authHandler.Logout)
+		r.Get("/admin/users", adminUsersHandler.ListUsersPage)
+		r.Get("/admin/users/table", adminUsersHandler.TableFragment)
 	})
 
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))

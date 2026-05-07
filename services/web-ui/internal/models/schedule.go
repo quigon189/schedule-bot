@@ -2,13 +2,6 @@ package models
 
 import "time"
 
-type Group struct {
-	ID            int    `json:"id"`
-	Name          string `json:"name"`
-	Specialty     string `json:"specialty"`
-	AdmissionYear int    `json:"admission_year"`
-}
-
 type Student struct {
 	User  User  `json:"user"`
 	Group Group `json:"group"`

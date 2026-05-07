@@ -21,7 +21,7 @@ func NewUserService(userRepo *repository.UserRepo, sessionRepo *repository.Sessi
 		userRepo:    userRepo,
 		sessionRepo: sessionRepo,
 		jwtService:  jwtService,
-		perPage:     20,
+		perPage:     10,
 	}
 }
 

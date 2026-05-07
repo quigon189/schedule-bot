@@ -1,0 +1,186 @@
+package handlers
+
+import (
+	"log"
+	"net/http"
+	"strconv"
+	"web-ui/internal/api"
+	"web-ui/internal/models"
+	"web-ui/internal/session"
+	"web-ui/views/components"
+	"web-ui/views/pages"
+)
+
+type AdminUsersHandler struct {
+    coreClient     *api.CoreClient
+    sessionManager *session.SessionManager
+}
+
+func NewAdminUsersHandler(client *api.CoreClient, sm *session.SessionManager) *AdminUsersHandler {
+    return &AdminUsersHandler{coreClient: client, sessionManager: sm}
+}
+
+// GET /admin/users — страница со списком пользователей
+func (h *AdminUsersHandler) ListUsersPage(w http.ResponseWriter, r *http.Request) {
+    user, err := h.coreClient.GetCurrentUser(w, r)
+    if err != nil {
+        h.sessionManager.Logout(w, r)
+        w.Header().Set("HX-Redirect", "/login")
+        return
+    }
+    if !user.HasRole("admin") {
+        http.NotFound(w, r)
+        return
+    }
+
+    // Параметры фильтрации из query
+    page := 1
+    if p := r.URL.Query().Get("page"); p != "" {
+        if val, err := strconv.Atoi(p); err == nil && val > 0 {
+            page = val
+        }
+    }
+    perPage := 20
+    if pp := r.URL.Query().Get("per_page"); pp != "" {
+        if val, err := strconv.Atoi(pp); err == nil && val > 0 {
+            perPage = val
+        }
+    }
+    sortBy := r.URL.Query().Get("sort_by")
+    sortOrder := r.URL.Query().Get("sort_order")
+    fullName := r.URL.Query().Get("full_name")
+    username := r.URL.Query().Get("username")
+    email := r.URL.Query().Get("email")
+
+    params := models.PaginatedUsersQuery{
+        Page:      &page,
+        PerPage:   &perPage,
+        SortBy:    stringPtrOrNil(sortBy),
+        SortOrder: stringPtrOrNil(sortOrder),
+        FullName:  stringPtrOrNil(fullName),
+        Username:  stringPtrOrNil(username),
+        Email:     stringPtrOrNil(email),
+    }
+
+    paginated, err := h.coreClient.GetPaginatedUsers(w, r, params)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    // Рендерим всю страницу (базовый шаблон + контент)
+    pages.AdminUsersPage(user, paginated, params).Render(r.Context(), w)
+}
+
+// GET /admin/users/table?page=...&full_name=... — HTMX-фрагмент таблицы
+func (h *AdminUsersHandler) TableFragment(w http.ResponseWriter, r *http.Request) {
+    page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+    if page < 1 { page = 1 }
+    perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+    if perPage < 1 { perPage = 10 }
+    params := models.PaginatedUsersQuery{
+        Page: &page, PerPage: &perPage,
+		SortBy: stringPtrOrNil(r.URL.Query().Get("sort_by")),
+    	SortOrder: stringPtrOrNil(r.URL.Query().Get("sort_order")),
+        FullName: stringPtrOrNil(r.URL.Query().Get("full_name")),
+        Username: stringPtrOrNil(r.URL.Query().Get("username")),
+        Email:    stringPtrOrNil(r.URL.Query().Get("email")),
+    }
+    paginated, err := h.coreClient.GetPaginatedUsers(w, r, params)
+    if err != nil {
+		log.Printf("failed to get paginated users")
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    components.UsersTable(paginated, params).Render(r.Context(), w)
+}
+//
+// // GET /admin/users/new — форма создания пользователя
+// func (h *AdminUsersHandler) NewUserForm(w http.ResponseWriter, r *http.Request) {
+//     // Получаем списки групп и ролей для выпадающих списков (можно добавить методы в API)
+//     // Упростим: пока роли и группы будут загружаться через отдельные вызовы, но для демки сделаем статические заглушки
+//     // Лучше добавить в API: /roles, /groups
+//     // Пока передадим пустые слайсы, а в реальном проекте доработать
+//     components.UserForm(nil, nil, nil).Render(r.Context(), w)
+// }
+//
+// // POST /admin/users — создание пользователя
+// func (h *AdminUsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+//     req := models.CreateUserRequest{
+//         Username: r.FormValue("username"),
+//         Password: r.FormValue("password"),
+//         FullName: r.FormValue("full_name"),
+//         Email:    r.FormValue("email"),
+//     }
+//     // role_ids из формы
+//     if roleIDs := r.FormValue("role_ids"); roleIDs != "" {
+//         // парсим, например "1,2,3"
+//     }
+//     // group_id
+//     if gid := r.FormValue("group_id"); gid != "" {
+//         id, _ := strconv.Atoi(gid)
+//         req.GroupID = &id
+//     }
+//
+//     _, err := h.coreClient.CreateUser(w, r, req)
+//     if err != nil {
+//         components.ErrorAlert(err.Error()).Render(r.Context(), w)
+//         return
+//     }
+//     // После успешного создания редиректим на список
+//     w.Header().Set("HX-Redirect", "/admin/users")
+//     w.WriteHeader(http.StatusOK)
+// }
+//
+// // GET /admin/users/{id}/edit — форма редактирования
+// func (h *AdminUsersHandler) EditUserForm(w http.ResponseWriter, r *http.Request) {
+//     idStr := chi.URLParam(r, "id")
+//     id, _ := strconv.Atoi(idStr)
+//     user, err := h.coreClient.GetUser(w, r, id)
+//     if err != nil {
+//         http.Error(w, err.Error(), http.StatusNotFound)
+//         return
+//     }
+//     components.UserForm(user, nil, nil).Render(r.Context(), w)
+// }
+//
+// // PUT /admin/users/{id} — обновление
+// func (h *AdminUsersHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+//     idStr := chi.URLParam(r, "id")
+//     id, _ := strconv.Atoi(idStr)
+//     req := models.UpdateUserRequest{
+//         FullName: r.FormValue("full_name"),
+//         Email:    r.FormValue("email"),
+//     }
+//     if pwd := r.FormValue("password"); pwd != "" {
+//         req.Password = &pwd
+//     }
+//     // role_ids, group_id аналогично
+//     _, err := h.coreClient.UpdateUser(w, r, id, req)
+//     if err != nil {
+//         components.ErrorAlert(err.Error()).Render(r.Context(), w)
+//         return
+//     }
+//     w.Header().Set("HX-Redirect", "/admin/users")
+//     w.WriteHeader(http.StatusOK)
+// }
+//
+// // DELETE /admin/users/{id} — удаление
+// func (h *AdminUsersHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+//     idStr := chi.URLParam(r, "id")
+//     id, _ := strconv.Atoi(idStr)
+//     err := h.coreClient.DeleteUser(w, r, id)
+//     if err != nil {
+//         w.WriteHeader(http.StatusInternalServerError)
+//         w.Write([]byte(err.Error()))
+//         return
+//     }
+//     w.WriteHeader(http.StatusOK)
+// }
+
+func stringPtrOrNil(s string) *string {
+    if s == "" {
+        return nil
+    }
+    return &s
+}

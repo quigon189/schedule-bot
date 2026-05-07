@@ -1,0 +1,132 @@
+package components
+
+import (
+    "fmt"
+    "web-ui/internal/models"
+)
+
+templ UsersTable(paginated *models.PaginatedUsers, params models.PaginatedUsersQuery) {
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th><a href="#" hx-get={ sortUrl("full_name", params) } hx-target="#usersTableContainer">ФИО</a></th>
+                    <th><a href="#" hx-get={ sortUrl("username", params) } hx-target="#usersTableContainer">Логин</a></th>
+                    <th>Email</th>
+                    <th>Роли</th>
+                    <th>Группа</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                for _, user := range paginated.Users {
+                    <tr id={ fmt.Sprintf("user-%d", user.ID) }>
+                        <td>{ user.FullName }</td>
+                        <td>{ user.Username }</td>
+                        <td>{ user.Email }</td>
+                        <td>
+                            for _, role := range user.Roles {
+								if role.Name != "user" {
+                                <span class="badge bg-secondary me-1">{ role.Name }</span>
+								}
+                            }
+                        </td>
+                        <td>
+                            if user.Group != nil {
+                                { user.Group.Name }<br><small class="text-muted">{ user.Group.Specialty }</small>
+                            } else {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary"
+                                hx-get={ fmt.Sprintf("/admin/users/%d/edit", user.ID) }
+                                hx-target="#userModalContent">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger"
+                                hx-delete={ fmt.Sprintf("/admin/users/%d", user.ID) }
+                                hx-confirm="Удалить пользователя?"
+                                hx-target={ fmt.Sprintf("#user-%d", user.ID) }
+                                hx-swap="outerHTML">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                }
+                if len(paginated.Users) == 0 {
+                    <tr><td colspan="6" class="text-center">Нет пользователей</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Пагинация -->
+    if paginated.TotalPages > 1 {
+        <nav>
+            <ul class="pagination">
+                if paginated.Page > 1 {
+                    <li class="page-item">
+                        <a class="page-link" href="#" hx-get={ pageUrl(paginated.Page-1, params) } hx-target="#usersTableContainer">Назад</a>
+                    </li>
+                }
+                for i := 1; i <= paginated.TotalPages; i++ {
+					if i == paginated.Page {
+                    <li class="page-item active">
+						<a class="page-link" href="#" hx-get={ pageUrl(i, params) } hx-target="#usersTableContainer">{ i }</a>
+                    </li>
+					} else {
+                    <li class="page-item">
+                        <a class="page-link" href="#" hx-get={ pageUrl(i, params) } hx-target="#usersTableContainer">{ i }</a>
+                    </li>
+					}
+                }
+                if paginated.Page < paginated.TotalPages {
+                    <li class="page-item">
+                        <a class="page-link" href="#" hx-get={ pageUrl(paginated.Page+1, params) } hx-target="#usersTableContainer">Вперёд</a>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+}
+
+func pageUrl(page int, params models.PaginatedUsersQuery) string {
+    query := "?"
+    if params.PerPage != nil {
+        query += fmt.Sprintf("per_page=%d&", *params.PerPage)
+    }
+    if params.FullName != nil {
+        query += fmt.Sprintf("full_name=%s&", *params.FullName)
+    }
+    if params.Username != nil {
+        query += fmt.Sprintf("username=%s&", *params.Username)
+    }
+    if params.Email != nil {
+        query += fmt.Sprintf("email=%s&", *params.Email)
+    }
+    query += fmt.Sprintf("page=%d", page)
+    return "/admin/users/table" + query
+}
+
+func sortUrl(field string, params models.PaginatedUsersQuery) string {
+    query := "?"
+    if params.PerPage != nil {
+        query += fmt.Sprintf("per_page=%d&", *params.PerPage)
+    }
+    if params.FullName != nil {
+        query += fmt.Sprintf("full_name=%s&", *params.FullName)
+    }
+    if params.Username != nil {
+        query += fmt.Sprintf("username=%s&", *params.Username)
+    }
+    if params.Email != nil {
+        query += fmt.Sprintf("email=%s&", *params.Email)
+    }
+    sortOrder := "asc"
+    if params.SortBy != nil && *params.SortBy == field && params.SortOrder != nil && *params.SortOrder == "asc" {
+        sortOrder = "desc"
+    }
+    query += fmt.Sprintf("sort_by=%s&sort_order=%s&page=1", field, sortOrder)
+    return "/admin/users/table" + query
+}
