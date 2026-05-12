@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"strconv"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -10,14 +12,17 @@ type Config struct {
 	CoreTimeout   int
 	CookieSecret  string
 	SessionMaxAge int
+	Port          string
 }
 
 func Load() *Config {
+	godotenv.Load()
 	return &Config{
 		CoreURL:       getEnv("CORE_URL", "http://localhost:8080"),
 		CoreTimeout:   getIntEnv("CORE_TIMEOUT", 30),
 		CookieSecret:  getEnv("COOKIE_SECRET", "very-secret-key"),
 		SessionMaxAge: getIntEnv("SESSION_MAX_AGE", 3600),
+		Port:          getEnv("PORT", "8181"),
 	}
 }
 

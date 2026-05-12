@@ -8,6 +8,7 @@ import (
 	"web-ui/internal/session"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 type Router struct {
@@ -37,6 +38,9 @@ func (r *Router) SetupRoutes() {
 	authHandler := handlers.NewAuthHandler(r.coreClient, r.sessionManager)	
 	dashboardHandler := handlers.NewDashboardHandler(r.coreClient, r.sessionManager)
 	adminUsersHandler := handlers.NewAdminUsersHandler(r.coreClient, r.sessionManager)
+
+	r.router.Use(middleware.Logger)
+	r.router.Use(middleware.Recoverer)
 
 	r.router.Get("/login", authHandler.LoginPage)
 	r.router.Post("/login", authHandler.LoginSubmit)

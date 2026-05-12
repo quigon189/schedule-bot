@@ -1,7 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 	"web-ui/internal/api"
 	"web-ui/internal/config"
@@ -16,13 +22,13 @@ func main() {
 
 	cookieStore := sessions.NewCookieStore([]byte(cfg.CookieSecret))
 	cookieStore.Options = &sessions.Options{
-		Path: "/",
-		MaxAge: cfg.SessionMaxAge,
+		Path:     "/",
+		MaxAge:   cfg.SessionMaxAge,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	}
 	sessionManager := session.NewSessionManager(cookieStore, "user-session")
-	coreClient := api.NewCoreClient("http://localhost:8088", time.Duration(cfg.CoreTimeout)*time.Second, sessionManager)
+	coreClient := api.NewCoreClient(cfg.CoreURL, time.Duration(cfg.CoreTimeout)*time.Second, sessionManager)
 
 	// csrfMiddleware := csrf.Protect(
 	// 	[]byte("secret-key-from-config"),
@@ -33,5 +39,29 @@ func main() {
 
 	r := router.NewRouter(coreClient, sessionManager)
 
-	http.ListenAndServe(":8181", r.Handler())
+	server := http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: r.Handler(),
+	}
+
+	log.Printf("Server web-ui started on :%s", cfg.Port)
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	<-quit
+
+	log.Println("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatalf("Server shutdown failed: %v", err)
+	}
+
+	log.Println("Server stoped")
 }

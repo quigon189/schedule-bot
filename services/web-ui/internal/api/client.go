@@ -89,7 +89,7 @@ func (c *CoreClient) getAccessToken(w http.ResponseWriter, r *http.Request) (str
 		return "", fmt.Errorf("failed to get jwt from session")
 	}
 	exiresAt := time.Unix(jwt.ExpiresAt, 0)
-	if time.Now().After(exiresAt) {
+	if time.Now().Add(30*time.Second).After(exiresAt) {
 		if err := c.refreshToken(r.Context(), &jwt); err != nil {
 			return "", err
 		}

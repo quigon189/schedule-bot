@@ -6,6 +6,7 @@ import (
 	"core/internal/dto"
 	"core/internal/router"
 	"core/pkg/postgres"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -54,7 +55,7 @@ func main() {
 
 	log.Printf("Auth server starting on port %s", cfg.Server.Port)
 	go func() {
-		if err := server.ListenAndServe(); err != nil || err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Server failed: %v", err)
 		}
 	}()
