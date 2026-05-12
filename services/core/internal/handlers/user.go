@@ -57,6 +57,12 @@ func (h *UserHandler) GetPaginatedUsers(w http.ResponseWriter, r *http.Request) 
 	if email := r.URL.Query().Get("email"); email != "" {
 		req.Filters.Email = &email
 	}
+	if groupName := r.URL.Query().Get("group_name"); groupName != "" {
+		req.Filters.GroupName = &groupName
+	}
+	if role := r.URL.Query().Get("role_name"); role != "" {
+		req.Filters.Role = &role
+	}
 
 	users, err := h.userService.GetPaginatedUsers(r.Context(), &req)
 	if err != nil {
@@ -77,6 +83,12 @@ func (h *UserHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	if email := r.URL.Query().Get("email"); email != "" {
 		req.Email = &email
+	}
+	if groupName := r.URL.Query().Get("group_name"); groupName != "" {
+		req.GroupName = &groupName
+	}
+	if role := r.URL.Query().Get("role_name"); role != "" {
+		req.Role = &role
 	}
 
 	users, err := h.userService.GetAllUsers(r.Context(), &req)

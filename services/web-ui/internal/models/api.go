@@ -25,4 +25,6 @@ type PaginatedUsersQuery struct {
 	FullName  *string `json:"full_name,omitempty"`
 	Username  *string `json:"username,omitempty"`
 	Email     *string `json:"email,omitempty"`
+	GroupName *string `json:"group_name,omitempty"`
+	RoleName  *string `json:"role_name,omitempty"`
 }

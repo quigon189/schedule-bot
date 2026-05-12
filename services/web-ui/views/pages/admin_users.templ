@@ -28,18 +28,41 @@ templ AdminUsersContent(paginated *models.PaginatedUsers, params models.Paginate
         <!-- Фильтры -->
         <div class="card mb-3">
             <div class="card-body">
-                <form hx-get="/admin/users/table" hx-target="#usersTableContainer">
-                    <div class="row g-3">
-                        <div class="col-md-3">
+                <form hx-get="/admin/users/table" hx-target="#usersTableContainer" hx-push-url="true">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
                             <input type="text" name="full_name" class="form-control" placeholder="ФИО" value={ selectedOrEmpty(params.FullName) }>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <input type="text" name="username" class="form-control" placeholder="Логин" value={ selectedOrEmpty(params.Username) }>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <input type="text" name="email" class="form-control" placeholder="Email" value={ selectedOrEmpty(params.Email) }>
                         </div>
-                        <div class="col-md-3">
+					</div>
+					<div class="row g-3">
+						<div class="col-md-4">
+							<input type="text" name="group_name" class="form-control" placeholder="Группа" value={ selectedOrEmpty(params.Email)}>
+						</div>
+						<div class="col-md-4">
+							<select name="role_name" class="form-control">
+								if params.RoleName == nil {
+									<option value="" selected disabled>Роль</option>
+									<option value="">Все</option>
+									@selectOption(false, "admin", "Администратор")
+									@selectOption(false, "manager", "Менеджер")
+									@selectOption(false, "teacher", "Преподователь")
+									@selectOption(false, "student", "Студент")
+								} else {
+									<option value="">Все</option>
+									@selectOption(*params.RoleName == "admin", "admin", "Администратор")
+									@selectOption(*params.RoleName == "manager", "manager", "Менеджер")
+									@selectOption(*params.RoleName == "teacher", "teacher", "Преподаватель")
+									@selectOption(*params.RoleName == "student", "student", "Студент")
+								}
+							</select>
+						</div>
+                        <div class="col-md-4">
                             <button type="submit" class="btn btn-secondary w-100">Применить</button>
                         </div>
                     </div>
@@ -87,4 +110,12 @@ templ AdminUsersContent(paginated *models.PaginatedUsers, params models.Paginate
 func selectedOrEmpty(s *string) string {
     if s == nil { return "" }
     return *s
+}
+
+templ selectOption(selected bool, value, text string) {
+	if selected {
+		<option value={ value } selected>{ text }</option>
+	} else {
+		<option value={ value }>{ text }</option>
+	}
 }

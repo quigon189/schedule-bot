@@ -170,7 +170,7 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.
 	FROM auth.users u
 	WHERE username = $1
 	`
-	
+
 	rows, err := r.db.Query(ctx, query, username)
 	if err != nil {
 		return nil, err
@@ -225,7 +225,7 @@ func (r *UserRepo) GetUsersPaginated(ctx context.Context, filters *dto.UserFilte
      LIMIT 1
     ) as "group"
 	FROM auth.users u`
-	
+
 	var conditions []string
 	var args []any
 	argIndex := 1
@@ -248,6 +248,30 @@ func (r *UserRepo) GetUsersPaginated(ctx context.Context, filters *dto.UserFilte
 		argIndex++
 	}
 
+	if filters.GroupName != nil {
+		conditions = append(conditions,
+			fmt.Sprintf(`EXISTS (
+            SELECT 1 FROM auth.student_profiles s
+            JOIN auth.groups g ON g.id = s.group_id
+            WHERE s.user_id = u.id
+              AND g.name ILIKE '%%' || $%d || '%%'
+        )`, argIndex))
+		args = append(args, *filters.GroupName)
+		argIndex++
+	}
+
+	if filters.Role != nil {
+		conditions = append(conditions,
+			fmt.Sprintf(`EXISTS (
+            SELECT 1 FROM auth.user_roles ur
+            JOIN auth.roles r ON r.id = ur.role_id
+            WHERE ur.user_id = u.id
+              AND r.name ILIKE '%%' || $%d || '%%'
+        )`, argIndex))
+		args = append(args, *filters.Role)
+		argIndex++
+	}
+
 	if len(conditions) > 0 {
 		query += "\nWHERE " + strings.Join(conditions, " AND ")
 	}
@@ -264,12 +288,12 @@ func (r *UserRepo) GetUsersPaginated(ctx context.Context, filters *dto.UserFilte
 	}
 	defer rows.Close()
 
-	users, err := pgx.CollectRows(rows, pgx.RowToStructByName[models.User])	
+	users, err := pgx.CollectRows(rows, pgx.RowToStructByName[models.User])
 	if err != nil {
 		return nil, fmt.Errorf("collect rows: %w")
 	}
 
-	query = `SELECT COUNT(*) FROM auth.users`
+	query = `SELECT COUNT(*) FROM auth.users u`
 	if len(conditions) > 0 {
 		query += "\nWHERE " + strings.Join(conditions, " AND ")
 	}
@@ -341,6 +365,30 @@ func (r *UserRepo) GetAll(ctx context.Context, filters *dto.UserFilter) ([]model
 		argIndex++
 	}
 
+	if filters.GroupName != nil {
+		conditions = append(conditions,
+			fmt.Sprintf(`EXISTS (
+            SELECT 1 FROM auth.student_profiles s
+            JOIN auth.groups g ON g.id = s.group_id
+            WHERE s.user_id = u.id
+              AND g.name ILIKE '%%' || $%d || '%%'
+        )`, argIndex))
+		args = append(args, *filters.GroupName)
+		argIndex++
+	}
+
+	if filters.Role != nil {
+		conditions = append(conditions,
+			fmt.Sprintf(`EXISTS (
+            SELECT 1 FROM auth.user_roles ur
+            JOIN auth.roles r ON r.id = ur.role_id
+            WHERE ur.user_id = u.id
+              AND r.name ILIKE '%%' || $%d || '%%'
+        )`, argIndex))
+		args = append(args, *filters.Role)
+		argIndex++
+	}
+
 	if len(conditions) > 0 {
 		query += "\nWHERE " + strings.Join(conditions, " AND ")
 	}
@@ -355,7 +403,7 @@ func (r *UserRepo) GetAll(ctx context.Context, filters *dto.UserFilter) ([]model
 	if err != nil {
 		return nil, fmt.Errorf("collect rows: %w", err)
 	}
-	
+
 	return users, nil
 }
 

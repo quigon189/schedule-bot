@@ -1,0 +1,1364 @@
+Текущий каталог: /home/admin/schedule-bot/services/web-ui
+├── cmd
+|   └── main.go
+├── go.mod
+├── go.sum
+├── internal
+|   ├── api
+|   |   ├── client.go
+|   |   ├── schedule.go
+|   |   └── user.go
+|   ├── config
+|   |   └── config.go
+|   ├── handlers
+|   |   ├── admin_users.go
+|   |   ├── auth.go
+|   |   └── dashboard.go
+|   ├── middlewares
+|   |   └── auth.go
+|   ├── models
+|   |   ├── api.go
+|   |   ├── schedule.go
+|   |   ├── tokens.go
+|   |   └── user.go
+|   ├── router
+|   |   └── router.go
+|   └── session
+|       └── manager.go
+├── static
+|   ├── css
+|   |   └── main.css
+|   └── js
+|       └── main.js
+├── tmp
+|   ├── build-errors.log
+|   └── main
+└── views
+    ├── base_private.templ
+    ├── base_public.templ
+    ├── components
+    |   ├── alert.templ
+    |   ├── navbar.templ
+    |   ├── schedule.templ
+    |   ├── sidebar.templ
+    |   └── users_table.templ
+    └── pages
+        ├── admin_dashboard.templ
+        ├── admin_users.templ
+        ├── login.templ
+        └── student_dashboard.templ
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/cmd/main.go
+package main
+
+import (
+	"net/http"
+	"time"
+	"web-ui/internal/api"
+	"web-ui/internal/config"
+	"web-ui/internal/router"
+	"web-ui/internal/session"
+
+	"github.com/gorilla/sessions"
+)
+
+func main() {
+	cfg := config.Load()
+
+	cookieStore := sessions.NewCookieStore([]byte(cfg.CookieSecret))
+	cookieStore.Options = &sessions.Options{
+		Path: "/",
+		MaxAge: cfg.SessionMaxAge,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
+	sessionManager := session.NewSessionManager(cookieStore, "user-session")
+	coreClient := api.NewCoreClient("http://localhost:8088", time.Duration(cfg.CoreTimeout)*time.Second, sessionManager)
+
+	// csrfMiddleware := csrf.Protect(
+	// 	[]byte("secret-key-from-config"),
+	// 	csrf.Secure(false), // true для https
+	// 	csrf.Path("/"),
+	// 	csrf.RequestHeader("X-CSRF-Token"),
+	// )
+
+	r := router.NewRouter(coreClient, sessionManager)
+
+	http.ListenAndServe(":8181", r.Handler())
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/go.mod
+module web-ui
+
+go 1.26.2
+
+require (
+	github.com/a-h/templ v0.3.1001
+	github.com/go-chi/chi/v5 v5.2.5
+	github.com/gorilla/csrf v1.7.3
+	github.com/gorilla/sessions v1.4.0
+)
+
+require github.com/gorilla/securecookie v1.1.2 // indirect
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/api/client.go
+package api
+
+import ( "bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+	"web-ui/internal/models"
+	"web-ui/internal/session"
+)
+
+type CoreClient struct {
+	baseURL        string
+	httpClient     *http.Client
+	sessionManager *session.SessionManager
+}
+
+type request struct {
+	method  string
+	path    string
+	headers map[string]string
+	query   map[string]string
+	body    any
+}
+
+func NewCoreClient(baseURL string, timeout time.Duration, sm *session.SessionManager) *CoreClient {
+	return &CoreClient{
+		baseURL:        baseURL,
+		httpClient:     &http.Client{Timeout: timeout},
+		sessionManager: sm,
+	}
+}
+
+func (c *CoreClient) doRequest(ctx context.Context, method, path string, headers map[string]string, body any, result any) error {
+	var reqBody []byte
+	if body != nil {
+		var err error
+		reqBody, err = json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("marshal body: %w", err)
+		}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(reqBody))
+	if err != nil {
+		return fmt.Errorf("new request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("do request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var res models.Result
+	json.NewDecoder(resp.Body).Decode(&res)
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("api return status %s: %s", resp.Status, res.Error)
+	}
+
+	if !res.Success {
+		return fmt.Errorf("API error: %w", res.Error)
+	}
+
+	if result != nil && res.Data != nil {
+		return json.Unmarshal(res.Data, result)
+	}
+
+	return nil
+}
+
+func (c *CoreClient) refreshToken(ctx context.Context, jwt *models.JWT) error {
+	body := map[string]string{"refresh_token": jwt.Refresh, "session_id": jwt.SessionID}
+	headers := map[string]string{}
+	return c.doRequest(ctx, "POST", "/refresh", headers, body, jwt)
+}
+
+func (c *CoreClient) getAccessToken(w http.ResponseWriter, r *http.Request) (string, error) {
+	jwt, ok := c.sessionManager.Get(r, "jwt").(models.JWT)
+	if !ok {
+		return "", fmt.Errorf("failed to get jwt from session")
+	}
+	exiresAt := time.Unix(jwt.ExpiresAt, 0)
+	if time.Now().After(exiresAt) {
+		if err := c.refreshToken(r.Context(), &jwt); err != nil {
+			return "", err
+		}
+		c.sessionManager.Set(w, r, "jwt", jwt)
+	}
+	return jwt.AccessToken, nil
+}
+
+func (c *CoreClient) Login(r *http.Request, username, password string) (*models.JWT, error) {
+	body := map[string]string{"username": username, "password": password}
+	var jwt models.JWT
+	var clientIP string
+	if xForwardedFor := r.Header.Get("X-Forwarded-For"); xForwardedFor != "" {
+		clientIP = xForwardedFor
+	} else {
+		ips := strings.Split(r.RemoteAddr, ",")
+		clientIP = strings.TrimSpace(ips[0])
+	}
+	headers := map[string]string{
+		"User-Agent":      r.Header.Get("User-Agent"),
+		"X-Forwarded-For": clientIP,
+	}
+	if err := c.doRequest(r.Context(), "POST", "/login", headers, body, &jwt); err != nil {
+		return nil, err
+	}
+
+	return &jwt, nil
+}
+
+func (c *CoreClient) Logout(w http.ResponseWriter, r *http.Request) error {
+	req := request {
+		method: "GET",
+		path: "/logout",
+	}
+
+	c.sessionManager.Logout(w, r)
+
+	return c.Do(w, r, req, nil)
+}
+
+func (c *CoreClient) Do(w http.ResponseWriter, r *http.Request, req request, result any) error {
+	accessToken, err := c.getAccessToken(w, r)
+	if err != nil {
+		return fmt.Errorf("get access token: %w", err)
+	}
+
+	headers := make(map[string]string)
+	headers["Authorization"] = fmt.Sprintf("Bearer %s", accessToken)
+
+	for key, value := range req.headers {
+		headers[key] = value
+	}
+
+	u, err := url.Parse(req.path)
+	if err != nil {
+		return fmt.Errorf("parse path: %w", err)
+	}
+
+	q := u.Query()
+	for key, value := range req.query {
+		q.Set(key, value)
+	}
+	u.RawQuery = q.Encode()
+
+	return c.doRequest(r.Context(), req.method, u.String(), headers, req.body, result)
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/api/schedule.go
+package api
+
+import (
+	"fmt"
+	"net/http"
+	"strconv"
+	"web-ui/internal/models"
+)
+
+// GetGroupSchedule возвращает расписание группы
+func (c *CoreClient) GetGroupSchedule(w http.ResponseWriter, r *http.Request, groupID int, periodID *int) (*models.ScheduleData, error) {
+	var entries []models.ScheduleEntry
+	req := request{
+		method: "GET", 
+		path: fmt.Sprintf("/schedule/group/%d", groupID),
+	}
+	if periodID != nil {
+		req.query = map[string]string{
+			"period_id": strconv.Itoa(*periodID),
+		}
+	}
+	if err := c.Do(w, r, req, &entries); err != nil {
+		return nil, err
+	}
+
+	return &models.ScheduleData{Entries: entries}, nil
+}
+
+// GetFilteredSchedule получает расписание с фильтрацией (группа, преподаватель, аудитория, период)
+func (c *CoreClient) GetFilteredSchedule(groupID, teacherID, audienceID, periodID *int) ([]models.ScheduleEntry, error) {
+	path := "/schedule?"
+	if groupID != nil {
+		path += fmt.Sprintf("group_id=%d&", *groupID)
+	}
+	if teacherID != nil {
+		path += fmt.Sprintf("teacher_id=%d&", *teacherID)
+	}
+	if audienceID != nil {
+		path += fmt.Sprintf("audience_id=%d&", *audienceID)
+	}
+	if periodID != nil {
+		path += fmt.Sprintf("academic_period_id=%d&", *periodID)
+	}
+	// убираем последний &
+	if len(path) > 0 && path[len(path)-1] == '&' {
+		path = path[:len(path)-1]
+	}
+	var entries []models.ScheduleEntry
+	req := request{method: "GET", path: path}
+	if err := c.Do(nil, nil, req, &entries); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/api/user.go
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+	"web-ui/internal/models"
+)
+
+func (c *CoreClient) GetCurrentUser(w http.ResponseWriter, r *http.Request) (*models.User, error) {
+	var user models.User
+	req := request{
+		method: "GET",
+		path:   "/user",
+	}
+
+	if err := c.Do(w, r, req, &user); err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func (c *CoreClient) GetPaginatedUsers(w http.ResponseWriter, r *http.Request, params models.PaginatedUsersQuery) (*models.PaginatedUsers, error) {
+	var paginatedUsers models.PaginatedUsers
+	var query map[string]string
+	data, _ := json.Marshal(params)
+	if err := json.Unmarshal(data, &query); err != nil {
+		return nil, err
+	}
+	req := request{
+		method: "GET",
+		path:   "/admin/users/paginated",
+		query: query,
+	}
+
+	if err := c.Do(w, r, req, &paginatedUsers); err != nil {
+		return nil, err
+	}
+
+	return &paginatedUsers, nil
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/config/config.go
+package config
+
+import (
+	"os"
+	"strconv"
+)
+
+type Config struct {
+	CoreURL       string
+	CoreTimeout   int
+	CookieSecret  string
+	SessionMaxAge int
+}
+
+func Load() *Config {
+	return &Config{
+		CoreURL:       getEnv("CORE_URL", "http://localhost:8080"),
+		CoreTimeout:   getIntEnv("CORE_TIMEOUT", 30),
+		CookieSecret:  getEnv("COOKIE_SECRET", "very-secret-key"),
+		SessionMaxAge: getIntEnv("SESSION_MAX_AGE", 3600),
+	}
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func getIntEnv(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/handlers/admin_users.go
+package handlers
+
+import (
+	"log"
+	"net/http"
+	"strconv"
+	"web-ui/internal/api"
+	"web-ui/internal/models"
+	"web-ui/internal/session"
+	"web-ui/views/components"
+	"web-ui/views/pages"
+)
+
+type AdminUsersHandler struct {
+    coreClient     *api.CoreClient
+    sessionManager *session.SessionManager
+}
+
+func NewAdminUsersHandler(client *api.CoreClient, sm *session.SessionManager) *AdminUsersHandler {
+    return &AdminUsersHandler{coreClient: client, sessionManager: sm}
+}
+
+// GET /admin/users — страница со списком пользователей
+func (h *AdminUsersHandler) ListUsersPage(w http.ResponseWriter, r *http.Request) {
+    user, err := h.coreClient.GetCurrentUser(w, r)
+    if err != nil {
+        h.sessionManager.Logout(w, r)
+        w.Header().Set("HX-Redirect", "/login")
+        return
+    }
+    if !user.HasRole("admin") {
+        http.NotFound(w, r)
+        return
+    }
+
+    // Параметры фильтрации из query
+    page := 1
+    if p := r.URL.Query().Get("page"); p != "" {
+        if val, err := strconv.Atoi(p); err == nil && val > 0 {
+            page = val
+        }
+    }
+    perPage := 20
+    if pp := r.URL.Query().Get("per_page"); pp != "" {
+        if val, err := strconv.Atoi(pp); err == nil && val > 0 {
+            perPage = val
+        }
+    }
+    sortBy := r.URL.Query().Get("sort_by")
+    sortOrder := r.URL.Query().Get("sort_order")
+    fullName := r.URL.Query().Get("full_name")
+    username := r.URL.Query().Get("username")
+    email := r.URL.Query().Get("email")
+
+    params := models.PaginatedUsersQuery{
+        Page:      &page,
+        PerPage:   &perPage,
+        SortBy:    stringPtrOrNil(sortBy),
+        SortOrder: stringPtrOrNil(sortOrder),
+        FullName:  stringPtrOrNil(fullName),
+        Username:  stringPtrOrNil(username),
+        Email:     stringPtrOrNil(email),
+    }
+
+    paginated, err := h.coreClient.GetPaginatedUsers(w, r, params)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    // Рендерим всю страницу (базовый шаблон + контент)
+    pages.AdminUsersPage(user, paginated, params).Render(r.Context(), w)
+}
+
+// GET /admin/users/table?page=...&full_name=... — HTMX-фрагмент таблицы
+func (h *AdminUsersHandler) TableFragment(w http.ResponseWriter, r *http.Request) {
+    page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+    if page < 1 { page = 1 }
+    perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+    if perPage < 1 { perPage = 10 }
+    params := models.PaginatedUsersQuery{
+        Page: &page, PerPage: &perPage,
+		SortBy: stringPtrOrNil(r.URL.Query().Get("sort_by")),
+    	SortOrder: stringPtrOrNil(r.URL.Query().Get("sort_order")),
+        FullName: stringPtrOrNil(r.URL.Query().Get("full_name")),
+        Username: stringPtrOrNil(r.URL.Query().Get("username")),
+        Email:    stringPtrOrNil(r.URL.Query().Get("email")),
+    }
+    paginated, err := h.coreClient.GetPaginatedUsers(w, r, params)
+    if err != nil {
+		log.Printf("failed to get paginated users")
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    components.UsersTable(paginated, params).Render(r.Context(), w)
+}
+//
+// // GET /admin/users/new — форма создания пользователя
+// func (h *AdminUsersHandler) NewUserForm(w http.ResponseWriter, r *http.Request) {
+//     // Получаем списки групп и ролей для выпадающих списков (можно добавить методы в API)
+//     // Упростим: пока роли и группы будут загружаться через отдельные вызовы, но для демки сделаем статические заглушки
+//     // Лучше добавить в API: /roles, /groups
+//     // Пока передадим пустые слайсы, а в реальном проекте доработать
+//     components.UserForm(nil, nil, nil).Render(r.Context(), w)
+// }
+//
+// // POST /admin/users — создание пользователя
+// func (h *AdminUsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+//     req := models.CreateUserRequest{
+//         Username: r.FormValue("username"),
+//         Password: r.FormValue("password"),
+//         FullName: r.FormValue("full_name"),
+//         Email:    r.FormValue("email"),
+//     }
+//     // role_ids из формы
+//     if roleIDs := r.FormValue("role_ids"); roleIDs != "" {
+//         // парсим, например "1,2,3"
+//     }
+//     // group_id
+//     if gid := r.FormValue("group_id"); gid != "" {
+//         id, _ := strconv.Atoi(gid)
+//         req.GroupID = &id
+//     }
+//
+//     _, err := h.coreClient.CreateUser(w, r, req)
+//     if err != nil {
+//         components.ErrorAlert(err.Error()).Render(r.Context(), w)
+//         return
+//     }
+//     // После успешного создания редиректим на список
+//     w.Header().Set("HX-Redirect", "/admin/users")
+//     w.WriteHeader(http.StatusOK)
+// }
+//
+// // GET /admin/users/{id}/edit — форма редактирования
+// func (h *AdminUsersHandler) EditUserForm(w http.ResponseWriter, r *http.Request) {
+//     idStr := chi.URLParam(r, "id")
+//     id, _ := strconv.Atoi(idStr)
+//     user, err := h.coreClient.GetUser(w, r, id)
+//     if err != nil {
+//         http.Error(w, err.Error(), http.StatusNotFound)
+//         return
+//     }
+//     components.UserForm(user, nil, nil).Render(r.Context(), w)
+// }
+//
+// // PUT /admin/users/{id} — обновление
+// func (h *AdminUsersHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+//     idStr := chi.URLParam(r, "id")
+//     id, _ := strconv.Atoi(idStr)
+//     req := models.UpdateUserRequest{
+//         FullName: r.FormValue("full_name"),
+//         Email:    r.FormValue("email"),
+//     }
+//     if pwd := r.FormValue("password"); pwd != "" {
+//         req.Password = &pwd
+//     }
+//     // role_ids, group_id аналогично
+//     _, err := h.coreClient.UpdateUser(w, r, id, req)
+//     if err != nil {
+//         components.ErrorAlert(err.Error()).Render(r.Context(), w)
+//         return
+//     }
+//     w.Header().Set("HX-Redirect", "/admin/users")
+//     w.WriteHeader(http.StatusOK)
+// }
+//
+// // DELETE /admin/users/{id} — удаление
+// func (h *AdminUsersHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+//     idStr := chi.URLParam(r, "id")
+//     id, _ := strconv.Atoi(idStr)
+//     err := h.coreClient.DeleteUser(w, r, id)
+//     if err != nil {
+//         w.WriteHeader(http.StatusInternalServerError)
+//         w.Write([]byte(err.Error()))
+//         return
+//     }
+//     w.WriteHeader(http.StatusOK)
+// }
+
+func stringPtrOrNil(s string) *string {
+    if s == "" {
+        return nil
+    }
+    return &s
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/handlers/auth.go
+package handlers
+
+import (
+	"log"
+	"net/http"
+	"web-ui/internal/api"
+	"web-ui/internal/session"
+	"web-ui/views/components"
+	"web-ui/views/pages"
+)
+
+type AuthHandler struct {
+	coreClient     *api.CoreClient
+	sessionManager *session.SessionManager
+}
+
+func NewAuthHandler(client *api.CoreClient, sm *session.SessionManager) *AuthHandler {
+	return &AuthHandler{coreClient: client, sessionManager: sm}
+}
+
+// GET /login - отображает страницу входа
+func (h *AuthHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
+	pages.LoginPage("").Render(r.Context(), w)
+}
+
+// POST /login - обрабатывает форму
+func (h *AuthHandler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+
+	if username == "" || password == "" {
+		errorMsg := "Заполните обя поля"
+		components.ErrorAlert(errorMsg).Render(r.Context(), w)
+		return
+	}
+
+	token, err := h.coreClient.Login(r, username, password)
+	if err != nil {
+		log.Printf("error: %v", err)
+		errorMsg := "Неверный логин или пароль"
+		components.ErrorAlert(errorMsg).Render(r.Context(), w)
+		return
+	}
+
+	if err := h.sessionManager.Set(w, r, "jwt", token); err != nil {
+		log.Printf("failed to set jwt in session: %v", err)
+	}
+
+	w.Header().Set("HX-Redirect", "/")
+	w.WriteHeader(http.StatusOK)
+}
+
+// POST /logout — выход (удаляем cookie)
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	h.coreClient.Logout(w, r)
+	// Для HTMX редиректим на логин
+	w.Header().Set("HX-Redirect", "/login")
+	w.WriteHeader(http.StatusOK)
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/handlers/dashboard.go
+package handlers
+
+import (
+	"net/http"
+	"web-ui/internal/api"
+	"web-ui/internal/session"
+	"web-ui/views/components"
+	"web-ui/views/pages"
+
+	"github.com/gorilla/csrf"
+)
+
+type DashboardHandler struct {
+	coreClient     *api.CoreClient
+	sessionManager *session.SessionManager
+}
+
+func NewDashboardHandler(client *api.CoreClient, sm *session.SessionManager) *DashboardHandler {
+	return &DashboardHandler{coreClient: client, sessionManager: sm}
+}
+
+func (h *DashboardHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
+	user, err := h.coreClient.GetCurrentUser(w, r)
+	if err != nil {
+		h.sessionManager.Logout(w, r)
+		w.Header().Set("HX-Redirect", "/login")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	csrfToken := csrf.Token(r)
+
+	if user.HasRole("admin") {
+		pages.AdminDashboardPage(csrfToken, user).Render(r.Context(), w)
+	} else if user.HasRole("student") {
+		var props components.ScheduleViewProps
+		if user.Group != nil {
+			scheduleData, err := h.coreClient.GetGroupSchedule(w, r, user.Group.ID, nil)
+			if err == nil {
+				props.Data = *scheduleData
+			}
+		}
+		props.ShowTeacher = true
+		props.ShowAudience = true
+		pages.StudentDashboardPage(csrfToken, user, props).Render(r.Context(), w)
+	} else {
+		h.sessionManager.Logout(w, r)
+		w.Header().Set("HX-Redirect", "/login")
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/middlewares/auth.go
+package middlewares
+
+import (
+	"net/http"
+	"web-ui/internal/models"
+	"web-ui/internal/session"
+)
+
+func AuthMiddleware(sm *session.SessionManager) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, ok := sm.Get(r, "jwt").(models.JWT)
+			if !ok {
+				// Нет токена — редирект на логин
+				// Для запросов HTMX отдаём редирект-заголовок
+				if r.Header.Get("HX-Request") == "true" {
+					w.Header().Set("HX-Redirect", "/login")
+					w.WriteHeader(http.StatusUnauthorized)
+				} else {
+					http.Redirect(w, r, "/login", http.StatusSeeOther)
+				}
+				return
+			}
+			
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/models/api.go
+package models
+
+import "encoding/json"
+
+type Result struct {
+	Success bool            `json:"success"`
+	Data    json.RawMessage `json:"data"`
+	Message string          `json:"message"`
+	Error   string          `json:"error"`
+}
+
+type PaginatedUsers struct {
+	Users      []User `json:"users"`
+	Total      int    `json:"total"`
+	TotalPages int    `json:"total_pages"`
+	Page       int    `json:"page"`
+	PerPage    int    `json:"per_page"`
+}
+
+type PaginatedUsersQuery struct {
+	Page      *int    `json:"page,string,omitempty"`
+	PerPage   *int    `json:"per_page,string,omitempty"`
+	SortBy    *string `json:"sort_by,omitempty"`
+	SortOrder *string `json:"sort_order,omitempty"`
+	FullName  *string `json:"full_name,omitempty"`
+	Username  *string `json:"username,omitempty"`
+	Email     *string `json:"email,omitempty"`
+	GroupName *string `json:"group_name,omitempty"`
+	RoleName  *string `json:"role_name,omitempty"`
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/models/schedule.go
+package models
+
+import "time"
+
+type Student struct {
+	User  User  `json:"user"`
+	Group Group `json:"group"`
+}
+
+type AcademicPeriod struct {
+	ID        int       `json:"id"`
+	Year      string    `json:"year"`
+	Semester  int       `json:"semester"`
+	StartDate time.Time `json:"start_date"`
+	EndDate   time.Time `json:"end_date"`
+}
+
+type Audience struct {
+	ID     int    `json:"id"`
+	Name   string `json:"name"`
+	Number string `json:"number"`
+}
+
+type Subject struct {
+	ID        int    `json:"id"`
+	Title     string `json:"title"`
+	GroupID   int    `json:"group_id"`
+	GroupName string `json:"group_name"` // добавим для удобства
+}
+
+type Teacher struct {
+	ID       int    `json:"id"`
+	FullName string `json:"full_name"`
+}
+
+type ScheduleEntry struct {
+	DayOfWeek int      `json:"day_of_week"`
+	Number    int      `json:"number"`
+	WeekType  int      `json:"week_type"` // 0 - обе, 1 - числитель, 2 - знаменатель
+	Subject   Subject  `json:"subject"`
+	Teacher   Teacher  `json:"teacher"`
+	Audience  Audience `json:"audience"`
+}
+
+type ScheduleData struct {
+	Period         AcademicPeriod  `json:"period"`
+	GroupName      string          `json:"group_name,omitempty"`
+	TeacherName    string          `json:"teacher_name,omitempty"`
+	AudienceNumber string          `json:"audience_number,omitempty"`
+	Entries        []ScheduleEntry `json:"entries"`
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/models/tokens.go
+package models
+
+type JWT struct {
+	AccessToken string   `json:"access_token"`
+	Refresh     string   `json:"refresh_token"`
+	ExpiresAt   int64    `json:"expires_at"`
+	SessionID   string   `json:"session_id"`
+	Roles       []string `json:"roles"`
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/models/user.go
+package models
+
+import "slices"
+
+type Role struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type User struct {
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+	Roles    []Role `json:"roles"`
+	Group    *Group `json:"group"`
+}
+
+type Group struct {
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	Specialty     string `json:"specialty"`
+	AdmissionYear int    `json:"admission_year"`
+}
+
+func (u *User) HasRole(role string) bool {
+	return slices.ContainsFunc(u.Roles, func(r Role) bool {
+		return r.Name == role
+	})
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/router/router.go
+package router
+
+import (
+	"net/http"
+	"web-ui/internal/api"
+	"web-ui/internal/handlers"
+	"web-ui/internal/middlewares"
+	"web-ui/internal/session"
+
+	"github.com/go-chi/chi/v5"
+)
+
+type Router struct {
+	sessionManager *session.SessionManager
+	coreClient     *api.CoreClient
+	router         *chi.Mux
+}
+
+func NewRouter(client *api.CoreClient, sm *session.SessionManager) *Router {
+	router := Router{
+		coreClient: client,
+		sessionManager: sm,
+		router: chi.NewRouter(),
+	}
+
+	router.SetupRoutes()
+
+	return &router
+}
+
+func (r *Router) Handler() *chi.Mux {
+	return r.router
+}
+
+func (r *Router) SetupRoutes() {
+	sm := r.sessionManager
+	authHandler := handlers.NewAuthHandler(r.coreClient, r.sessionManager)	
+	dashboardHandler := handlers.NewDashboardHandler(r.coreClient, r.sessionManager)
+	adminUsersHandler := handlers.NewAdminUsersHandler(r.coreClient, r.sessionManager)
+
+	r.router.Get("/login", authHandler.LoginPage)
+	r.router.Post("/login", authHandler.LoginSubmit)
+
+	r.router.Group(func(r chi.Router) {
+		//r.Use(csrfMiddleware)
+		r.Use(middlewares.AuthMiddleware(sm))
+		r.Get("/", dashboardHandler.Dashboard)
+		r.Post("/logout", authHandler.Logout)
+		r.Get("/admin/users", adminUsersHandler.ListUsersPage)
+		r.Get("/admin/users/table", adminUsersHandler.TableFragment)
+	})
+
+	r.router.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/internal/session/manager.go
+package session
+
+import (
+	"encoding/gob"
+	"net/http"
+	"web-ui/internal/models"
+
+	"github.com/gorilla/sessions"
+)
+
+type SessionManager struct {
+	store sessions.Store
+	name string
+}
+
+func NewSessionManager(store sessions.Store, name string) *SessionManager {
+	gob.Register(models.JWT{})
+	return &SessionManager{
+		store: store,
+		name: name,
+	}
+}
+
+func (m *SessionManager) Set(w http.ResponseWriter, r *http.Request, key string, value any) error {
+	session, err := m.store.Get(r, m.name)
+	if err != nil {
+		return err
+	}
+	session.Values[key] = value
+	return session.Save(r,w)
+}
+
+func (m *SessionManager) Get(r *http.Request, key string) any {
+	session, _ := m.store.Get(r, m.name)
+	return session.Values[key]
+}
+
+func (m *SessionManager) Delete(w http.ResponseWriter, r *http.Request, key string) error {
+	session, err := m.store.Get(r, m.name)
+	if err != nil {
+		return err
+	}
+	delete(session.Values, key)
+	return sessions.Save(r, w)
+}
+
+func (m *SessionManager) Logout(w http.ResponseWriter, r *http.Request) error {
+	session, err := m.store.Get(r, m.name)
+	if err != nil {
+		return err
+	}
+	session.Options.MaxAge = -1
+	return sessions.Save(r, w)
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/static/css/main.css
+/* static/css/main.css */
+
+/* ----- Sidebar (вертикальное меню) ----- */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 260px;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #ecf0f1;
+    transition: width 0.3s ease;
+    z-index: 1030;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+}
+
+.sidebar.collapsed {
+    width: 60px;
+}
+
+/* Заголовок + кнопка в одной строке */
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0.75rem 0.75rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    min-height: 56px;
+}
+
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.sidebar-brand i {
+    font-size: 1.3rem;
+    flex-shrink: 0;
+}
+
+.sidebar.collapsed .sidebar-brand span {
+    display: none;
+}
+
+/* Кнопка сворачивания */
+.btn-toggle {
+    background: transparent;
+    border: none;
+    color: #ecf0f1;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.2s;
+    flex-shrink: 0;
+}
+
+.btn-toggle:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+.sidebar.collapsed .btn-toggle i {
+    transform: rotate(180deg);
+}
+
+/* Навигация */
+.sidebar .nav {
+    flex: 1;
+    padding: 1rem 0;
+}
+
+.sidebar .nav-link {
+    color: #ecf0f1;
+    padding: 0.65rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    white-space: nowrap;
+    transition: background 0.2s;
+    border-radius: 0;
+}
+
+.sidebar .nav-link i {
+    font-size: 1.2rem;
+    min-width: 24px;
+    text-align: center;
+}
+
+.sidebar .nav-link span {
+    transition: opacity 0.2s;
+}
+
+.sidebar.collapsed .nav-link span {
+    opacity: 0;
+    width: 0;
+    display: none;
+}
+
+.sidebar .nav-link:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.sidebar .nav-link.active {
+    background: rgba(255,255,255,0.2);
+    border-left: 3px solid #f39c12;
+}
+
+/* Footer сайдбара (информация о пользователе) */
+.sidebar-footer {
+    padding: 0.75rem;
+    font-size: 0.85rem;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.sidebar-footer .user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.sidebar-footer .user-info i {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+
+.sidebar-footer .user-details {
+    overflow: hidden;
+}
+
+.sidebar-footer .user-name {
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.sidebar-footer .user-role {
+    font-size: 0.7rem;
+    opacity: 0.8;
+}
+
+.sidebar-footer .user-actions {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.sidebar-footer .user-actions a {
+    color: #ecf0f1;
+    text-decoration: none;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sidebar-footer .user-actions a:hover {
+    text-decoration: underline;
+}
+
+.sidebar.collapsed .sidebar-footer .user-details,
+.sidebar.collapsed .sidebar-footer .user-actions span {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-footer .user-info i {
+    margin: 0 auto;
+}
+
+/* Основной контент */
+.main-content {
+    margin-left: 260px;
+    transition: margin-left 0.3s ease;
+    padding: 1rem;
+    min-height: 100vh;
+}
+
+.main-content.expanded {
+    margin-left: 70px;
+}
+
+/* Breadcrumbs */
+.breadcrumb-container {
+    background: #f8f9fa;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.breadcrumb {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.breadcrumb-item a {
+    text-decoration: none;
+    color: #6c757d;
+}
+
+.breadcrumb-item.active {
+    color: #2c3e50;
+}
+
+/* Адаптивность: на маленьких экранах меню сворачивается автоматически */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 70px;
+    }
+    .sidebar .sidebar-brand span,
+    .sidebar .nav-link span,
+    .sidebar-footer .user-details,
+    .sidebar-footer .user-actions span {
+        display: none;
+    }
+    .main-content {
+        margin-left: 70px;
+    }
+    .btn-toggle i {
+        transform: rotate(180deg);
+    }
+}
+
+/* ... предыдущие стили ... */
+
+/* Кнопка сворачивания — показывается только в развёрнутом состоянии */
+.btn-toggle {
+    background: transparent;
+    border: none;
+    color: #ecf0f1;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.2s;
+    flex-shrink: 0;
+}
+
+.btn-toggle:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+/* В свёрнутом сайдбаре кнопка скрывается */
+.sidebar.collapsed .btn-toggle {
+    display: none;
+}
+
+/* Поворот иконки (не влияет, так как кнопка скрыта, но оставим) */
+.sidebar.collapsed .btn-toggle i {
+    transform: rotate(180deg);
+}
+
+/* Стили для расписания */
+.schedule-table td {
+    vertical-align: top;
+    padding: 8px;
+}
+.schedule-cell {
+    min-width: 120px;
+}
+.lesson-entry {
+    border-bottom: 1px solid #eee;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+}
+.lesson-entry:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+.day-header {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+
+.no-transition {
+    transition: none !important;
+}
+
+--------------------------
+Файл: /home/admin/schedule-bot/services/web-ui/static/js/main.js
+htmx.onLoad(function(target) {
+    // Ищем элементы внутри target (нового контента) или во всем документе
+    const sidebar = document.querySelector('.sidebar');
+    const toggleBtn = document.querySelector('#toggleSidebarBtn');
+    const brand = document.querySelector('.sidebar-brand');
+    const mainContent = document.querySelector('.main-content');
+
+    if (!sidebar || !toggleBtn || !brand) return;
+
+    // 1. Восстанавливаем состояние из localStorage
+    const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+    if (isCollapsed) {
+        sidebar.classList.add('collapsed');
+        mainContent?.classList.add('expanded');
+    } else {
+        sidebar.classList.remove('collapsed');
+        mainContent?.classList.remove('expanded');
+    }
+
+    // 2. Сворачивание/разворачивание (удаляем старый слушатель, если есть, и вешаем новый)
+    toggleBtn.onclick = function(e) {
+        e.stopPropagation();
+        sidebar.classList.toggle('collapsed');
+        mainContent?.classList.toggle('expanded');
+        const collapsed = sidebar.classList.contains('collapsed');
+        localStorage.setItem('sidebarCollapsed', collapsed);
+    };
+
+    // 3. Разворачивание по клику на логотип
+    brand.onclick = function() {
+        if (sidebar.classList.contains('collapsed')) {
+            sidebar.classList.remove('collapsed');
+            mainContent?.classList.remove('expanded');
+            localStorage.setItem('sidebarCollapsed', 'false');
+        }
+    };
+});
+
+// document.addEventListener('DOMContentLoaded', function() {
+//     const sidebar = document.querySelector('.sidebar');
+//     const toggleBtn = document.getElementById('toggleSidebarBtn');
+//     const brand = document.querySelector('.sidebar-brand');
+//     const mainContent = document.querySelector('.main-content');
+//
+//     if (!toggleBtn || !brand) return;
+//
+//     // Восстанавливаем состояние из localStorage
+//     const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+//     if (isCollapsed) {
+//         sidebar.classList.add('collapsed');
+//         mainContent.classList.add('expanded');
+//     }
+//
+//     // Сворачивание/разворачивание по кнопке
+//     toggleBtn.addEventListener('click', function(e) {
+//         e.stopPropagation();
+//         sidebar.classList.toggle('collapsed');
+//         mainContent.classList.toggle('expanded');
+//         const collapsed = sidebar.classList.contains('collapsed');
+//         localStorage.setItem('sidebarCollapsed', collapsed);
+//     });
+//
+//     // Разворачивание по клику на логотип (только если свёрнут)
+//     brand.addEventListener('click', function() {
+//         if (sidebar.classList.contains('collapsed')) {
+//             sidebar.classList.remove('collapsed');
+//             mainContent.classList.remove('expanded');
+//             localStorage.setItem('sidebarCollapsed', 'false');
+//         }
+//     });
+// });
+//
+// document.body.addEventListener('htmx:configRequest', (event) => {
+//     const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+//     event.detail.headers['X-CSRF-Token'] = token;
+// });
+
