@@ -18,12 +18,12 @@ type User struct {
 }
 
 type CreateUserRequest struct {
-	Username string  `json:"username"`
-	FullName string  `json:"full_name"`
-	Email    string  `json:"email"`
-	Password string  `json:"password"`
-	Role     string  `json:"role"`
-	Group    *string `json:"group"`
+	Username string `json:"username"`
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Role     string `json:"role"`
+	GroupID  *int   `json:"group_id"`
 }
 
 type Group struct {

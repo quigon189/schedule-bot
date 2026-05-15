@@ -29,6 +29,7 @@ func (h *TeacherHandler) CreateTeacher(w http.ResponseWriter, r *http.Request) {
 
 	if err := dto.ValidateStruct(req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
 	}
 
 	teacher, err := h.scheduleService.CreateTeacher(r.Context(), &req)

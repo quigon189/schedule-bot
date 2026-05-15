@@ -67,7 +67,7 @@ func (c *CoreClient) doRequest(ctx context.Context, method, path string, headers
 	}
 
 	if !res.Success {
-		return fmt.Errorf("API error: %w", res.Error)
+		return fmt.Errorf("API error: %s", res.Error)
 	}
 
 	if result != nil && res.Data != nil {
@@ -113,7 +113,7 @@ func (c *CoreClient) Login(r *http.Request, username, password string) (*models.
 		"X-Forwarded-For": clientIP,
 	}
 	if err := c.doRequest(r.Context(), "POST", "/login", headers, body, &jwt); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("do request: %w", err)
 	}
 
 	return &jwt, nil

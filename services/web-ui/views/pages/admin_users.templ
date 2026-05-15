@@ -17,7 +17,7 @@ templ AdminUsersContent(paginated *models.PaginatedUsers, params models.Paginate
             <h1 class="h3">Пользователи</h1>
             <button class="btn btn-primary"
                 hx-get="/admin/users/new"
-                hx-target="body"
+                hx-target="#userModalContent"
                 hx-swap="beforeend"
                 data-bs-toggle="modal"
                 data-bs-target="#userModal">
@@ -88,7 +88,7 @@ templ AdminUsersContent(paginated *models.PaginatedUsers, params models.Paginate
 
     <script>
         document.body.addEventListener('htmx:afterSwap', function(evt) {
-            if (evt.detail.target.id === 'userModalContent') {
+            if (evt.detail.target.id === 'userModalContent' || evt.detail.target.id === 'alertError') {
                 new bootstrap.Modal(document.getElementById('userModal')).show();
             }
         });

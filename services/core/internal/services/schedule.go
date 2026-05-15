@@ -397,8 +397,8 @@ func (s *ScheduleService) GetSubjectsByDate(ctx context.Context, startDate, endD
 	return s.subjectRepo.GetSubjectsByDate(ctx, startDate, endDate)
 }
 
-func (s *ScheduleService) GetSubjectsByGroupID(ctx context.Context, groupID int, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
-	return s.subjectRepo.GetSubjectsByGroupID(ctx, groupID, req)
+func (s *ScheduleService) GetSubjectsByGroupID(ctx context.Context, groupID int) ([]models.Subject, error) {
+	return s.subjectRepo.GetSubjectsByGroupID(ctx, groupID)
 }
 
 func (s *ScheduleService) UpdateSubject(ctx context.Context, id int, req *dto.UpdateSubjectRequest) (*models.Subject, error) {

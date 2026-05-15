@@ -136,11 +136,15 @@ func (h *AdminUsersHandler) TableFragment(w http.ResponseWriter, r *http.Request
 
 // GET /admin/users/new — форма создания пользователя
 func (h *AdminUsersHandler) NewUserForm(w http.ResponseWriter, r *http.Request) {
-    // Получаем списки групп и ролей для выпадающих списков (можно добавить методы в API)
-    // Упростим: пока роли и группы будут загружаться через отдельные вызовы, но для демки сделаем статические заглушки
-    // Лучше добавить в API: /roles, /groups
-    // Пока передадим пустые слайсы, а в реальном проекте доработать
-    components.UserForm(nil, nil, nil).Render(r.Context(), w)
+	groups, err := h.coreClient.GetGroups(w, r)
+	if err != nil {
+		groups = []models.Group{}
+	}
+	roles := []models.Role{
+		models.Role{Name: "student"},
+		models.Role{Name: "teacher"},
+	}
+    components.NewUserForm(roles, groups).Render(r.Context(), w)
 }
 
 // POST /admin/users — создание пользователя
@@ -150,20 +154,17 @@ func (h *AdminUsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
         Password: r.FormValue("password"),
         FullName: r.FormValue("full_name"),
         Email:    r.FormValue("email"),
+		Role: r.FormValue("role"),
     }
-    // role_ids из формы
-    if roleIDs := r.FormValue("role_ids"); roleIDs != "" {
-        // парсим, например "1,2,3"
-    }
-    // group_id
     if gid := r.FormValue("group_id"); gid != "" {
         id, _ := strconv.Atoi(gid)
         req.GroupID = &id
     }
 
-    _, err := h.coreClient.CreateUser(w, r, req)
+    err := h.coreClient.CreateUser(w, r, req)
     if err != nil {
         components.ErrorAlert(err.Error()).Render(r.Context(), w)
+		w.WriteHeader(http.StatusBadRequest)
         return
     }
     // После успешного создания редиректим на список
@@ -172,16 +173,16 @@ func (h *AdminUsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /admin/users/{id}/edit — форма редактирования
-func (h *AdminUsersHandler) EditUserForm(w http.ResponseWriter, r *http.Request) {
-    idStr := chi.URLParam(r, "id")
-    id, _ := strconv.Atoi(idStr)
-    user, err := h.coreClient.GetUser(w, r, id)
-    if err != nil {
-        http.Error(w, err.Error(), http.StatusNotFound)
-        return
-    }
-    components.UserForm(user, nil, nil).Render(r.Context(), w)
-}
+// func (h *AdminUsersHandler) EditUserForm(w http.ResponseWriter, r *http.Request) {
+//     idStr := chi.URLParam(r, "id")
+//     id, _ := strconv.Atoi(idStr)
+//     user, err := h.coreClient.GetUser(w, r, id)
+//     if err != nil {
+//         http.Error(w, err.Error(), http.StatusNotFound)
+//         return
+//     }
+//     components.UserForm(user, nil, nil).Render(r.Context(), w)
+// }
 //
 // // PUT /admin/users/{id} — обновление
 // func (h *AdminUsersHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {

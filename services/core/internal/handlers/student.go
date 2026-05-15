@@ -29,6 +29,7 @@ func (h *StudentHandler) CreateStudent(w http.ResponseWriter, r *http.Request) {
 
 	if err := dto.ValidateStruct(req); err != nil {
 		utils.ErrorResponse(w, http.StatusBadRequest, fmt.Sprintf("validate: %v", err))
+		return
 	}
 
 	student, err := h.scheduleService.CreateStudent(r.Context(), &req)

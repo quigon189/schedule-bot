@@ -52,6 +52,8 @@ func (r *Router) SetupRoutes() {
 		r.Post("/logout", authHandler.Logout)
 		r.Get("/admin/users", adminUsersHandler.ListUsersPage)
 		r.Get("/admin/users/table", adminUsersHandler.TableFragment)
+		r.Get("/admin/users/new", adminUsersHandler.NewUserForm)
+		r.Post("/admin/users", adminUsersHandler.CreateUser)
 	})
 
 	r.router.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))

@@ -84,18 +84,8 @@ func (h *SubjectHandler) GetSubjectsByGroup(w http.ResponseWriter, r *http.Reque
 		utils.ErrorResponse(w, http.StatusBadRequest, "invalid group_id")
 		return
 	}
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
-	sortBy := r.URL.Query().Get("sort_by")
-	sortOrder := r.URL.Query().Get("sort_order")
-
-	req := dto.PaginatedSubjectsRequest{
-		Page:      page,
-		PerPage:   perPage,
-		SortBy:    sortBy,
-		SortOrder: sortOrder,
-	}
-	resp, err := h.scheduleService.GetSubjectsByGroupID(r.Context(), groupID, &req)
+	
+	resp, err := h.scheduleService.GetSubjectsByGroupID(r.Context(), groupID)
 	if err != nil {
 		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("failed to get subjects: %v", err))
 		return

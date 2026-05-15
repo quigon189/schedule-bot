@@ -50,10 +50,10 @@ func (c *CoreClient) CreateUser(w http.ResponseWriter, r *http.Request, req mode
 
 	switch req.Role {
 	case "student":
-		if req.Group == nil {
+		if req.GroupID == nil {
 			return errors.New("group is required")
 		}
-		reqBody["group"] = req.Group
+		reqBody["group_id"] = req.GroupID
 
 		apiReq := request{
 			method: "POST",
@@ -100,4 +100,16 @@ func (c *CoreClient) DeleteUser(w http.ResponseWriter, r *http.Request, userID i
 	return errors.New("method not implemented")
 }
 
+func (c *CoreClient) GetGroups(w http.ResponseWriter, r *http.Request) ([]models.Group, error) {
+	var groups []models.Group
+	req := request{
+		method: "GET",
+		path: "/groups",
+	}
 
+	if err := c.Do(w, r, req, &groups); err != nil {
+		return nil, err
+	}
+
+	return groups, nil
+}

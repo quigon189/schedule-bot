@@ -223,42 +223,17 @@ func (r *SubjectRepo) GetSubjectsByDate(ctx context.Context, startDate, endDate 
 	return subjects, nil
 }
 
-func (r *SubjectRepo) GetSubjectsByGroupID(ctx context.Context, groupID int, req *dto.PaginatedSubjectsRequest) (*dto.PaginatedSubjectsResponse, error) {
-	page := req.Page
-	if page < 1 {
-		page = 1
-	}
-	perPage := req.PerPage
-	if perPage < 1 {
-		perPage = 10
-	}
-	if perPage > 100 {
-		perPage = 100
-	}
-
-	sortBy := req.SortBy
-	if sortBy == "" || !r.allowedSortFields[sortBy] {
-		sortBy = "id"
-	}
-	sortOrder := strings.ToUpper(req.SortOrder)
-	if sortOrder != "ASC" && sortOrder != "DESC" {
-		sortOrder = "ASC"
-	}
-
-	offset := (page - 1) * perPage
-	orderClause := fmt.Sprintf("%s %s", sortBy, sortOrder)
-
-	query := fmt.Sprintf(`
+func (r *SubjectRepo) GetSubjectsByGroupID(ctx context.Context, groupID int) ([]models.Subject, error) {
+	query := `
 	SELECT s.id, s.title, s.semester, s.hours_load, s.start_date, s.end_date, s.group_id,
 	       g.id, g.name, g.specialty, g.admission_year
 	FROM schedule.subjects s
 	LEFT JOIN auth.groups g ON s.group_id = g.id
 	WHERE s.group_id = $1
-	ORDER BY %s
-	LIMIT $2 OFFSET $3
-	`, orderClause)
+	ORDER BY s.semester
+	`
 
-	rows, err := r.db.Query(ctx, query, groupID, perPage, offset)
+	rows, err := r.db.Query(ctx, query, groupID)
 	if err != nil {
 		return nil, fmt.Errorf("query subjects by group: %w", err)
 	}
@@ -287,21 +262,7 @@ func (r *SubjectRepo) GetSubjectsByGroupID(ctx context.Context, groupID int, req
 		subjects = append(subjects, subject)
 	}
 
-	var total int
-	err = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM schedule.subjects WHERE group_id = $1`, groupID).Scan(&total)
-	if err != nil {
-		return nil, fmt.Errorf("count subjects for group: %w", err)
-	}
-
-	totalPages := int(math.Ceil(float64(total) / float64(perPage)))
-
-	return &dto.PaginatedSubjectsResponse{
-		Subjects:   subjects,
-		Total:      total,
-		Page:       page,
-		PerPage:    perPage,
-		TotalPages: totalPages,
-	}, nil
+	return subjects, nil
 }
 
 func (r *SubjectRepo) UpdateSubject(ctx context.Context, subject *models.Subject) error {
