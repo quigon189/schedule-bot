@@ -1,0 +1,58 @@
+package components
+
+import (
+    "fmt"
+    "web-ui/internal/models"
+)
+
+templ NewUserForm(roles []models.Role, groups []models.Group) {
+    <form hx-post="/admin/users"
+		  hx-target="#alertError"
+		  hx-swap="innerHTML">
+        <div class="modal-header">
+            <h5 class="modal-title">Новый пользователь</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+			<div class="mb-3" id="alertError">
+			</div>
+            <div class="mb-3">
+                <label class="form-label">Логин</label>
+                <input type="text" name="username" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">ФИО</label>
+                <input type="text" name="full_name" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Email</label>
+                <input type="email" name="email" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Пароль</label>
+                <input type="password" name="password" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Роли</label>
+                <select name="role" class="form-select">
+					for _, role := range roles {
+                    	<option value={ role.Name }>{ role.Name }</option>
+					}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Группа (для студента)</label>
+                <select name="group_id" class="form-select">
+                    <option value="">— нет —</option>
+					for _, group := range groups {
+                		<option value={ fmt.Sprintf("%d", group.ID) }>{ group.Name }</option>
+					}
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+            <button type="submit" class="btn btn-primary">Сохранить</button>
+        </div>
+    </form>
+}

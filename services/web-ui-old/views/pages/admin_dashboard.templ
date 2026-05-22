@@ -1,0 +1,54 @@
+package pages
+
+import "web-ui/internal/models"
+import "web-ui/views"
+import "web-ui/views/components"
+
+templ AdminDashboardPage(csrf string, user *models.User) {
+    @views.BasePrivate("Панель управления", csrf, components.AdminSidebar(user, "/"), AdminDashboardContent(user))
+}
+
+templ AdminDashboardContent(user *models.User) {
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-speedometer2"></i> Добро пожаловать, { user.FullName }!
+                </div>
+                <div class="card-body">
+                    <p>Вы вошли как администратор. Вы можете управлять пользователями, группами, предметами и расписанием.</p>
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <div class="card text-bg-info mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title">Пользователи</h5>
+                                    <p class="card-text">Управление учётными записями, ролями.</p>
+                                    <a href="/admin/users" class="btn btn-light">Перейти</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card text-bg-success mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title">Расписание</h5>
+                                    <p class="card-text">Создание шаблонов и семестрового расписания.</p>
+                                    <a href="/admin/schedule" class="btn btn-light">Перейти</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">Статистика</div>
+                <div class="card-body">
+                    <p><i class="bi bi-people"></i> Всего пользователей: <span id="totalUsers">--</span></p>
+                    <p><i class="bi bi-people-fill"></i> Групп: <span id="totalGroups">--</span></p>
+                    <p><i class="bi bi-book"></i> Предметов: <span id="totalSubjects">--</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+}

@@ -1,0 +1,97 @@
+package components
+
+import (
+	"web-ui/internal/models"
+)
+
+type ScheduleViewProps struct {
+	Data      models.ScheduleData
+	ShowGroup bool
+	ShowTeacher bool
+	ShowAudience bool
+}
+
+// день недели в русском
+var dayNames = map[int]string{
+	1: "Понедельник",
+	2: "Вторник",
+	3: "Среда",
+	4: "Четверг",
+	5: "Пятница",
+	6: "Суббота",
+	7: "Воскресенье",
+}
+
+// отображает расписание в виде таблицы
+templ ScheduleView(props ScheduleViewProps) {
+	<div class="schedule-container">
+		if props.Data.Period.Year != "" {
+			<div class="alert alert-info mb-3">
+				Учебный период: { props.Data.Period.Year }, { props.Data.Period.Semester } семестр
+				({ props.Data.Period.StartDate.Format("02.01.2006") } – { props.Data.Period.EndDate.Format("02.01.2006") })
+			</div>
+		}
+		
+		<table class="table table-bordered schedule-table">
+			<thead>
+				<tr>
+					<th style="width: 10%">День / Пара</th>
+					for i := 1; i <= 8; i++ {
+						<th style="width: 11%">{ i } пара</th>
+					}
+				</tr>
+			</thead>
+			<tbody>
+				for day := 1; day <= 6; day++ {
+					<tr>
+						<th class="day-header">{ dayNames[day] }</th>
+						for slot := 1; slot <= 8; slot++ {
+							<td class="schedule-cell">
+								{{ cells := getCellsForDaySlot(props.Data.Entries, day, slot) }}
+								if len(cells) == 0 {
+									<span class="text-muted">—</span>
+								} 
+								if len(cells) != 0 {
+									for _, cell := range cells {
+										<div class="lesson-entry">
+											<strong>{ cell.Subject.Title }</strong>
+											if props.ShowGroup && cell.Subject.GroupName != "" {
+												<div class="text-secondary small">Группа: { cell.Subject.GroupName }</div>
+											}
+											if props.ShowTeacher && cell.Teacher.FullName != "" {
+												<div class="text-secondary small">Преп.: { cell.Teacher.FullName }</div>
+											}
+											if props.ShowAudience && cell.Audience.Number != "" {
+												<div class="text-secondary small">Ауд.: { cell.Audience.Number }</div>
+											}
+											if cell.WeekType != 0 {
+												<span class="badge bg-secondary mt-1">
+													if cell.WeekType == 1 {
+														числитель
+													} else {
+														знаменатель
+													}
+												</span>
+											}
+										</div>
+									}
+								}
+							</td>
+						}
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+// вспомогательная функция (можно реализовать внутри templ через script, но лучше вынести в Go)
+func getCellsForDaySlot(entries []models.ScheduleEntry, day, slot int) []models.ScheduleEntry {
+	var res []models.ScheduleEntry
+	for _, e := range entries {
+		if e.DayOfWeek == day && e.Number == slot {
+			res = append(res, e)
+		}
+	}
+	return res
+}

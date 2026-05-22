@@ -1,0 +1,121 @@
+package pages
+
+import (
+    "fmt"
+    "web-ui/internal/models"
+    "web-ui/views"
+    "web-ui/views/components"
+)
+
+templ AdminUsersPage(currentUser *models.User, paginated *models.PaginatedUsers, params models.PaginatedUsersQuery) {
+    @views.BasePrivate("Управление пользователями", "", components.AdminSidebar(currentUser, "/admin/users"), AdminUsersContent(paginated, params))
+}
+
+templ AdminUsersContent(paginated *models.PaginatedUsers, params models.PaginatedUsersQuery) {
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="h3">Пользователи</h1>
+            <button class="btn btn-primary"
+                hx-get="/admin/users/new"
+                hx-target="#userModalContent"
+                hx-swap="beforeend"
+                data-bs-toggle="modal"
+                data-bs-target="#userModal">
+                <i class="bi bi-plus-circle"></i> Создать
+            </button>
+        </div>
+
+        <!-- Фильтры -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <form hx-get="/admin/users/table" hx-target="#usersTableContainer" hx-push-url="true">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <input type="text" name="full_name" class="form-control" placeholder="ФИО" value={ selectedOrEmpty(params.FullName) }>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="text" name="username" class="form-control" placeholder="Логин" value={ selectedOrEmpty(params.Username) }>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="text" name="email" class="form-control" placeholder="Email" value={ selectedOrEmpty(params.Email) }>
+                        </div>
+					</div>
+					<div class="row g-3">
+						<div class="col-md-4">
+							<input type="text" name="group_name" class="form-control" placeholder="Группа" value={ selectedOrEmpty(params.Email)}>
+						</div>
+						<div class="col-md-4">
+							<select name="role_name" class="form-control">
+								if params.RoleName == nil {
+									<option value="" selected disabled>Роль</option>
+									<option value="">Все</option>
+									@selectOption(false, "admin", "Администратор")
+									@selectOption(false, "manager", "Менеджер")
+									@selectOption(false, "teacher", "Преподователь")
+									@selectOption(false, "student", "Студент")
+								} else {
+									<option value="">Все</option>
+									@selectOption(*params.RoleName == "admin", "admin", "Администратор")
+									@selectOption(*params.RoleName == "manager", "manager", "Менеджер")
+									@selectOption(*params.RoleName == "teacher", "teacher", "Преподаватель")
+									@selectOption(*params.RoleName == "student", "student", "Студент")
+								}
+							</select>
+						</div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-secondary w-100">Применить</button>
+                        </div>
+                    </div>
+                    <input type="hidden" name="per_page" value={ fmt.Sprintf("%d", *params.PerPage) }>
+                </form>
+            </div>
+        </div>
+
+        <!-- Таблица с пагинацией -->
+        <div id="usersTableContainer">
+            @components.UsersTable(paginated, params)
+        </div>
+    </div>
+
+    <!-- Модальное окно для формы -->
+    <div class="modal fade" id="userModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog">
+            <div class="modal-content" id="userModalContent">
+                <!-- сюда загрузится форма -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (evt.detail.target.id === 'userModalContent' || evt.detail.target.id === 'alertError') {
+                new bootstrap.Modal(document.getElementById('userModal')).show();
+            }
+        });
+        // закрыть модалку после успешного сохранения
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.successful && evt.detail.target && evt.detail.target.closest('.modal')) {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('userModal'));
+                if (modal) modal.hide();
+                // обновить таблицу
+                htmx.trigger('#usersTableContainer', 'refresh');
+            }
+        });
+        htmx.on('refresh', function() {
+            htmx.trigger('#usersTableContainer', 'load');
+        });
+    </script>
+}
+
+func selectedOrEmpty(s *string) string {
+    if s == nil { return "" }
+    return *s
+}
+
+templ selectOption(selected bool, value, text string) {
+	if selected {
+		<option value={ value } selected>{ text }</option>
+	} else {
+		<option value={ value }>{ text }</option>
+	}
+}
