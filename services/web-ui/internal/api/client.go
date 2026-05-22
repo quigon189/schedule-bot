@@ -15,7 +15,14 @@ import ( "bytes"
 type CoreClient struct {
 	baseURL        string
 	httpClient     *http.Client
-	sessionManager *session.SessionManager
+}
+
+var Core CoreClient
+
+
+func InitCore(baseURL string, timeout time.Duration) {
+	Core.baseURL = baseURL
+	Core.httpClient = &http.Client{Timeout: timeout}
 }
 
 type request struct {
@@ -26,34 +33,37 @@ type request struct {
 	body    any
 }
 
-func NewCoreClient(baseURL string, timeout time.Duration, sm *session.SessionManager) *CoreClient {
-	return &CoreClient{
-		baseURL:        baseURL,
-		httpClient:     &http.Client{Timeout: timeout},
-		sessionManager: sm,
-	}
-}
-
-func (c *CoreClient) doRequest(ctx context.Context, method, path string, headers map[string]string, body any, result any) error {
+func (c *CoreClient) do(ctx context.Context, req *request, result any) error {
 	var reqBody []byte
-	if body != nil {
+	if req.body != nil {
 		var err error
-		reqBody, err = json.Marshal(body)
+		reqBody, err = json.Marshal(req.body)
 		if err != nil {
 			return fmt.Errorf("marshal body: %w", err)
 		}
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bytes.NewReader(reqBody))
+	u, err := url.Parse(req.path)
+	if err != nil {
+		return fmt.Errorf("parse path: %w", err)
+	}
+
+	q := u.Query()
+	for key, value := range req.query {
+		q.Set(key, value)
+	}
+	u.RawQuery = q.Encode()
+
+	r, err := http.NewRequestWithContext(ctx, req.method, c.baseURL+u.String(), bytes.NewReader(reqBody))
 	if err != nil {
 		return fmt.Errorf("new request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
-	for key, value := range headers {
-		req.Header.Set(key, value)
+	r.Header.Set("Content-Type", "application/json")
+	for key, value := range req.headers {
+		r.Header.Set(key, value)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(r)
 	if err != nil {
 		return fmt.Errorf("do request: %w", err)
 	}
@@ -112,22 +122,26 @@ func (c *CoreClient) Login(r *http.Request, username, password string) (*models.
 		"User-Agent":      r.Header.Get("User-Agent"),
 		"X-Forwarded-For": clientIP,
 	}
-	if err := c.doRequest(r.Context(), "POST", "/login", headers, body, &jwt); err != nil {
+	if err := c.do(r.Context(), &request{
+		method: "POST",
+		path: "/login",
+		headers: headers,
+		body: body,
+	}, &jwt); err != nil {
 		return nil, fmt.Errorf("do request: %w", err)
 	}
 
 	return &jwt, nil
 }
 
+//исправить
 func (c *CoreClient) Logout(w http.ResponseWriter, r *http.Request) error {
 	req := request {
 		method: "GET",
 		path: "/logout",
 	}
 
-	c.sessionManager.Logout(w, r)
-
-	return c.Do(w, r, req, nil)
+	return c.do(r.Context(), req, nil)
 }
 
 func (c *CoreClient) Do(w http.ResponseWriter, r *http.Request, req request, result any) error {
