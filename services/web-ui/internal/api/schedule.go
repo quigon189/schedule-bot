@@ -1,16 +1,16 @@
 package api
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 	"strconv"
 	"web-ui/internal/models"
 )
 
 // GetGroupSchedule возвращает расписание группы
-func (c *CoreClient) GetGroupSchedule(w http.ResponseWriter, r *http.Request, groupID int, periodID *int) (*models.ScheduleData, error) {
+func (c *CoreClient) GetGroupSchedule(ctx context.Context, s *Session, groupID int, periodID *int) (*models.ScheduleData, error) {
 	var entries []models.ScheduleEntry
-	req := request{
+	req := &request{
 		method: "GET", 
 		path: fmt.Sprintf("/schedule/group/%d", groupID),
 	}
@@ -19,7 +19,7 @@ func (c *CoreClient) GetGroupSchedule(w http.ResponseWriter, r *http.Request, gr
 			"period_id": strconv.Itoa(*periodID),
 		}
 	}
-	if err := c.Do(w, r, req, &entries); err != nil {
+	if err := c.doWithAuth(ctx, s, req, &entries); err != nil {
 		return nil, err
 	}
 
@@ -27,7 +27,7 @@ func (c *CoreClient) GetGroupSchedule(w http.ResponseWriter, r *http.Request, gr
 }
 
 // GetFilteredSchedule получает расписание с фильтрацией (группа, преподаватель, аудитория, период)
-func (c *CoreClient) GetFilteredSchedule(groupID, teacherID, audienceID, periodID *int) ([]models.ScheduleEntry, error) {
+func (c *CoreClient) GetFilteredSchedule(ctx context.Context, s *Session, groupID, teacherID, audienceID, periodID *int) ([]models.ScheduleEntry, error) {
 	path := "/schedule?"
 	if groupID != nil {
 		path += fmt.Sprintf("group_id=%d&", *groupID)
@@ -46,8 +46,8 @@ func (c *CoreClient) GetFilteredSchedule(groupID, teacherID, audienceID, periodI
 		path = path[:len(path)-1]
 	}
 	var entries []models.ScheduleEntry
-	req := request{method: "GET", path: path}
-	if err := c.Do(nil, nil, req, &entries); err != nil {
+	req := &request{method: "GET", path: path}
+	if err := c.doWithAuth(ctx, s, req, &entries); err != nil {
 		return nil, err
 	}
 	return entries, nil

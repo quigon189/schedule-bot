@@ -3,7 +3,6 @@ package handlers
 import (
 	"net/http"
 	"web-ui/internal/api"
-	"web-ui/internal/session"
 	"web-ui/views/components"
 	"web-ui/views/pages"
 
@@ -11,19 +10,18 @@ import (
 )
 
 type DashboardHandler struct {
-	coreClient     *api.CoreClient
-	sessionManager *session.SessionManager
+	coreClient *api.CoreClient
 }
 
-func NewDashboardHandler(client *api.CoreClient, sm *session.SessionManager) *DashboardHandler {
-	return &DashboardHandler{coreClient: client, sessionManager: sm}
+func NewDashboardHandler(client *api.CoreClient) *DashboardHandler {
+	return &DashboardHandler{coreClient: client}
 }
 
 func (h *DashboardHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
-	user, err := h.coreClient.GetCurrentUser(w, r)
+	session, _ := r.Context().Value("session").(*api.Session)
+	user, err := h.coreClient.GetCurrentUser(r.Context(), session)
 	if err != nil {
-		h.sessionManager.Logout(w, r)
-		w.Header().Set("HX-Redirect", "/login")
+		w.Header().Set("HX-Redirect", "/logout")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -35,7 +33,7 @@ func (h *DashboardHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	} else if user.HasRole("student") {
 		var props components.ScheduleViewProps
 		if user.Group != nil {
-			scheduleData, err := h.coreClient.GetGroupSchedule(w, r, user.Group.ID, nil)
+			scheduleData, err := h.coreClient.GetGroupSchedule(r.Context(), session, user.Group.ID, nil)
 			if err == nil {
 				props.Data = *scheduleData
 			}
@@ -44,8 +42,7 @@ func (h *DashboardHandler) Dashboard(w http.ResponseWriter, r *http.Request) {
 		props.ShowAudience = true
 		pages.StudentDashboardPage(csrfToken, user, props).Render(r.Context(), w)
 	} else {
-		h.sessionManager.Logout(w, r)
-		w.Header().Set("HX-Redirect", "/login")
+		w.Header().Set("HX-Redirect", "/logout")
 		w.WriteHeader(http.StatusOK)
 	}
 }

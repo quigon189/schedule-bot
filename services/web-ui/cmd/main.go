@@ -12,7 +12,6 @@ import (
 	"web-ui/internal/api"
 	"web-ui/internal/config"
 	"web-ui/internal/router"
-	"web-ui/internal/session"
 
 	"github.com/gorilla/sessions"
 )
@@ -27,8 +26,7 @@ func main() {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	}
-	sessionManager := session.NewSessionManager(cookieStore, "user-session")
-	coreClient := api.NewCoreClient(cfg.CoreURL, time.Duration(cfg.CoreTimeout)*time.Second, sessionManager)
+	coreClient := api.NewCoreClient(cfg.CoreURL, time.Duration(cfg.CoreTimeout)*time.Second, 30 * time.Second)
 
 	// csrfMiddleware := csrf.Protect(
 	// 	[]byte("secret-key-from-config"),
@@ -37,7 +35,7 @@ func main() {
 	// 	csrf.RequestHeader("X-CSRF-Token"),
 	// )
 
-	r := router.NewRouter(coreClient, sessionManager)
+	r := router.NewRouter(coreClient, cookieStore)
 
 	server := http.Server{
 		Addr:    ":" + cfg.Port,

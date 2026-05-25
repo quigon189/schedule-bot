@@ -1,47 +1,47 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"web-ui/internal/models"
 )
 
-func (c *CoreClient) GetCurrentUser(w http.ResponseWriter, r *http.Request) (*models.User, error) {
+func (c *CoreClient) GetCurrentUser(ctx context.Context, s *Session) (*models.User, error) {
 	var user models.User
-	req := request{
+	req := &request{
 		method: "GET",
 		path:   "/user",
 	}
 
-	if err := c.Do(w, r, req, &user); err != nil {
+	if err := c.doWithAuth(ctx, s, req, &user); err != nil {
 		return nil, err
 	}
 
 	return &user, nil
 }
 
-func (c *CoreClient) GetPaginatedUsers(w http.ResponseWriter, r *http.Request, params models.PaginatedUsersQuery) (*models.PaginatedUsers, error) {
+func (c *CoreClient) GetPaginatedUsers(ctx context.Context, s *Session, params models.PaginatedUsersQuery) (*models.PaginatedUsers, error) {
 	var paginatedUsers models.PaginatedUsers
 	var query map[string]string
 	data, _ := json.Marshal(params)
 	if err := json.Unmarshal(data, &query); err != nil {
 		return nil, err
 	}
-	req := request{
+	req := &request{
 		method: "GET",
 		path:   "/admin/users/paginated",
 		query:  query,
 	}
 
-	if err := c.Do(w, r, req, &paginatedUsers); err != nil {
+	if err := c.doWithAuth(ctx, s, req, &paginatedUsers); err != nil {
 		return nil, err
 	}
 
 	return &paginatedUsers, nil
 }
 
-func (c *CoreClient) CreateUser(w http.ResponseWriter, r *http.Request, req models.CreateUserRequest) error {
+func (c *CoreClient) CreateUser(ctx context.Context, s *Session, req models.CreateUserRequest) error {
 	var reqBody = make(map[string]any)
 	reqBody["username"] = req.Username
 	reqBody["full_name"] = req.FullName
@@ -55,59 +55,59 @@ func (c *CoreClient) CreateUser(w http.ResponseWriter, r *http.Request, req mode
 		}
 		reqBody["group_id"] = req.GroupID
 
-		apiReq := request{
+		apiReq := &request{
 			method: "POST",
 			path:   "/students",
 			body:   reqBody,
 		}
 
-		return c.Do(w, r, apiReq, nil)
+		return c.doWithAuth(ctx, s, apiReq, nil)
 	case "teacher":
-		apiReq := request{
+		apiReq := &request{
 			method: "POST",
 			path:   "/teachers",
 			body:   reqBody,
 		}
 
-		return c.Do(w, r, apiReq, nil)
+		return c.doWithAuth(ctx, s, apiReq, nil)
 	case "user":
-		apiReq := request{
+		apiReq := &request{
 			method: "/POST",
 			path:   "/admin/users",
 			body:   reqBody,
 		}
 
-		return c.Do(w, r, apiReq, nil)
+		return c.doWithAuth(ctx, s, apiReq, nil)
 	}
 	return errors.New("role is not available")
 }
 
-func (c *CoreClient) ChangeUserPasswordAdmin(w http.ResponseWriter, r *http.Request, userID int, new string) error {
+func (c *CoreClient) ChangeUserPasswordAdmin(ctx context.Context, s *Session, userID int, new string) error {
 	reqBody := make(map[string]any)
 	reqBody["user_id"] = userID
 	reqBody["new_password"] = new
 
-	req := request{
+	req := &request{
 		method: "POST",
-		path: "/admin/users/password",
-		body: reqBody,
+		path:   "/admin/users/password",
+		body:   reqBody,
 	}
 
-	return c.Do(w, r, req, nil)
+	return c.doWithAuth(ctx, s, req, nil)
 }
 
-func (c *CoreClient) DeleteUser(w http.ResponseWriter, r *http.Request, userID int) error {
+func (c *CoreClient) DeleteUser(ctx context.Context, s *Session, userID int) error {
 	return errors.New("method not implemented")
 }
 
-func (c *CoreClient) GetGroups(w http.ResponseWriter, r *http.Request) ([]models.Group, error) {
+func (c *CoreClient) GetGroups(ctx context.Context, s *Session) ([]models.Group, error) {
 	var groups []models.Group
-	req := request{
+	req := &request{
 		method: "GET",
-		path: "/groups",
+		path:   "/groups",
 	}
 
-	if err := c.Do(w, r, req, &groups); err != nil {
+	if err := c.doWithAuth(ctx, s, req, &groups); err != nil {
 		return nil, err
 	}
 

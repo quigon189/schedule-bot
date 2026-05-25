@@ -25,7 +25,7 @@ services:
     environment:
       GO_ENV: development
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_SECONDS: 36000
+      JWT_EXPIRES_SECONDS: 60
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${DB_ADMIN}

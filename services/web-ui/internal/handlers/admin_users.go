@@ -7,26 +7,24 @@ import (
 	"strconv"
 	"web-ui/internal/api"
 	"web-ui/internal/models"
-	"web-ui/internal/session"
 	"web-ui/views/components"
 	"web-ui/views/pages"
 )
 
 type AdminUsersHandler struct {
 	coreClient     *api.CoreClient
-	sessionManager *session.SessionManager
 }
 
-func NewAdminUsersHandler(client *api.CoreClient, sm *session.SessionManager) *AdminUsersHandler {
-	return &AdminUsersHandler{coreClient: client, sessionManager: sm}
+func NewAdminUsersHandler(client *api.CoreClient) *AdminUsersHandler {
+	return &AdminUsersHandler{coreClient: client}
 }
 
 // GET /admin/users — страница со списком пользователей
 func (h *AdminUsersHandler) ListUsersPage(w http.ResponseWriter, r *http.Request) {
-	user, err := h.coreClient.GetCurrentUser(w, r)
+	session, _ := r.Context().Value("session").(*api.Session)
+	user, err := h.coreClient.GetCurrentUser(r.Context(), session)
 	if err != nil {
-		h.sessionManager.Logout(w, r)
-		w.Header().Set("HX-Redirect", "/login")
+		w.Header().Set("HX-Redirect", "/logout")
 		return
 	}
 	if !user.HasRole("admin") {
@@ -67,7 +65,7 @@ func (h *AdminUsersHandler) ListUsersPage(w http.ResponseWriter, r *http.Request
 		RoleName:  stringPtrOrNil(roleName),
 	}
 
-	paginated, err := h.coreClient.GetPaginatedUsers(w, r, params)
+	paginated, err := h.coreClient.GetPaginatedUsers(r.Context(), session, params)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -79,6 +77,7 @@ func (h *AdminUsersHandler) ListUsersPage(w http.ResponseWriter, r *http.Request
 
 // GET /admin/users/table?page=...&full_name=... — HTMX-фрагмент таблицы
 func (h *AdminUsersHandler) TableFragment(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value("session").(*api.Session)
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	if page < 1 {
 		page = 1
@@ -124,7 +123,7 @@ func (h *AdminUsersHandler) TableFragment(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("HX-Push-Url", fullURL)
 
-	paginated, err := h.coreClient.GetPaginatedUsers(w, r, params)
+	paginated, err := h.coreClient.GetPaginatedUsers(r.Context(), session, params)
 	if err != nil {
 		log.Printf("failed to get paginated users")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -136,7 +135,8 @@ func (h *AdminUsersHandler) TableFragment(w http.ResponseWriter, r *http.Request
 
 // GET /admin/users/new — форма создания пользователя
 func (h *AdminUsersHandler) NewUserForm(w http.ResponseWriter, r *http.Request) {
-	groups, err := h.coreClient.GetGroups(w, r)
+	session, _ := r.Context().Value("session").(*api.Session)
+	groups, err := h.coreClient.GetGroups(r.Context(), session)
 	if err != nil {
 		groups = []models.Group{}
 	}
@@ -149,6 +149,7 @@ func (h *AdminUsersHandler) NewUserForm(w http.ResponseWriter, r *http.Request) 
 
 // POST /admin/users — создание пользователя
 func (h *AdminUsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value("user-session").(*api.Session)
     req := models.CreateUserRequest{
         Username: r.FormValue("username"),
         Password: r.FormValue("password"),
@@ -161,7 +162,7 @@ func (h *AdminUsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
         req.GroupID = &id
     }
 
-    err := h.coreClient.CreateUser(w, r, req)
+    err := h.coreClient.CreateUser(r.Context(), session, req)
     if err != nil {
         components.ErrorAlert(err.Error()).Render(r.Context(), w)
 		w.WriteHeader(http.StatusBadRequest)

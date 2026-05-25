@@ -1,28 +1,30 @@
 package api
 
-import ( "bytes"
+import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 	"web-ui/internal/models"
-	"web-ui/internal/session"
 )
 
 type CoreClient struct {
-	baseURL        string
-	httpClient     *http.Client
+	baseURL    string
+	httpClient *http.Client
+	expireDuration time.Duration
 }
 
-var Core CoreClient
-
-
-func InitCore(baseURL string, timeout time.Duration) {
-	Core.baseURL = baseURL
-	Core.httpClient = &http.Client{Timeout: timeout}
+func NewCoreClient(baseURL string, timeout, expireDuration time.Duration) *CoreClient {
+	return &CoreClient{
+		baseURL: baseURL,
+		expireDuration: expireDuration,
+		httpClient: &http.Client{Timeout: timeout},
+	}
 }
 
 type request struct {
@@ -87,31 +89,45 @@ func (c *CoreClient) do(ctx context.Context, req *request, result any) error {
 	return nil
 }
 
-func (c *CoreClient) refreshToken(ctx context.Context, jwt *models.JWT) error {
-	body := map[string]string{"refresh_token": jwt.Refresh, "session_id": jwt.SessionID}
-	headers := map[string]string{}
-	return c.doRequest(ctx, "POST", "/refresh", headers, body, jwt)
+func (c *CoreClient) doWithAuth(ctx context.Context, s *Session, req *request, resp any) error {
+	if s.Exire(c.expireDuration) {
+		err := c.refreshToken(ctx, s)
+		log.Printf("err refresh token: %v", err)
+	}
+	if req.headers == nil {
+		req.headers = make(map[string]string)
+	}
+
+	req.headers["Authorization"] = "Bearer "+s.AccessToken
+
+	return c.do(ctx, req, resp)
 }
 
-func (c *CoreClient) getAccessToken(w http.ResponseWriter, r *http.Request) (string, error) {
-	jwt, ok := c.sessionManager.Get(r, "jwt").(models.JWT)
-	if !ok {
-		return "", fmt.Errorf("failed to get jwt from session")
+func (c *CoreClient) refreshToken(ctx context.Context, session *Session) error {
+	body := map[string]string{
+		"refresh_token": session.RefreshToken,
+		"session_id":    session.SessionID,
 	}
-	exiresAt := time.Unix(jwt.ExpiresAt, 0)
-	if time.Now().Add(30*time.Second).After(exiresAt) {
-		if err := c.refreshToken(r.Context(), &jwt); err != nil {
-			return "", err
-		}
-		c.sessionManager.Set(w, r, "jwt", jwt)
+	r := &request{
+		method:  "POST",
+		path:    "/refresh",
+		headers: map[string]string{},
+		body:    body,
 	}
-	return jwt.AccessToken, nil
+	var jwt JWT
+	if err := c.do(ctx, r, &jwt); err != nil {
+		return err
+	}
+
+	session.Update(jwt.AccessToken, jwt.RefreshToken, jwt.ExiresAt)
+
+	return nil
 }
 
-func (c *CoreClient) Login(r *http.Request, username, password string) (*models.JWT, error) {
+func (c *CoreClient) Login(r *http.Request, username, password string) (*Session, error) {
 	body := map[string]string{"username": username, "password": password}
-	var jwt models.JWT
 	var clientIP string
+	var jwt JWT
 	if xForwardedFor := r.Header.Get("X-Forwarded-For"); xForwardedFor != "" {
 		clientIP = xForwardedFor
 	} else {
@@ -123,50 +139,25 @@ func (c *CoreClient) Login(r *http.Request, username, password string) (*models.
 		"X-Forwarded-For": clientIP,
 	}
 	if err := c.do(r.Context(), &request{
-		method: "POST",
-		path: "/login",
+		method:  "POST",
+		path:    "/login",
 		headers: headers,
-		body: body,
+		body:    body,
 	}, &jwt); err != nil {
 		return nil, fmt.Errorf("do request: %w", err)
 	}
 
-	return &jwt, nil
+	var session Session
+	session.Set(jwt.AccessToken, jwt.RefreshToken, jwt.SessionID, jwt.ExiresAt)
+
+	return &session, nil
 }
 
-//исправить
-func (c *CoreClient) Logout(w http.ResponseWriter, r *http.Request) error {
-	req := request {
+func (c *CoreClient) Logout(ctx context.Context, s *Session) error {
+	req := request{
 		method: "GET",
-		path: "/logout",
+		path:   "/logout",
 	}
 
-	return c.do(r.Context(), req, nil)
-}
-
-func (c *CoreClient) Do(w http.ResponseWriter, r *http.Request, req request, result any) error {
-	accessToken, err := c.getAccessToken(w, r)
-	if err != nil {
-		return fmt.Errorf("get access token: %w", err)
-	}
-
-	headers := make(map[string]string)
-	headers["Authorization"] = fmt.Sprintf("Bearer %s", accessToken)
-
-	for key, value := range req.headers {
-		headers[key] = value
-	}
-
-	u, err := url.Parse(req.path)
-	if err != nil {
-		return fmt.Errorf("parse path: %w", err)
-	}
-
-	q := u.Query()
-	for key, value := range req.query {
-		q.Set(key, value)
-	}
-	u.RawQuery = q.Encode()
-
-	return c.doRequest(r.Context(), req.method, u.String(), headers, req.body, result)
+	return c.doWithAuth(ctx, s, &req, nil)
 }
