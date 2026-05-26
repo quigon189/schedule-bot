@@ -11,7 +11,9 @@ import (
 	"time"
 	"web-ui/internal/api"
 	"web-ui/internal/config"
+	"web-ui/internal/models"
 	"web-ui/internal/router"
+	cache "web-ui/pkg"
 
 	"github.com/gorilla/sessions"
 )
@@ -28,6 +30,8 @@ func main() {
 	}
 	coreClient := api.NewCoreClient(cfg.CoreURL, time.Duration(cfg.CoreTimeout)*time.Second, 30 * time.Second)
 
+	userCache := cache.NewMemCache[models.User](5*time.Minute)
+
 	// csrfMiddleware := csrf.Protect(
 	// 	[]byte("secret-key-from-config"),
 	// 	csrf.Secure(false), // true для https
@@ -35,7 +39,7 @@ func main() {
 	// 	csrf.RequestHeader("X-CSRF-Token"),
 	// )
 
-	r := router.NewRouter(coreClient, cookieStore)
+	r := router.NewRouter(coreClient, cookieStore, userCache)
 
 	server := http.Server{
 		Addr:    ":" + cfg.Port,

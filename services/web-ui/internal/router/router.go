@@ -5,6 +5,8 @@ import (
 	"web-ui/internal/api"
 	"web-ui/internal/handlers"
 	"web-ui/internal/middlewares"
+	"web-ui/internal/models"
+	cache "web-ui/pkg"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -15,13 +17,15 @@ type Router struct {
 	coreClient *api.CoreClient
 	router     *chi.Mux
 	store      sessions.Store
+	userCache  *cache.MemCache[models.User]
 }
 
-func NewRouter(client *api.CoreClient, store sessions.Store) *Router {
+func NewRouter(client *api.CoreClient, store sessions.Store, userCache *cache.MemCache[models.User]) *Router {
 	router := Router{
 		coreClient: client,
 		router:     chi.NewRouter(),
 		store:      store,
+		userCache: userCache,
 	}
 
 	router.SetupRoutes()
@@ -35,7 +39,7 @@ func (r *Router) Handler() *chi.Mux {
 
 func (r *Router) SetupRoutes() {
 	authHandler := handlers.NewAuthHandler(r.coreClient, r.store)
-	dashboardHandler := handlers.NewDashboardHandler(r.coreClient)
+	dashboardHandler := handlers.NewDashboardHandler(r.coreClient, r.userCache)
 	adminUsersHandler := handlers.NewAdminUsersHandler(r.coreClient)
 
 	r.router.Use(middleware.Logger)
