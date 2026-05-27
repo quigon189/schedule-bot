@@ -6,7 +6,7 @@ import (
 	"web-ui/internal/handlers"
 	"web-ui/internal/middlewares"
 	"web-ui/internal/models"
-	cache "web-ui/pkg"
+	"web-ui/pkg/cache"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -25,7 +25,7 @@ func NewRouter(client *api.CoreClient, store sessions.Store, userCache *cache.Me
 		coreClient: client,
 		router:     chi.NewRouter(),
 		store:      store,
-		userCache: userCache,
+		userCache:  userCache,
 	}
 
 	router.SetupRoutes()
@@ -39,16 +39,18 @@ func (r *Router) Handler() *chi.Mux {
 
 func (r *Router) SetupRoutes() {
 	authHandler := handlers.NewAuthHandler(r.coreClient, r.store)
-	dashboardHandler := handlers.NewDashboardHandler(r.coreClient, r.userCache)
+	dashboardHandler := handlers.NewDashboardHandler(r.coreClient)
 	adminUsersHandler := handlers.NewAdminUsersHandler(r.coreClient)
+	groupsHandler := handlers.NewGroupsHandler(r.coreClient)
+	subjectHandler := handlers.NewSubjectsHandler(r.coreClient)
 
 	r.router.Use(middleware.Logger)
-	r.router.Use(middleware.Recoverer)
+	r.router.Use(middlewares.RecoveryWithHTML)
 
 	r.router.Get("/login", authHandler.LoginPage)
 	r.router.Post("/login", authHandler.LoginSubmit)
 
-	ms := middlewares.NewMiddlewares(r.store)
+	ms := middlewares.NewMiddlewares(r.store, r.coreClient, r.userCache)
 
 	r.router.Group(func(r chi.Router) {
 		//r.Use(csrfMiddleware)
@@ -59,7 +61,14 @@ func (r *Router) SetupRoutes() {
 		r.Get("/admin/users/table", adminUsersHandler.TableFragment)
 		r.Get("/admin/users/new", adminUsersHandler.NewUserForm)
 		r.Post("/admin/users", adminUsersHandler.CreateUser)
+		r.Get("/admin/groups", groupsHandler.ListGroupsPage)
+
+		r.Get("/admin/subjects", subjectHandler.SubjectsPage)
+		r.Get("/admin/subjects/table", subjectHandler.SubjectsTable)
 	})
 
 	r.router.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+
+	// Обработчик 404
+	r.router.NotFound(handlers.NotFound)
 }

@@ -1,0 +1,59 @@
+package pages
+
+import (
+	"fmt"
+	"web-ui/internal/models"
+	"web-ui/views"
+	"web-ui/views/components"
+)
+
+templ AdminSubjectsPage(csrf string, currentUser *models.User, groups []models.Group, selectedGroupID int, subjects []models.Subject) {
+	@views.BasePrivate("Управление дисциплинами", csrf, components.AdminSidebar(currentUser, "/admin/subjects"), AdminSubjectsContent(groups, selectedGroupID, subjects))
+}
+
+templ AdminSubjectsContent(groups []models.Group, selectedGroupID int, subjects []models.Subject) {
+	<div class="container-fluid">
+		<div class="d-flex justify-content-between align-items-center mb-4">
+			<h1 class="h3">Дисциплины групп</h1>
+			<button class="btn btn-primary" disabled>
+				<i class="bi bi-plus-circle"></i> Добавить дисциплину
+			</button>
+		</div>
+
+		<!-- Форма выбора группы -->
+		<div class="card mb-4">
+			<div class="card-body">
+				<form hx-get="/admin/subjects/table" 
+					  hx-target="#subjectsTableContainer" 
+					  hx-push-url="true"
+					  class="row g-3 align-items-end">
+					<div class="col-md-6">
+						<label for="groupSelect" class="form-label">Выберите группу</label>
+						<select name="group_id" id="groupSelect" class="form-select" required>
+							if selectedGroupID == 0 {
+								<option value="" selected disabled>-- Выберите группу --</option>
+							}
+							for _, group := range groups {
+								<option 
+									value={ fmt.Sprintf("%d", group.ID) } 
+									selected?={ selectedGroupID == group.ID }
+								>
+									{ group.Name } ({ group.Specialty })
+								</option>
+							}
+						</select>
+					</div>
+					<div class="col-md-3">
+						<button type="submit" class="btn btn-primary w-100">
+							<i class="bi bi-eye"></i> Показать
+						</button>
+					</div>
+				</form>
+			</div>
+		</div>
+
+		<!-- Таблица дисциплин -->
+		@components.SubjectsTable(subjects)
+
+	</div>
+}

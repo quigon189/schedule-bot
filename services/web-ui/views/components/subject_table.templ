@@ -1,0 +1,46 @@
+package components
+
+import "web-ui/internal/models"
+
+templ SubjectsTable(subjects []models.Subject) {
+	<div id="subjectsTableContainer">
+		if len(subjects) == 0 {
+			<div class="alert alert-info">
+				<i class="bi bi-info-circle"></i> У выбранной группы пока нет дисциплин.
+			</div>
+		} else {
+			<div class="table-responsive">
+				<table class="table table-striped table-hover">
+					<thead>
+						<tr>
+							<th>ID</th>
+							<th>Название дисциплины</th>
+							<th>Семестр</th>
+							<th>Количество часов</th>
+							<th>Дата начала</th>
+							<th>Дата конца</th>
+							<th>Действия</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, subject := range subjects {
+							<tr>
+								<td>{ subject.ID }</td>
+								<td>{ subject.Title }</td>
+								<td>{ subject.Semester }</td>
+								<td>{ subject.HoursLoad }</td>
+								<td>{ subject.StartDate.Format("02.01.2006") }</td>
+								<td>{ subject.EndDate.Format("02.01.2006") }</td>
+								<td>
+									<button class="btn btn-sm btn-outline-secondary" disabled>
+										<i class="bi bi-pencil"></i> Редактировать
+									</button>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}

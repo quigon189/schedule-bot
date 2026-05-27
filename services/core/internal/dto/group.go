@@ -25,7 +25,7 @@ type CreateGroupSubjectRequest struct {
 // CreateGroupWithCurriculumRequest - запрос на создание группы с дисциплинами и студентами
 type CreateGroupWithCurriculumRequest struct {
 	Group    CreateGroupRequest                    `json:"group" validate:"required"`
-	Subjects []CreateGroupSubjectRequest                `json:"subjects" validate:"required,min=1,dive"`
+	Subjects []CreateGroupSubjectRequest           `json:"subjects" validate:"required,min=1,dive"`
 	Students []CreateStudentWithCredentialsRequest `json:"students" validate:"dive"`
 }
 

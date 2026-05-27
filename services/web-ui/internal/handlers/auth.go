@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"time"
 	"web-ui/internal/api"
 	"web-ui/views/components"
 	"web-ui/views/pages"
@@ -44,6 +45,16 @@ func (h *AuthHandler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userSession, _ := h.store.Get(r, "user-session")
+	maxAge := int(time.Until(session.ExiresAt.Add(30 * 24 * time.Hour)).Seconds())
+	if maxAge < 0 {
+		maxAge = -1
+	}
+	userSession.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
 	userSession.Values["session"] = *session
 	err = userSession.Save(r, w)
 	if err != nil {
@@ -65,6 +76,10 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		h.coreClient.Logout(r.Context(), session)
 	}
 
-	w.Header().Set("HX-Redirect", "/login")
-	w.WriteHeader(http.StatusOK)
+	if w.Header().Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/login")
+		w.WriteHeader(http.StatusOK)
+	} else {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	}
 }

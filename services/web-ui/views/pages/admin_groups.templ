@@ -1,0 +1,25 @@
+package pages
+
+import (
+	"web-ui/internal/models"
+	"web-ui/views"
+	"web-ui/views/components"
+)
+
+templ AdminGroupsPage(csrf string, currentUser *models.User, groups []models.Group) {
+	@views.BasePrivate("Управление группами", csrf, components.AdminSidebar(currentUser, "/admin/groups"), AdminGroupsContent(groups))
+}
+
+templ AdminGroupsContent(groups []models.Group) {
+	<div class="container-fluid">
+		<div class="d-flex justify-content-between align-items-center mb-4">
+			<h1 class="h3">Группы</h1>
+			<!-- Кнопка добавления группы (опционально, можно реализовать позже) -->
+			<button class="btn btn-primary" disabled>
+				<i class="bi bi-plus-circle"></i> Добавить группу
+			</button>
+		</div>
+
+		@components.GroupCards(groups)
+	</div>
+}

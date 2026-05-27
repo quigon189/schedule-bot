@@ -31,6 +31,7 @@ type Group struct {
 	Name          string `json:"name"`
 	Specialty     string `json:"specialty"`
 	AdmissionYear int    `json:"admission_year"`
+	Students      []User `json:"students"`
 }
 
 func (u *User) HasRole(role string) bool {

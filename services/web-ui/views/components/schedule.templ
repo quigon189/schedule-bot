@@ -55,8 +55,8 @@ templ ScheduleView(props ScheduleViewProps) {
 									for _, cell := range cells {
 										<div class="lesson-entry">
 											<strong>{ cell.Subject.Title }</strong>
-											if props.ShowGroup && cell.Subject.GroupName != "" {
-												<div class="text-secondary small">Группа: { cell.Subject.GroupName }</div>
+											if props.ShowGroup && cell.Subject.Group.Name != "" {
+												<div class="text-secondary small">Группа: { cell.Subject.Group.Name }</div>
 											}
 											if props.ShowTeacher && cell.Teacher.FullName != "" {
 												<div class="text-secondary small">Преп.: { cell.Teacher.FullName }</div>

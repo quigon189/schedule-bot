@@ -1,0 +1,32 @@
+package pages
+
+import "web-ui/views"
+
+templ NotFoundPage() {
+	@views.BasePublic("Страница не найдена", NotFoundContent())
+}
+
+templ NotFoundContent() {
+	<div class="row justify-content-center">
+		<div class="col-md-12">
+			<div class="card shadow border-0 rounded-4">
+				<div class="card-body p-4 text-center">
+					<i class="bi bi-exclamation-triangle-fill" style="font-size: 5rem; color: #dc3545;"></i>
+					<h1 class="mt-3">404</h1>
+					<h2 class="h4 mb-3">Страница не найдена</h2>
+					<p class="mb-4">Запрашиваемая страница не существует или была перемещена.</p>
+
+					<div class="d-flex gap-3 justify-content-center">
+						<button onclick="history.back()" class="btn btn-secondary">
+							<i class="bi bi-arrow-left"></i> Назад
+						</button>
+						<a href="/" class="btn btn-primary">
+							<i class="bi bi-house"></i> На главную
+						</a>
+					</div>
+
+				</div>
+			</div>
+		</div>
+	</div>
+}

@@ -1,0 +1,62 @@
+package components
+
+import "web-ui/internal/models"
+import "fmt"
+
+templ GroupCard(group models.Group) {
+	<div class="card mb-3">
+		<div class="card-body">
+			<div class="row align-items-start">
+				<!-- Основная информация -->
+				<div class="col-md-4">
+					<h5 class="card-title">
+						<i class="bi bi-people-fill me-2"></i>{ group.Name }
+					</h5>
+					<p class="card-text text-muted small mb-1">
+						<strong>Специальность:</strong> { group.Specialty }
+					</p>
+					<p class="card-text text-muted small">
+						<strong>Год поступления:</strong> { group.AdmissionYear }
+					</p>
+				</div>
+
+				<!-- Статистика (заглушки) -->
+				<div class="col-md-4">
+					<div class="row text-center small">
+						<div class="col-4">
+							<div class="fw-bold">{ len(group.Students) }</div>
+							<div class="text-muted">Студентов</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Кнопки действий -->
+				<div class="col-md-4 text-md-end mt-3 ">
+					<div class="btn-group" role="group">
+						<a href={ fmt.Sprintf("/admin/subjects?group_id=%d", group.ID) } class="btn btn-sm btn-outline-primary">
+							<i class="bi bi-book"></i> Дисциплины
+						</a>
+						<button class="btn btn-sm btn-outline-success" disabled>
+							<i class="bi bi-calendar-week"></i> Расписание
+						</button>
+						<button class="btn btn-sm btn-outline-info" disabled>
+							<i class="bi bi-graph-up"></i> Статистика
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+templ GroupCards(groups []models.Group) {
+	<div class="groups-list">
+		if len(groups) == 0 {
+			<div class="alert alert-info text-center">Нет доступных групп</div>
+		} else {
+			for _, group := range groups {
+				@GroupCard(group)
+			}
+		}
+	</div>
+}

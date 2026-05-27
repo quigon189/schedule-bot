@@ -132,8 +132,39 @@ func (r *GroupRepo) GetAll(ctx context.Context) ([]models.Group, error) {
 		if err := rows.Scan(&g.ID, &g.Name, &g.Specialty, &g.AdmissionYear); err != nil {
 			return nil, err
 		}
+
 		groups = append(groups, g)
 	}
+
+	query = `
+	SELECT u.id, u.username, u.full_name, u.email
+	FROM auth.users u
+	JOIN auth.student_profiles sp ON u.id = sp.user_id
+	WHERE sp.group_id = $1
+	ORDER BY u.full_name
+	`
+	for i := range groups {
+		rows, err := r.db.Query(ctx, query, groups[i].ID)
+		if err != nil {
+			continue
+		}
+
+		for rows.Next() {
+			var student models.User
+			if err := rows.Scan(
+				&student.ID,
+				&student.Name,
+				&student.FullName,
+				&student.Email,
+			); err != nil {
+				continue
+			}
+
+			groups[i].Students = append(groups[i].Students, student)
+		}
+
+	}
+
 	return groups, nil
 }
 

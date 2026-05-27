@@ -22,10 +22,14 @@ type Audience struct {
 }
 
 type Subject struct {
-	ID        int    `json:"id"`
-	Title     string `json:"title"`
-	GroupID   int    `json:"group_id"`
-	GroupName string `json:"group_name"` // добавим для удобства
+	ID        int       `json:"id"`
+	Title     string    `json:"title"`
+	Semester  int       `json:"semester"`
+	HoursLoad int       `json:"hours_load"`
+	StartDate time.Time `json:"start_date"`
+	EndDate   time.Time `json:"end_date"`
+	GroupID   int       `json:"group_id"`
+	Group     Group     `json:"group"`
 }
 
 type Teacher struct {

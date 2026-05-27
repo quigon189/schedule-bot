@@ -99,17 +99,3 @@ func (c *CoreClient) ChangeUserPasswordAdmin(ctx context.Context, s *Session, us
 func (c *CoreClient) DeleteUser(ctx context.Context, s *Session, userID int) error {
 	return errors.New("method not implemented")
 }
-
-func (c *CoreClient) GetGroups(ctx context.Context, s *Session) ([]models.Group, error) {
-	var groups []models.Group
-	req := &request{
-		method: "GET",
-		path:   "/groups",
-	}
-
-	if err := c.doWithAuth(ctx, s, req, &groups); err != nil {
-		return nil, err
-	}
-
-	return groups, nil
-}

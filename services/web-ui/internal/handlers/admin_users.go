@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"web-ui/internal/api"
@@ -22,15 +21,7 @@ func NewAdminUsersHandler(client *api.CoreClient) *AdminUsersHandler {
 // GET /admin/users — страница со списком пользователей
 func (h *AdminUsersHandler) ListUsersPage(w http.ResponseWriter, r *http.Request) {
 	session, _ := r.Context().Value("session").(*api.Session)
-	user, err := h.coreClient.GetCurrentUser(r.Context(), session)
-	if err != nil {
-		w.Header().Set("HX-Redirect", "/logout")
-		return
-	}
-	if !user.HasRole("admin") {
-		http.NotFound(w, r)
-		return
-	}
+	user, _ := r.Context().Value("user").(*models.User)
 
 	// Параметры фильтрации из query
 	page := 1
@@ -67,7 +58,7 @@ func (h *AdminUsersHandler) ListUsersPage(w http.ResponseWriter, r *http.Request
 
 	paginated, err := h.coreClient.GetPaginatedUsers(r.Context(), session, params)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		RenderInternalError(w, r, err)
 		return
 	}
 
@@ -125,8 +116,7 @@ func (h *AdminUsersHandler) TableFragment(w http.ResponseWriter, r *http.Request
 
 	paginated, err := h.coreClient.GetPaginatedUsers(r.Context(), session, params)
 	if err != nil {
-		log.Printf("failed to get paginated users")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		RenderInternalError(w, r, err)
 		return
 	}
 	components.UsersTable(paginated, params).Render(r.Context(), w)

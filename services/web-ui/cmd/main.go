@@ -13,7 +13,7 @@ import (
 	"web-ui/internal/config"
 	"web-ui/internal/models"
 	"web-ui/internal/router"
-	cache "web-ui/pkg"
+	"web-ui/pkg/cache"
 
 	"github.com/gorilla/sessions"
 )
