@@ -1,5 +1,7 @@
 package components
 
+import "web-ui/internal/models"
+
 templ ErrorAlert(message string) {
     <div class="alert alert-danger alert-dismissible fade show" role="alert">
         <i class="bi bi-exclamation-triangle-fill me-2"></i> { message }
@@ -11,4 +13,30 @@ templ SuccessAlert(message string) {
     <div class="alert alert-success" role="alert">
         <i class="bi bi-check-circle-fill me-2"></i> { message }
     </div>
+}
+
+// RenderAlert – отображает один алерт (используется для polling)
+templ RenderAlert(alert models.Alert) {
+	switch alert.Type {
+	case models.AlertSuccess:
+		<div class="alert alert-success alert-dismissible fade show" role="alert">
+			<i class="bi bi-check-circle-fill me-2"></i> { alert.Message }
+			<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+		</div>
+	case models.AlertError:
+		<div class="alert alert-danger alert-dismissible fade show" role="alert">
+			<i class="bi bi-exclamation-triangle-fill me-2"></i> { alert.Message }
+			<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+		</div>
+	case models.AlertInfo:
+		<div class="alert alert-info alert-dismissible fade show" role="alert">
+			<i class="bi bi-info-circle-fill me-2"></i> { alert.Message }
+			<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+		</div>
+	case models.AlertWarning:
+		<div class="alert alert-warning alert-dismissible fade show" role="alert">
+			<i class="bi bi-exclamation-triangle-fill me-2"></i> { alert.Message }
+			<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+		</div>
+	}
 }

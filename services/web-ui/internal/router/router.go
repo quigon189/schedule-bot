@@ -2,6 +2,7 @@ package router
 
 import (
 	"net/http"
+	"time"
 	"web-ui/internal/api"
 	"web-ui/internal/handlers"
 	"web-ui/internal/middlewares"
@@ -38,9 +39,10 @@ func (r *Router) Handler() *chi.Mux {
 }
 
 func (r *Router) SetupRoutes() {
+	alertsHandler := handlers.NewAlertsHandler(5*time.Minute, 1*time.Minute)
 	authHandler := handlers.NewAuthHandler(r.coreClient, r.store)
 	dashboardHandler := handlers.NewDashboardHandler(r.coreClient)
-	adminUsersHandler := handlers.NewAdminUsersHandler(r.coreClient)
+	adminUsersHandler := handlers.NewAdminUsersHandler(r.coreClient, alertsHandler)
 	groupsHandler := handlers.NewGroupsHandler(r.coreClient)
 	subjectHandler := handlers.NewSubjectsHandler(r.coreClient)
 
@@ -55,6 +57,7 @@ func (r *Router) SetupRoutes() {
 	r.router.Group(func(r chi.Router) {
 		//r.Use(csrfMiddleware)
 		r.Use(ms.Auth)
+		r.Get("/alerts", alertsHandler.GetAlerts)
 		r.Get("/", dashboardHandler.Dashboard)
 		r.Post("/logout", authHandler.Logout)
 		r.Get("/admin/users", adminUsersHandler.ListUsersPage)

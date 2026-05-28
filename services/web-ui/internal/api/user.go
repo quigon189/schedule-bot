@@ -99,3 +99,14 @@ func (c *CoreClient) ChangeUserPasswordAdmin(ctx context.Context, s *Session, us
 func (c *CoreClient) DeleteUser(ctx context.Context, s *Session, userID int) error {
 	return errors.New("method not implemented")
 }
+
+func (c *CoreClient) DownloadTeacherTemplate(ctx context.Context, s *Session) ([]byte, error) {
+	data, _, err := c.doRawWithAuth(ctx, s, &request{method: "GET", path: "/teachers/template"})
+	return data, err
+}
+
+func (c *CoreClient) UploadTeachersExcel(ctx context.Context, s *Session, fileData []byte, filename string) ([]models.TeacherCreationResult, error) {
+	var result []models.TeacherCreationResult
+	err := c.doMultipartWithAuth(ctx, s, "/teachers/upload", fileData, filename, nil, &result)
+	return result, err
+}

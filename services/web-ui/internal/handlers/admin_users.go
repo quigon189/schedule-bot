@@ -11,11 +11,12 @@ import (
 )
 
 type AdminUsersHandler struct {
-	coreClient     *api.CoreClient
+	coreClient *api.CoreClient
+	alerts     *AlertsHandler
 }
 
-func NewAdminUsersHandler(client *api.CoreClient) *AdminUsersHandler {
-	return &AdminUsersHandler{coreClient: client}
+func NewAdminUsersHandler(client *api.CoreClient, alerts *AlertsHandler) *AdminUsersHandler {
+	return &AdminUsersHandler{coreClient: client, alerts: alerts}
 }
 
 // GET /admin/users — страница со списком пользователей
@@ -122,7 +123,6 @@ func (h *AdminUsersHandler) TableFragment(w http.ResponseWriter, r *http.Request
 	components.UsersTable(paginated, params).Render(r.Context(), w)
 }
 
-
 // GET /admin/users/new — форма создания пользователя
 func (h *AdminUsersHandler) NewUserForm(w http.ResponseWriter, r *http.Request) {
 	session, _ := r.Context().Value("session").(*api.Session)
@@ -134,33 +134,35 @@ func (h *AdminUsersHandler) NewUserForm(w http.ResponseWriter, r *http.Request) 
 		models.Role{Name: "student"},
 		models.Role{Name: "teacher"},
 	}
-    components.NewUserForm(roles, groups).Render(r.Context(), w)
+	components.NewUserForm(roles, groups).Render(r.Context(), w)
 }
 
 // POST /admin/users — создание пользователя
 func (h *AdminUsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
-	session, _ := r.Context().Value("user-session").(*api.Session)
-    req := models.CreateUserRequest{
-        Username: r.FormValue("username"),
-        Password: r.FormValue("password"),
-        FullName: r.FormValue("full_name"),
-        Email:    r.FormValue("email"),
-		Role: r.FormValue("role"),
-    }
-    if gid := r.FormValue("group_id"); gid != "" {
-        id, _ := strconv.Atoi(gid)
-        req.GroupID = &id
-    }
+	session, _ := r.Context().Value("session").(*api.Session)
+	req := models.CreateUserRequest{
+		Username: r.FormValue("username"),
+		Password: r.FormValue("password"),
+		FullName: r.FormValue("full_name"),
+		Email:    r.FormValue("email"),
+		Role:     r.FormValue("role"),
+	}
+	if gid := r.FormValue("group_id"); gid != "" {
+		id, _ := strconv.Atoi(gid)
+		req.GroupID = &id
+	}
 
-    err := h.coreClient.CreateUser(r.Context(), session, req)
-    if err != nil {
-        components.ErrorAlert(err.Error()).Render(r.Context(), w)
+	err := h.coreClient.CreateUser(r.Context(), session, req)
+	if err != nil {
+		h.alerts.AddError(w, session.SessionID, err.Error())
+		w.Header().Set("HX-Redirect", "/admin/users")
 		w.WriteHeader(http.StatusBadRequest)
-        return
-    }
-    // После успешного создания редиректим на список
-    w.Header().Set("HX-Redirect", "/admin/users")
-    w.WriteHeader(http.StatusOK)
+		return
+	}
+	// После успешного создания редиректим на список
+	h.alerts.AddSuccess(w, session.SessionID, "Пользователь создан")
+	w.Header().Set("HX-Redirect", "/admin/users")
+	w.WriteHeader(http.StatusOK)
 }
 
 // GET /admin/users/{id}/edit — форма редактирования

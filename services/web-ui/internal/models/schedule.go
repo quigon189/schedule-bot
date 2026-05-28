@@ -53,3 +53,9 @@ type ScheduleData struct {
 	AudienceNumber string          `json:"audience_number,omitempty"`
 	Entries        []ScheduleEntry `json:"entries"`
 }
+
+type GenerationResult struct {
+	Seed      int       `json:"seed"`
+	FilePath  string    `json:"file_path"`
+	ExpiresAt time.Time `json:"expires_at"`
+}

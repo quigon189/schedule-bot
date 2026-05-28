@@ -34,6 +34,23 @@ type Group struct {
 	Students      []User `json:"students"`
 }
 
+type GroupWithCurriculumResponse struct {
+	Group    Group                   `json:"group"`
+	Subjects []Subject               `json:"subjects"`
+	Students []StudentCreationResult `json:"students"`
+}
+
+type StudentCreationResult struct {
+	User     User   `json:"user"`
+	Password string `json:"password"`
+	GroupID  int    `json:"group_id"`
+}
+
+type TeacherCreationResult struct {
+	User     User   `json:"user"`
+	Password string `json:"password"`
+}
+
 func (u *User) HasRole(role string) bool {
 	return slices.ContainsFunc(u.Roles, func(r Role) bool {
 		return r.Name == role

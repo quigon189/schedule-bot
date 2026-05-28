@@ -3,6 +3,7 @@ package middlewares
 import (
 	"log"
 	"net/http"
+	"runtime/debug"
 	"web-ui/views/pages"
 )
 
@@ -12,6 +13,7 @@ func RecoveryWithHTML(next http.Handler) http.Handler {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Printf("panic: %v", err)
+				log.Printf("%s", debug.Stack())
 				w.WriteHeader(http.StatusInternalServerError)
 				// Игнорируем возможную ошибку рендеринга, так как запрос уже в панике
 				pages.InternalServerErrorPage().Render(r.Context(), w)

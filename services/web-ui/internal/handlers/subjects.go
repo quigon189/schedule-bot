@@ -37,7 +37,7 @@ func (h *SubjectsHandler) SubjectsPage(w http.ResponseWriter, r *http.Request) {
 	if groupIDStr != "" {
 		groupID, err = strconv.Atoi(groupIDStr)
 		if err == nil && groupID > 0 {
-			subjects, err = h.coreClient.GetSubjects(r.Context(), session, groupID)
+			subjects, err = h.coreClient.GetGroupSubjects(r.Context(), session, groupID)
 			if err != nil {
 				RenderInternalError(w, r, err)
 				return
@@ -66,7 +66,7 @@ func (h *SubjectsHandler) SubjectsTable(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	subjects, err := h.coreClient.GetSubjects(r.Context(), session, groupID)
+	subjects, err := h.coreClient.GetGroupSubjects(r.Context(), session, groupID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -18,7 +18,7 @@ templ AdminUsersContent(paginated *models.PaginatedUsers, params models.Paginate
             <button class="btn btn-primary"
                 hx-get="/admin/users/new"
                 hx-target="#userModalContent"
-                hx-swap="beforeend"
+                hx-swap="innerHTML"
                 data-bs-toggle="modal"
                 data-bs-target="#userModal">
                 <i class="bi bi-plus-circle"></i> Создать
@@ -86,26 +86,7 @@ templ AdminUsersContent(paginated *models.PaginatedUsers, params models.Paginate
         </div>
     </div>
 
-    <script>
-        document.body.addEventListener('htmx:afterSwap', function(evt) {
-            if (evt.detail.target.id === 'userModalContent' || evt.detail.target.id === 'alertError') {
-                new bootstrap.Modal(document.getElementById('userModal')).show();
-            }
-        });
-        // закрыть модалку после успешного сохранения
-        document.body.addEventListener('htmx:afterRequest', function(evt) {
-            if (evt.detail.successful && evt.detail.target && evt.detail.target.closest('.modal')) {
-                const modal = bootstrap.Modal.getInstance(document.getElementById('userModal'));
-                if (modal) modal.hide();
-                // обновить таблицу
-                htmx.trigger('#usersTableContainer', 'refresh');
-            }
-        });
-        htmx.on('refresh', function() {
-            htmx.trigger('#usersTableContainer', 'load');
-        });
-    </script>
-}
+    }
 
 func selectedOrEmpty(s *string) string {
     if s == nil { return "" }

@@ -20,7 +20,7 @@ func (s *Session) Set(accessToken, refreshToken, sessionID string, exiresAt int6
 	s.ExiresAt = time.Unix(exiresAt, 0)
 }
 
-func (s *Session) Exire(d time.Duration) bool {
+func (s *Session) Expire(d time.Duration) bool {
 	return time.Now().Add(d).After(s.ExiresAt)
 }
 
