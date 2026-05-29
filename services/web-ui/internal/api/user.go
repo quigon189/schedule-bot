@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"web-ui/internal/models"
 )
 
@@ -98,6 +99,21 @@ func (c *CoreClient) ChangeUserPasswordAdmin(ctx context.Context, s *Session, us
 
 func (c *CoreClient) DeleteUser(ctx context.Context, s *Session, userID int) error {
 	return errors.New("method not implemented")
+}
+
+func (c *CoreClient) GetUserByID(ctx context.Context, s *Session, userID int) (*models.User, error) {
+	var user models.User
+
+	req := &request{
+		method: "GET",
+		path: fmt.Sprintf("/admin/users/%d", userID),
+	}
+
+	if err := c.doWithAuth(ctx, s, req, &user); err != nil {
+		return nil, err
+	}
+
+	return &user, nil
 }
 
 func (c *CoreClient) DownloadTeacherTemplate(ctx context.Context, s *Session) ([]byte, error) {

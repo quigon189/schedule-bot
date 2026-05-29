@@ -1,0 +1,49 @@
+package components
+
+import (
+	"web-ui/internal/models"
+)
+
+templ TeacherUploadResults(results []models.TeacherCreationResult) {
+	<div class="card">
+		<div class="card-header bg-warning text-dark">
+			<i class="bi bi-exclamation-triangle-fill"></i> Внимание! Сохраните пароли
+		</div>
+		<div class="card-body">
+			<p class="alert alert-warning">
+				<strong>Пароли сгенерированы автоматически и не будут показаны повторно.</strong>
+				Обязательно сохраните их перед закрытием страницы.
+			</p>
+			<div class="table-responsive">
+				<table class="table table-sm table-bordered">
+					<thead class="table-light">
+						<tr>
+							<th>Логин</th>
+							<th>ФИО</th>
+							<th>Email</th>
+							<th>Пароль</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, r := range results {
+							<tr>
+								<td>{ r.User.Username }</td>
+								<td>{ r.User.FullName }</td>
+								<td>{ r.User.Email }</td>
+								<td><code>{ r.Password }</code></td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+			<div class="mt-3 d-flex justify-content-center">
+				<button class="btn btn-primary" 
+						hx-get="/admin/users/table" 
+						hx-target="#usersTableContainer" 
+						hx-push-url="true">
+					<i class="bi bi-check-lg"></i> Продолжить
+				</button>
+			</div>
+		</div>
+	</div>
+}

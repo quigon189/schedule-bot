@@ -39,12 +39,13 @@ func (r *Router) Handler() *chi.Mux {
 }
 
 func (r *Router) SetupRoutes() {
-	alertsHandler := handlers.NewAlertsHandler(5*time.Minute, 1*time.Minute)
+	alertsHandler := handlers.SetupAlertsHandler(5*time.Minute, 1*time.Minute)
 	authHandler := handlers.NewAuthHandler(r.coreClient, r.store)
 	dashboardHandler := handlers.NewDashboardHandler(r.coreClient)
 	adminUsersHandler := handlers.NewAdminUsersHandler(r.coreClient, alertsHandler)
 	groupsHandler := handlers.NewGroupsHandler(r.coreClient)
 	subjectHandler := handlers.NewSubjectsHandler(r.coreClient)
+	audiencesHandler := handlers.NewAudiencesHandler(r.coreClient)
 
 	r.router.Use(middleware.Logger)
 	r.router.Use(middlewares.RecoveryWithHTML)
@@ -60,14 +61,31 @@ func (r *Router) SetupRoutes() {
 		r.Get("/alerts", alertsHandler.GetAlerts)
 		r.Get("/", dashboardHandler.Dashboard)
 		r.Post("/logout", authHandler.Logout)
+
 		r.Get("/admin/users", adminUsersHandler.ListUsersPage)
 		r.Get("/admin/users/table", adminUsersHandler.TableFragment)
 		r.Get("/admin/users/new", adminUsersHandler.NewUserForm)
+		r.Get("/admin/users/upload-teachers-form", adminUsersHandler.UploadTeachersForm)
+		r.Get("/admin/users/teacher-template", adminUsersHandler.DownloadTeacherTemplate)
+		r.Post("/admin/users/upload-teachers", adminUsersHandler.UploadTeachers)
+
 		r.Post("/admin/users", adminUsersHandler.CreateUser)
 		r.Get("/admin/groups", groupsHandler.ListGroupsPage)
 
 		r.Get("/admin/subjects", subjectHandler.SubjectsPage)
 		r.Get("/admin/subjects/table", subjectHandler.SubjectsTable)
+
+		r.Get("/admin/audiences", audiencesHandler.ListAudiencesPage)
+		r.Get("/admin/audiences/table", audiencesHandler.TableFragment)
+		r.Get("/admin/audiences/new", audiencesHandler.NewAudienceForm)
+		r.Get("/admin/audiences/upload-form", audiencesHandler.UploadForm)
+		r.Post("/admin/audiences", audiencesHandler.CreateAudience)
+		r.Get("/admin/audiences/{id}/edit", audiencesHandler.EditAudienceForm)
+		r.Post("/admin/audiences/{id}", audiencesHandler.UpdateAudience)
+		r.Delete("/admin/audiences/{id}", audiencesHandler.DeleteAudience)
+		r.Get("/admin/audiences/template", audiencesHandler.DownloadTemplate)
+		r.Post("/admin/audiences/upload", audiencesHandler.UploadExcel)
+
 	})
 
 	r.router.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))

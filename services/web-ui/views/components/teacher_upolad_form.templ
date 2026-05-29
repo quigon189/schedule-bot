@@ -1,0 +1,42 @@
+package components
+
+templ TeacherUploadForm() {
+	<form hx-post="/admin/users/upload-teachers"
+	      hx-encoding="multipart/form-data"
+		  hx-target="#usersTableContainer"
+		  hx-swap="innerHTML"
+		  hx-indicator="#uploadSpinner"
+		  hx-on::after-request="if(event.detail.successful) { 
+			  const modalEl = document.getElementById('uploadModal');
+			  const modal = bootstrap.Modal.getInstance(modalEl);
+			  if(modal) modal.hide();
+		  }">
+		<div class="modal-header">
+			<h5 class="modal-title">Загрузка преподавателей из Excel</h5>
+			<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+		</div>
+		<div class="modal-body">
+			<div id="uploadError" class="mb-3"></div>
+			<div class="mb-3">
+				<label class="form-label">Excel-файл (.xlsx)</label>
+				<input type="file" name="file" class="form-control" accept=".xlsx" required>
+				<div class="form-text">Файл должен соответствовать шаблону.</div>
+			</div>
+			<div class="mb-3">
+				<a href="/admin/users/teacher-template" class="btn btn-info" hx-boost="false" download>
+					<i class="bi bi-download"></i> Скачать шаблон
+				</a>
+			</div>
+			<div id="uploadSpinner" class="htmx-indicator text-center">
+				<div class="spinner-border text-primary" role="status">
+					<span class="visually-hidden">Загрузка...</span>
+				</div>
+				<p class="mt-2">Обработка файла...</p>
+			</div>
+		</div>
+		<div class="modal-footer">
+			<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+			<button type="submit" class="btn btn-primary">Загрузить</button>
+		</div>
+	</form>
+}

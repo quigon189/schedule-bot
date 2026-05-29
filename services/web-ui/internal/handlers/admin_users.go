@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -8,6 +9,8 @@ import (
 	"web-ui/internal/models"
 	"web-ui/views/components"
 	"web-ui/views/pages"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type AdminUsersHandler struct {
@@ -165,18 +168,76 @@ func (h *AdminUsersHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// GET /admin/users/{id}/edit — форма редактирования
+// GET /admin/users/upload-teachers-form — форма загрузки (модальное окно)
+func (h *AdminUsersHandler) UploadTeachersForm(w http.ResponseWriter, r *http.Request) {
+	components.TeacherUploadForm().Render(r.Context(), w)
+}
+
+// GET /admin/users/teacher-template — скачать шаблон Excel
+func (h *AdminUsersHandler) DownloadTeacherTemplate(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value("session").(*api.Session)
+	data, err := h.coreClient.DownloadTeacherTemplate(r.Context(), session)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", "attachment; filename=teachers_template.xlsx")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Write(data)
+}
+
+// POST /admin/users/upload-teachers — загрузка Excel и отображение результатов
+func (h *AdminUsersHandler) UploadTeachers(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value("session").(*api.Session)
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		h.alerts.AddError(w, session.SessionID, "Файл не загружен")
+		w.Header().Set("HX-Redirect", "/admin/users")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	fileData := make([]byte, header.Size)
+	if _, err := file.Read(fileData); err != nil {
+		h.alerts.AddError(w, session.SessionID, "Ошибка чтения файла")
+		w.Header().Set("HX-Redirect", "/admin/users")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	results, err := h.coreClient.UploadTeachersExcel(r.Context(), session, fileData, header.Filename)
+	if err != nil {
+		h.alerts.AddError(w, session.SessionID, "Ошибка загрузки: "+err.Error())
+		w.Header().Set("HX-Redirect", "/admin/users")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Отображаем результаты вместо таблицы пользователей
+	components.TeacherUploadResults(results).Render(r.Context(), w)
+	w.Header().Set("HX-Trigger", "closeModal")
+	w.WriteHeader(http.StatusOK)
+}
+
+
+//GET /admin/users/{id}/edit — форма редактирования
 // func (h *AdminUsersHandler) EditUserForm(w http.ResponseWriter, r *http.Request) {
+// 	session, _ := r.Context().Value("session").(*api.Session)
+// 	
 //     idStr := chi.URLParam(r, "id")
 //     id, _ := strconv.Atoi(idStr)
-//     user, err := h.coreClient.GetUser(w, r, id)
+//
+// 	user, err := h.coreClient.GetUserByID(r.Context(), session, id)
 //     if err != nil {
 //         http.Error(w, err.Error(), http.StatusNotFound)
 //         return
 //     }
 //     components.UserForm(user, nil, nil).Render(r.Context(), w)
 // }
-//
+
 // // PUT /admin/users/{id} — обновление
 // func (h *AdminUsersHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 //     idStr := chi.URLParam(r, "id")

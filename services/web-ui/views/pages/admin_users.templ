@@ -15,14 +15,24 @@ templ AdminUsersContent(paginated *models.PaginatedUsers, params models.Paginate
     <div class="container-fluid">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h1 class="h3">Пользователи</h1>
-            <button class="btn btn-primary"
-                hx-get="/admin/users/new"
-                hx-target="#userModalContent"
-                hx-swap="innerHTML"
-                data-bs-toggle="modal"
-                data-bs-target="#userModal">
-                <i class="bi bi-plus-circle"></i> Создать
-            </button>
+			<div>
+				<button class="btn btn-success me-2"
+                    hx-get="/admin/users/upload-teachers-form"
+                    hx-target="#uploadModalContent"
+                    hx-swap="innerHTML"
+                    data-bs-toggle="modal"
+                    data-bs-target="#uploadModal">
+                    <i class="bi bi-upload"></i> Загрузить преподавателей
+                </button>
+				<button class="btn btn-primary"
+					hx-get="/admin/users/new"
+					hx-target="#userModalContent"
+					hx-swap="innerHTML"
+					data-bs-toggle="modal"
+					data-bs-target="#userModal">
+					<i class="bi bi-plus-circle"></i> Создать
+				</button>
+			</div>
         </div>
 
         <!-- Фильтры -->
@@ -83,6 +93,13 @@ templ AdminUsersContent(paginated *models.PaginatedUsers, params models.Paginate
             <div class="modal-content" id="userModalContent">
                 <!-- сюда загрузится форма -->
             </div>
+        </div>
+    </div>
+
+	<!-- Модальное окно для загрузки преподавателей -->
+    <div class="modal fade" id="uploadModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog">
+            <div class="modal-content" id="uploadModalContent"></div>
         </div>
     </div>
 

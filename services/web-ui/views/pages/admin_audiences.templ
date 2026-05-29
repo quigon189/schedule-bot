@@ -1,0 +1,29 @@
+package pages
+
+import (
+	"web-ui/internal/models"
+	"web-ui/views"
+	"web-ui/views/components"
+)
+
+templ AdminAudiencesPage(currentUser *models.User, audiences []models.Audience, filterNumber, filterName string) {
+	@views.BasePrivate("Управление аудиториями", "", components.AdminSidebar(currentUser, "/admin/audiences"), AdminAudiencesContent(audiences, filterNumber, filterName))
+}
+
+templ AdminAudiencesContent(audiences []models.Audience, filterNumber, filterName string) {
+	<div class="container-fluid">
+		<h1 class="h3 mb-3">Аудитории</h1>
+		<div id="audiences-table-container">
+			@components.AudiencesTable(audiences, filterNumber, filterName)
+		</div>
+	</div>
+
+	<!-- Модальное окно для форм -->
+	<div class="modal fade" id="audienceModal" tabindex="-1" data-bs-backdrop="static">
+		<div class="modal-dialog">
+			<div class="modal-content" id="modalContent">
+				<!-- сюда загрузится форма -->
+			</div>
+		</div>
+	</div>
+}

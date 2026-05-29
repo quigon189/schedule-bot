@@ -17,6 +17,10 @@ func generateUsername(fullName, groupName string) string {
 		return "user"
 	}
 	lastName := parts[0]
+	firstName := ""
+	if len(parts) > 1 {
+		firstName = parts[1]
+	}
 
 	// Транслитерация простейшая (можно расширить, но для демо так)
 	translit := func(s string) string {
@@ -26,13 +30,14 @@ func generateUsername(fullName, groupName string) string {
 			"а", "a", "б", "b", "в", "v", "г", "g", "д", "d", "е", "e", "ё", "e",
 			"ж", "zh", "з", "z", "и", "i", "й", "y", "к", "k", "л", "l", "м", "m",
 			"н", "n", "о", "o", "п", "p", "р", "r", "с", "s", "т", "t", "у", "u",
-			"ф", "f", "х", "kh", "ц", "ts", "ч", "ch", "ш", "sh", "щ", "shch",
-			"ы", "y", "э", "e", "ю", "yu", "я", "ya",
+			"ф", "f", "х", "kh", "ц", "ts", "ч", "ch", "ш", "sh", "щ", "shch", "ъ", "",
+			"ы", "y", "ь", "", "э", "e", "ю", "yu", "я", "ya",
 		)
 		lower := strings.ToLower(s)
 		return replacer.Replace(lower)
 	}
 	lastNameLat := translit(lastName)
+	firsNameLat := translit(firstName)
 
 	clean := func(s string) string {
 		var res strings.Builder
@@ -52,8 +57,15 @@ func generateUsername(fullName, groupName string) string {
 		}
 		return res.String()
 	}
-	username := digits(groupName)
+	username := ""
+	if groupName != "" {
+		username += digits(groupName)
+		username += "-"
+	}
 	username += clean(lastNameLat)
+	if lastNameLat != "" {
+		username += "-" + clean(firsNameLat)
+	}
 	if len(username) > 30 {
 		username = username[:30]
 	}

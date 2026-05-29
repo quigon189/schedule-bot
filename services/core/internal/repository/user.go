@@ -4,6 +4,7 @@ import (
 	"context"
 	"core/internal/dto"
 	"core/internal/models"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -173,10 +174,16 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.
 
 	rows, err := r.db.Query(ctx, query, username)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	user, err = pgx.CollectOneRow(rows, pgx.RowToStructByName[models.User])
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return &user, nil

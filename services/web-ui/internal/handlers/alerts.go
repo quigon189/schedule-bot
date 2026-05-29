@@ -14,9 +14,19 @@ type AlertsHandler struct {
 	ttl        time.Duration
 }
 
+var alerts AlertsHandler
+
 func NewAlertsHandler(ttl, cleanup time.Duration) *AlertsHandler {
 	alertCache := cache.NewMemCache[[]models.Alert](cleanup)
 	return &AlertsHandler{alertCache: alertCache, ttl: ttl}
+}
+
+func SetupAlertsHandler(ttl, cleanup time.Duration) *AlertsHandler {
+	alertCache := cache.NewMemCache[[]models.Alert](cleanup)
+	alerts.alertCache = alertCache
+	alerts.ttl = ttl
+
+	return &alerts
 }
 
 // GET /alerts – возвращает HTML-фрагменты всех непрочитанных алертов и очищает их

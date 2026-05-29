@@ -1,0 +1,56 @@
+package components
+
+import "web-ui/internal/models"
+import "fmt"
+
+templ AudienceForm(audience *models.Audience) {
+	<form hx-post={ formAction(audience) } hx-target="#modalError" hx-swap="innerHTML">
+		<div class="modal-header">
+			<h5 class="modal-title">{ formTitle(audience) }</h5>
+			<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+		</div>
+		<div class="modal-body">
+			<div id="modalError" class="mb-3"></div>
+			<div class="mb-3">
+				<label class="form-label">Название</label>
+				<input type="text" name="name" class="form-control" required value={ audienceName(audience) }>
+			</div>
+			<div class="mb-3">
+				<label class="form-label">Номер</label>
+				<input type="text" name="number" class="form-control" required value={ audienceNumber(audience) }>
+			</div>
+		</div>
+		<div class="modal-footer">
+			<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+			<button type="submit" class="btn btn-primary">Сохранить</button>
+		</div>
+	</form>
+}
+
+func formAction(a *models.Audience) string {
+	if a == nil {
+		return "/admin/audiences"
+	}
+	return fmt.Sprintf("/admin/audiences/%d", a.ID)
+}
+
+func formTitle(a *models.Audience) string {
+	if a == nil {
+		return "Новая аудитория"
+	}
+	return "Редактирование аудитории"
+}
+
+func audienceName(a *models.Audience) string {
+	if a == nil {
+		return ""
+	}
+	return a.Name
+}
+
+func audienceNumber(a *models.Audience) string {
+	if a == nil {
+		return ""
+	}
+	return a.Number
+}
