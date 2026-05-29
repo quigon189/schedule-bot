@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -16,16 +15,16 @@ import (
 )
 
 type CoreClient struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL        string
+	httpClient     *http.Client
 	expireDuration time.Duration
 }
 
 func NewCoreClient(baseURL string, timeout, expireDuration time.Duration) *CoreClient {
 	return &CoreClient{
-		baseURL: baseURL,
+		baseURL:        baseURL,
 		expireDuration: expireDuration,
-		httpClient: &http.Client{Timeout: timeout},
+		httpClient:     &http.Client{Timeout: timeout},
 	}
 }
 
@@ -94,13 +93,15 @@ func (c *CoreClient) do(ctx context.Context, req *request, result any) error {
 func (c *CoreClient) doWithAuth(ctx context.Context, s *Session, req *request, resp any) error {
 	if s.Expire(c.expireDuration) {
 		err := c.refreshToken(ctx, s)
-		log.Printf("err refresh token: %v", err)
+		if err != nil {
+			return fmt.Errorf("refresh token: %w", err)
+		}
 	}
 	if req.headers == nil {
 		req.headers = make(map[string]string)
 	}
 
-	req.headers["Authorization"] = "Bearer "+s.AccessToken
+	req.headers["Authorization"] = "Bearer " + s.AccessToken
 
 	return c.do(ctx, req, resp)
 }
