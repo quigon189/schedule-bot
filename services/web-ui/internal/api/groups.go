@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 	"web-ui/internal/models"
 )
 
@@ -24,6 +26,14 @@ type CreateGroupRequest struct {
 	Name          string `json:"name"`
 	Specialty     string `json:"specialty"`
 	AdmissionYear int    `json:"admission_year"`
+}
+
+type FileResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		FilePath  string    `json:"file_path"`
+		ExpiresAt time.Time `json:"expires"`
+	} `json:"data"`
 }
 
 func (c *CoreClient) CreateGroup(ctx context.Context, session *Session, req CreateGroupRequest) (*models.Group, error) {
@@ -69,9 +79,16 @@ func (c *CoreClient) GetGroup(ctx context.Context, s *Session, id int) (*models.
 }
 
 func (c *CoreClient) DownloadGroupTemplate(ctx context.Context, s *Session) ([]byte, error) {
-	data, _, err := c.doRawWithAuth(ctx, s, &request{method: "GET", path: "/groups/template"})
-	return data, err
+	raw, _, err := c.doRawWithAuth(ctx, s, &request{method: "GET", path: "/groups/template"})
+	var data FileResponse	
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, err
+	}
+	file, _, err := c.doRawWithAuth(ctx, s, &request{method: "GET", path: data.Data.FilePath})
+	return file, err
 }
+
+func (c *CoreClient) DownloadAIGroupTemplate(ctx context.Context, s *Session, filesData[][]byte) {}
 
 func (c *CoreClient) UploadGroupExcel(ctx context.Context, s *Session, fileData []byte, filename string) (*models.GroupWithCurriculumResponse, error) {
 	var result models.GroupWithCurriculumResponse

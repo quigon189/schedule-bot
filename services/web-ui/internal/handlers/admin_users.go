@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -9,8 +8,6 @@ import (
 	"web-ui/internal/models"
 	"web-ui/views/components"
 	"web-ui/views/pages"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type AdminUsersHandler struct {

@@ -4,10 +4,9 @@ import "web-ui/internal/models"
 import "fmt"
 
 templ GroupCard(group models.Group) {
-	<div class="card mb-3">
+	<div id={ fmt.Sprintf("group-%d", group.ID) } class="card mb-3">
 		<div class="card-body">
 			<div class="row align-items-start">
-				<!-- Основная информация -->
 				<div class="col-md-4">
 					<h5 class="card-title">
 						<i class="bi bi-people-fill me-2"></i>{ group.Name }
@@ -19,8 +18,6 @@ templ GroupCard(group models.Group) {
 						<strong>Год поступления:</strong> { group.AdmissionYear }
 					</p>
 				</div>
-
-				<!-- Статистика (заглушки) -->
 				<div class="col-md-4">
 					<div class="row text-center small">
 						<div class="col-4">
@@ -29,9 +26,7 @@ templ GroupCard(group models.Group) {
 						</div>
 					</div>
 				</div>
-
-				<!-- Кнопки действий -->
-				<div class="col-md-4 text-md-end mt-3 ">
+				<div class="col-md-4 text-md-end mt-3">
 					<div class="btn-group" role="group">
 						<a href={ fmt.Sprintf("/admin/subjects?group_id=%d", group.ID) } class="btn btn-sm btn-outline-primary">
 							<i class="bi bi-book"></i> Дисциплины
@@ -39,8 +34,12 @@ templ GroupCard(group models.Group) {
 						<button class="btn btn-sm btn-outline-success" disabled>
 							<i class="bi bi-calendar-week"></i> Расписание
 						</button>
-						<button class="btn btn-sm btn-outline-info" disabled>
-							<i class="bi bi-graph-up"></i> Статистика
+						<button class="btn btn-sm btn-outline-danger" 
+								hx-delete={ fmt.Sprintf("/admin/groups/%d", group.ID) }
+								hx-confirm="Удалить группу? Это также удалит всех студентов группы и связанные данные."
+								hx-target={ fmt.Sprintf("#group-%d", group.ID) }
+								hx-swap="outerHTML">
+							<i class="bi bi-trash"></i> Удалить
 						</button>
 					</div>
 				</div>
@@ -50,7 +49,7 @@ templ GroupCard(group models.Group) {
 }
 
 templ GroupCards(groups []models.Group) {
-	<div class="groups-list">
+	<div id="groups-container">
 		if len(groups) == 0 {
 			<div class="alert alert-info text-center">Нет доступных групп</div>
 		} else {

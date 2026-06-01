@@ -1,0 +1,67 @@
+package components
+
+import "web-ui/internal/models"
+import "fmt"
+
+templ GroupForm(group *models.Group) {
+	<form hx-post={ groupFormAction(group) } hx-target="#modalError" hx-swap="innerHTML">
+		<div class="modal-header">
+			<h5 class="modal-title">{ groupFormTitle(group) }</h5>
+			<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+		</div>
+		<div class="modal-body">
+			<div id="modalError" class="mb-3"></div>
+			<div class="mb-3">
+				<label class="form-label">Название группы</label>
+				<input type="text" name="name" class="form-control" required value={ groupName(group) }>
+			</div>
+			<div class="mb-3">
+				<label class="form-label">Специальность</label>
+				<input type="text" name="specialty" class="form-control" required value={ groupSpecialty(group) }>
+			</div>
+			<div class="mb-3">
+				<label class="form-label">Год поступления</label>
+				<input type="number" name="admission_year" class="form-control" required value={ groupAdmissionYear(group) }>
+			</div>
+		</div>
+		<div class="modal-footer">
+			<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+			<button type="submit" class="btn btn-primary">Сохранить</button>
+		</div>
+	</form>
+}
+
+func groupFormAction(g *models.Group) string {
+	if g == nil {
+		return "/admin/groups"
+	}
+	return fmt.Sprintf("/admin/groups/%d", g.ID)
+}
+
+func groupFormTitle(g *models.Group) string {
+	if g == nil {
+		return "Новая группа"
+	}
+	return "Редактирование группы"
+}
+
+func groupName(g *models.Group) string {
+	if g == nil {
+		return ""
+	}
+	return g.Name
+}
+
+func groupSpecialty(g *models.Group) string {
+	if g == nil {
+		return ""
+	}
+	return g.Specialty
+}
+
+func groupAdmissionYear(g *models.Group) string {
+	if g == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d", g.AdmissionYear)
+}

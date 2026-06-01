@@ -3,9 +3,13 @@ package handlers
 import (
 	"net/http"
 	"sort"
+	"strconv"
 	"web-ui/internal/api"
 	"web-ui/internal/models"
+	"web-ui/views/components"
 	"web-ui/views/pages"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type GroupsHandler struct {
@@ -33,4 +37,129 @@ func (h *GroupsHandler) ListGroupsPage(w http.ResponseWriter, r *http.Request) {
 
 	// CSRF-токен пока передаём пустым, как в admin_users
 	pages.AdminGroupsPage("", user, groups).Render(r.Context(), w)
+}
+
+// GET /admin/groups/list – HTMX-фрагмент со списком групп (карточки)
+func (h *GroupsHandler) ListGroupsFragment(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value("session").(*api.Session)
+
+	groups, err := h.coreClient.GetGroups(r.Context(), session)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].Name < groups[j].Name
+	})
+
+	components.GroupCards(groups).Render(r.Context(), w)
+}
+
+// GET /admin/groups/new – модальная форма создания группы
+func (h *GroupsHandler) NewGroupForm(w http.ResponseWriter, r *http.Request) {
+	components.GroupForm(nil).Render(r.Context(), w)
+}
+
+// POST /admin/groups – создание группы
+func (h *GroupsHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value("session").(*api.Session)
+
+	name := r.FormValue("name")
+	specialty := r.FormValue("specialty")
+	admissionYearStr := r.FormValue("admission_year")
+	admissionYear, err := strconv.Atoi(admissionYearStr)
+	if err != nil {
+		alerts.AddError(w, session.SessionID, "Год поступления должен быть числом")
+		w.Header().Set("HX-Redirect", "/admin/groups")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	req := api.CreateGroupRequest{
+		Name:          name,
+		Specialty:     specialty,
+		AdmissionYear: admissionYear,
+	}
+	_, err = h.coreClient.CreateGroup(r.Context(), session, req)
+	if err != nil {
+		alerts.AddError(w, session.SessionID, "Ошибка создания: "+err.Error())
+		w.Header().Set("HX-Redirect", "/admin/groups")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	alerts.AddSuccess(w, session.SessionID, "Группа успешно создана")
+	w.Header().Set("HX-Redirect", "/admin/groups")
+	w.WriteHeader(http.StatusOK)
+}
+
+// DELETE /admin/groups/{id} – удаление группы
+func (h *GroupsHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value("session").(*api.Session)
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	err = h.coreClient.DeleteGroup(r.Context(), session, id)
+	if err != nil {
+		alerts.AddError(w, session.SessionID, "Ошибка удаления: "+err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	alerts.AddSuccess(w, session.SessionID, "Группа удалена")
+	w.WriteHeader(http.StatusOK)
+}
+
+// GET /admin/groups/upload-form – модальная форма загрузки Excel
+func (h *GroupsHandler) UploadGroupsForm(w http.ResponseWriter, r *http.Request) {
+	components.GroupUploadForm().Render(r.Context(), w)
+}
+
+// GET /admin/groups/template – скачать шаблон Excel
+func (h *GroupsHandler) DownloadGroupTemplate(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value("session").(*api.Session)
+	data, err := h.coreClient.DownloadGroupTemplate(r.Context(), session)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", "attachment; filename=groups_template.xlsx")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Write(data)
+}
+
+// POST /admin/groups/upload – загрузка Excel с группами
+func (h *GroupsHandler) UploadGroupsExcel(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value("session").(*api.Session)
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		alerts.AddError(w, session.SessionID, "Файл не загружен")
+		w.Header().Set("HX-Redirect", "/admin/groups")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	fileData := make([]byte, header.Size)
+	_, err = file.Read(fileData)
+	if err != nil {
+		alerts.AddError(w, session.SessionID, "Ошибка чтения файла")
+		w.Header().Set("HX-Redirect", "/admin/groups")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	_, err = h.coreClient.UploadGroupExcel(r.Context(), session, fileData, header.Filename)
+	if err != nil {
+		alerts.AddError(w, session.SessionID, "Ошибка загрузки: "+err.Error())
+	} else {
+		alerts.AddSuccess(w, session.SessionID, "Группы успешно загружены")
+	}
+	w.Header().Set("HX-Redirect", "/admin/groups")
+	w.WriteHeader(http.StatusOK)
 }

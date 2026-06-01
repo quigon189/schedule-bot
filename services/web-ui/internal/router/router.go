@@ -70,7 +70,15 @@ func (r *Router) SetupRoutes() {
 		r.Post("/admin/users/upload-teachers", adminUsersHandler.UploadTeachers)
 
 		r.Post("/admin/users", adminUsersHandler.CreateUser)
+
 		r.Get("/admin/groups", groupsHandler.ListGroupsPage)
+		r.Get("/admin/groups/list", groupsHandler.ListGroupsFragment)
+		r.Get("/admin/groups/new", groupsHandler.NewGroupForm)
+		r.Post("/admin/groups", groupsHandler.CreateGroup)
+		r.Delete("/admin/groups/{id}", groupsHandler.DeleteGroup)
+		r.Get("/admin/groups/upload-form", groupsHandler.UploadGroupsForm)
+		r.Get("/admin/groups/template", groupsHandler.DownloadGroupTemplate)
+		r.Post("/admin/groups/upload", groupsHandler.UploadGroupsExcel)
 
 		r.Get("/admin/subjects", subjectHandler.SubjectsPage)
 		r.Get("/admin/subjects/table", subjectHandler.SubjectsTable)
