@@ -191,6 +191,7 @@ func (h *GroupHandler) UploadGroupExcel(w http.ResponseWriter, r *http.Request) 
 
 func (h *GroupHandler) AIGroupTemplate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		log.Printf("Parse multipart in ai template: %v", err)
 		utils.ErrorResponse(w, http.StatusBadRequest, "file too large or invalid form")
 		return
 	}

@@ -173,29 +173,30 @@ func (a *LLMAgent) GenerateStructuredData(ctx context.Context, userMessage strin
 			images = append(images, img.Data)
 		}
 	}
-	userPrompt.WriteString("Обязательно выфзови инструмент set_group_info!!!")
+	userPrompt.WriteString("Обязательно вызови инструмент set_group_info!!!")
 
 	var messages []Message
 	messages = append(messages, Message{
-		Role: "system",
+		Role:    "system",
 		Content: systemPrompt,
 	})
 	messages = append(messages, Message{
-		Role: "user",
+		Role:    "user",
 		Content: userPrompt.String(),
-		Images: images,
+		Images:  images,
 	})
 
 	log.Printf("Messages: %+v", messages)
 
 	tool := Tool{
-		Name: "set_group_info",
+		Name:        "set_group_info",
 		Description: "Обязательно вызови эту функцию, для отправки данных пользователю",
-		Parameters: target,
+		Parameters:  target,
 		Handler: func(ctx context.Context, params json.RawMessage) (string, error) {
 			if err := json.Unmarshal(params, &target); err != nil {
 				return "", err
 			}
+			log.Printf("%+v", target)
 			return "ok", nil
 		},
 	}
@@ -208,8 +209,8 @@ func (a *LLMAgent) GenerateStructuredData(ctx context.Context, userMessage strin
 
 	respMessage, err := a.client.Chat(ctx, messages, Options{
 		"temperature": 0,
-		"tools" : td,
-		"num_ctx": 32768,
+		"tools":       td,
+		"num_ctx":     32768,
 	})
 	if err != nil {
 		return fmt.Errorf("generate llm response: %w", err)

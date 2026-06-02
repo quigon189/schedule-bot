@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"log"
 	"sync"
 	"time"
 
@@ -25,6 +26,8 @@ func NewMemoryStorage(ttl, cleanupInterval time.Duration) *MemoryStorage {
 		storage: map[string]File{},
 		TTL:     ttl,
 	}
+
+	log.Printf("Memory file storage created: ttl: %v, cleanUp: %v", storage.TTL, cleanupInterval)
 
 	go storage.gc(cleanupInterval)
 
@@ -61,7 +64,9 @@ func (s *MemoryStorage) gc(interval time.Duration) {
 		s.mu.Lock()
 		now := time.Now()
 		for k, v := range s.storage {
-			if v.ExpiresAt.After(now) {
+			if v.ExpiresAt.Before(now) {
+				log.Printf("file %s expired with id %s", v.Filename, k)
+				log.Printf("now %v expiresAt %v", now, v.ExpiresAt)
 				delete(s.storage, k)
 			}
 		}

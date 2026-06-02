@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -61,10 +62,16 @@ func (c *CoreClient) do(ctx context.Context, req *request, result any) error {
 	if err != nil {
 		return fmt.Errorf("new request: %w", err)
 	}
-	r.Header.Set("Content-Type", "application/json")
+	if h, ok := req.headers["Content-Type"]; ok {
+		r.Header.Set("Content-Type", h)
+	} else {
+		r.Header.Set("Content-Type", "application/json")
+	}
 	for key, value := range req.headers {
 		r.Header.Set(key, value)
 	}
+
+	log.Printf("do request: %+v", r)
 
 	resp, err := c.httpClient.Do(r)
 	if err != nil {

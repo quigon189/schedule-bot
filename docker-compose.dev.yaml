@@ -16,12 +16,12 @@ services:
   core:
     build:
       context: ./services/core
-      dockerfile: Dockerfile.dev   # специальный Dockerfile для разработки
+      dockerfile: Dockerfile.dev # специальный Dockerfile для разработки
     ports:
       - "8088:8080"
     volumes:
-      - ./services/core:/app       # монтируем исходники
-      - /app/tmp                   # исключаем временную папку air
+      - ./services/core:/app # монтируем исходники
+      - /app/tmp # исключаем временную папку air
     environment:
       GO_ENV: development
       JWT_SECRET: ${JWT_SECRET}
@@ -41,12 +41,28 @@ services:
       GIGACHAT_BASE_URL: https://ngw.devices.sberbank.ru:9443/api/v2
       GIGACHAT_MODEL: GigaChat-2
 
-      OLLAMA_URL: host.docker.internal:11434
-      OLLAMA_MODEL: qwen3.5:4b
+      OLLAMA_URL: ollama:11434
+      OLLAMA_MODEL: qwen3.5:9b
       OLLAMA_TIMEOUT: 36000
 
-    command: air -c .air.toml      # запуск air с конфигом
-    entrypoint: ""                  # сбрасываем entrypoint из базового образа
+    command: air -c .air.toml # запуск air с конфигом
+    entrypoint: "" # сбрасываем entrypoint из базового образа
+
+  ollama:
+    image: ollama/ollama:rocm
+    pids_limit: 100
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - HSA_OVERRIDE_GFX_VERSION=10.3.0
+    volumes:
+      - ollama_storage:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
 
 volumes:
   db_data:
+  ollama_storage:

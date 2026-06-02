@@ -79,6 +79,7 @@ func (r *Router) SetupRoutes() {
 		r.Get("/admin/groups/upload-form", groupsHandler.UploadGroupsForm)
 		r.Get("/admin/groups/template", groupsHandler.DownloadGroupTemplate)
 		r.Post("/admin/groups/upload", groupsHandler.UploadGroupsExcel)
+		r.Post("/admin/groups/ai-template", groupsHandler.GenerateAITemplate)
 
 		r.Get("/admin/subjects", subjectHandler.SubjectsPage)
 		r.Get("/admin/subjects/table", subjectHandler.SubjectsTable)

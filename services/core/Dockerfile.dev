@@ -3,6 +3,21 @@ FROM golang:1.25-alpine AS builder
 # Устанавливаем air (live reload)
 RUN go install github.com/air-verse/air@latest
 
+RUN apk add --no-cache \
+    pandoc \
+    ca-certificates \
+    fontconfig \
+    freetype \
+    libstdc++ \
+    libx11 \
+    libxext \
+    libxrender \
+    libssl3 \
+    ttf-freefont \
+    ttf-liberation \
+	poppler-utils
+
+
 WORKDIR /app
 
 # Копируем go.mod и go.sum для кеширования зависимостей

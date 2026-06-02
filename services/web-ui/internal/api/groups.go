@@ -1,9 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
 	"time"
 	"web-ui/internal/models"
 )
@@ -80,7 +84,7 @@ func (c *CoreClient) GetGroup(ctx context.Context, s *Session, id int) (*models.
 
 func (c *CoreClient) DownloadGroupTemplate(ctx context.Context, s *Session) ([]byte, error) {
 	raw, _, err := c.doRawWithAuth(ctx, s, &request{method: "GET", path: "/groups/template"})
-	var data FileResponse	
+	var data FileResponse
 	if err := json.Unmarshal(raw, &data); err != nil {
 		return nil, err
 	}
@@ -88,7 +92,73 @@ func (c *CoreClient) DownloadGroupTemplate(ctx context.Context, s *Session) ([]b
 	return file, err
 }
 
-func (c *CoreClient) DownloadAIGroupTemplate(ctx context.Context, s *Session, filesData[][]byte) {}
+type File struct {
+	Filename string
+	FileData []byte
+}
+
+func (c *CoreClient) DownloadAIGroupTemplate(ctx context.Context, s *Session, message string, files []File) ([]byte, error) {
+	var result struct {
+		FilePath  string    `json:"file_path"`
+		ExpiresAt time.Time `json:"expires_at"`
+	}
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	// Добавляем файлы
+	for _, f := range files {
+		part, err := writer.CreateFormFile("files", f.Filename)
+		if err != nil {
+			return nil, fmt.Errorf("create form file: %w", err)
+		}
+		if _, err := part.Write(f.FileData); err != nil {
+			return nil, fmt.Errorf("write file data: %w", err)
+		}
+	}
+
+	if err := writer.WriteField("message", message); err != nil {
+		return nil, fmt.Errorf("write field message: %w", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("close writer: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/groups/template/ai", body)
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
+	httpReq.Header.Set("Authorization", "Bearer "+s.AccessToken)
+
+	client := http.Client{Timeout: 20 * time.Minute}
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("do request: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	var res models.Result
+	if err := json.Unmarshal(respBody, &res); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, res.Error)
+	}
+	if !res.Success {
+		return nil, fmt.Errorf("API error: %s", res.Error)
+	}
+	if err := json.Unmarshal(res.Data, &result); err != nil{
+		return nil, fmt.Errorf("unmarshal result: %w", err)
+	}
+
+	file, _, err := c.doRawWithAuth(ctx, s, &request{method: "GET", path: result.FilePath})
+	return file, err
+}
 
 func (c *CoreClient) UploadGroupExcel(ctx context.Context, s *Session, fileData []byte, filename string) (*models.GroupWithCurriculumResponse, error) {
 	var result models.GroupWithCurriculumResponse

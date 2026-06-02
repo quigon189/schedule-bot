@@ -1,7 +1,8 @@
 package components
 
 templ GroupUploadForm() {
-	<form hx-post="/admin/groups/upload" hx-encoding="multipart/form-data" hx-target="#uploadError" hx-swap="innerHTML">
+	<!-- Основная форма: загрузка готового Excel-файла -->
+	<form id="mainUploadForm" hx-post="/admin/groups/upload" hx-encoding="multipart/form-data" hx-target="#uploadError" hx-swap="innerHTML">
 		<div class="modal-header">
 			<h5 class="modal-title">Загрузка групп из Excel</h5>
 			<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -15,13 +16,44 @@ templ GroupUploadForm() {
 			</div>
 			<div class="mb-3">
 				<a href="/admin/groups/template" hx-boost="false" class="btn btn-info">
-					<i class="bi bi-download"></i> Скачать шаблон
+					<i class="bi bi-download"></i> Скачать пустой шаблон
 				</a>
 			</div>
+
+			<hr>
+
+			<!-- Альтернативный способ: AI-генерация шаблона -->
+			<h6 class="mb-3">🤖 Или сгенерировать шаблон через AI</h6>
+			<form id="aiForm" action="/admin/groups/ai-template" method="post" hx-boost="false" enctype="multipart/form-data" target="_blank">
+				<div class="mb-3">
+					<label class="form-label">Опишите группу</label>
+					<textarea name="message" class="form-control" rows="3" 
+						placeholder="Пример: Группа СА-501 2023 год набора специальность Сетевое и системное администрирование"></textarea>
+				</div>
+				<div class="mb-3">
+					<label class="form-label">Дополнительные файлы (обязательно)</label>
+					<input type="file" name="files" class="form-control" accept=".pdf,.txt" multiple>
+					<div class="form-text">Загрузите документы с описанием группы и учебного плана</div>
+				</div>
+				
+				<!-- Блок индикатора загрузки (изначально скрыт) -->
+				<div id="aiLoading" class="text-center mb-3" style="display: none;">
+					<div class="spinner-border text-primary" role="status">
+						<span class="visually-hidden">Генерация...</span>
+					</div>
+					<p class="mt-2">ИИ создаёт шаблон, это может занять несколько минут...</p>
+				</div>
+				
+				<div class="mb-3">
+					<button type="submit" id="generateBtn" class="btn btn-outline-primary w-100">
+						<i class="bi bi-magic"></i> Сгенерировать и скачать шаблон
+					</button>
+				</div>
+			</form>
 		</div>
 		<div class="modal-footer">
 			<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-			<button type="submit" class="btn btn-primary">Загрузить</button>
+			<button type="submit" class="btn btn-primary" form="mainUploadForm">Загрузить</button>
 		</div>
 	</form>
 }

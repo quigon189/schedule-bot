@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -162,4 +163,54 @@ func (h *GroupsHandler) UploadGroupsExcel(w http.ResponseWriter, r *http.Request
 	}
 	w.Header().Set("HX-Redirect", "/admin/groups")
 	w.WriteHeader(http.StatusOK)
+}
+
+// файл: internal/handlers/groups.go (добавить новый метод)
+
+// POST /admin/groups/ai-template – генерация шаблона через AI
+func (h *GroupsHandler) GenerateAITemplate(w http.ResponseWriter, r *http.Request) {
+	session, _ := r.Context().Value("session").(*api.Session)
+	
+	message := r.FormValue("message")
+	
+	// Получаем файлы
+	var files []api.File
+	if err := r.ParseMultipartForm(32 << 20); err != nil { // maxMemory 32MB
+		http.Error(w, "Failed to parse form: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	
+	formFiles := r.MultipartForm.File["files"]
+	for _, fileHeader := range formFiles {
+		file, err := fileHeader.Open()
+		if err != nil {
+			http.Error(w, "Failed to open file: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer file.Close()
+		
+		fileData, err := io.ReadAll(file)
+		if err != nil {
+			http.Error(w, "Failed to read file: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		
+		files = append(files, api.File{
+			Filename: fileHeader.Filename,
+			FileData: fileData,
+		})
+	}
+	
+	// Вызываем API для генерации шаблона
+	fileData, err := h.coreClient.DownloadAIGroupTemplate(r.Context(), session, message, files)
+	if err != nil {
+		http.Error(w, "AI generation failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	
+	// Отдаём файл пользователю
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", "attachment; filename=ai_generated_groups_template.xlsx")
+	w.Header().Set("Content-Length", strconv.Itoa(len(fileData)))
+	w.Write(fileData)
 }
