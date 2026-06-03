@@ -155,11 +155,13 @@ func (h *GroupsHandler) UploadGroupsExcel(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	_, err = h.coreClient.UploadGroupExcel(r.Context(), session, fileData, header.Filename)
+	result, err := h.coreClient.UploadGroupExcel(r.Context(), session, fileData, header.Filename)
 	if err != nil {
 		alerts.AddError(w, session.SessionID, "Ошибка загрузки: "+err.Error())
 	} else {
 		alerts.AddSuccess(w, session.SessionID, "Группы успешно загружены")
+		components.GroupUploadResults(result.Students).Render(r.Context(), w)
+		return
 	}
 	w.Header().Set("HX-Redirect", "/admin/groups")
 	w.WriteHeader(http.StatusOK)

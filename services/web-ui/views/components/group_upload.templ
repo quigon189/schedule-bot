@@ -2,7 +2,7 @@ package components
 
 templ GroupUploadForm() {
 	<!-- Основная форма: загрузка готового Excel-файла -->
-	<form id="mainUploadForm" hx-post="/admin/groups/upload" hx-encoding="multipart/form-data" hx-target="#uploadError" hx-swap="innerHTML">
+	<form id="mainUploadForm" hx-post="/admin/groups/upload" hx-encoding="multipart/form-data" hx-target="#groups-container" hx-swap="innerHTML">
 		<div class="modal-header">
 			<h5 class="modal-title">Загрузка групп из Excel</h5>
 			<button type="button" class="btn-close" data-bs-dismiss="modal"></button>

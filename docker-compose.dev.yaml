@@ -51,6 +51,8 @@ services:
   ollama:
     image: ollama/ollama:rocm
     pids_limit: 100
+    profiles:
+      - "ollama"
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
