@@ -1,0 +1,40 @@
+package components
+
+import (
+	"web-ui/internal/models"
+	"fmt"
+)
+
+templ ScheduleUploadForm() {
+	<form hx-post="/admin/schedule/upload" hx-encoding="multipart/form-data" hx-target="#modalContent" hx-swap="innerHTML">
+		<div class="modal-header">
+			<h5 class="modal-title">Генерация расписания из Excel</h5>
+			<button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+		</div>
+		<div class="modal-body">
+			<div class="mb-3">
+				<label class="form-label">Файл Excel (.xlsx)</label>
+				<input type="file" name="file" class="form-control" accept=".xlsx" required>
+				<div class="form-text">Файл должен быть создан из шаблона (см. предыдущий шаг).</div>
+			</div>
+		</div>
+		<div class="modal-footer">
+			<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+			<button type="submit" class="btn btn-primary">Сгенерировать</button>
+		</div>
+	</form>
+}
+
+templ ScheduleGenerationResult(result *models.GenerationResult) {
+	<div>
+		<div class="alert alert-success">
+			<i class="bi bi-check-circle"></i> Расписание успешно сгенерировано!
+		</div>
+		<p>Seed: <code>{ result.Seed }</code></p>
+		<p>Файл готов к скачиванию:</p>
+		<a href={ fmt.Sprintf("/admin/schedule/download-result?path=%s", result.FilePath) } class="btn btn-primary" target="_blank">
+			<i class="bi bi-download"></i> Скачать расписание (Excel)
+		</a>
+		<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+	</div>
+}

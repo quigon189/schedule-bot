@@ -46,6 +46,7 @@ func (r *Router) SetupRoutes() {
 	groupsHandler := handlers.NewGroupsHandler(r.coreClient)
 	subjectHandler := handlers.NewSubjectsHandler(r.coreClient)
 	audiencesHandler := handlers.NewAudiencesHandler(r.coreClient)
+	scheduleAdminHandler := handlers.NewScheduleAdminHandler(r.coreClient)
 
 	r.router.Use(middleware.Logger)
 	r.router.Use(middlewares.RecoveryWithHTML)
@@ -95,6 +96,13 @@ func (r *Router) SetupRoutes() {
 		r.Get("/admin/audiences/template", audiencesHandler.DownloadTemplate)
 		r.Post("/admin/audiences/upload", audiencesHandler.UploadExcel)
 
+		r.Get("/admin/schedule", scheduleAdminHandler.SchedulePage)
+		r.Get("/admin/schedule/view", scheduleAdminHandler.ViewSchedule)
+		r.Get("/admin/schedule/template", scheduleAdminHandler.DownloadPlannerTemplate)
+		r.Get("/admin/schedule/upload-form", scheduleAdminHandler.UploadForm)
+		r.Post("/admin/schedule/upload", scheduleAdminHandler.UploadScheduleExcel)
+		r.Get("/admin/schedule/download-result", scheduleAdminHandler.DownloadGeneratedFile)
+		r.Get("/admin/schedule/export", scheduleAdminHandler.ExportSchedule)
 	})
 
 	r.router.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))

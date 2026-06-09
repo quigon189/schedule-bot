@@ -300,3 +300,18 @@ func (c *CoreClient) doMultipartWithAuth(ctx context.Context, s *Session, path s
 	}
 	return nil
 }
+
+// DoRawGetFile выполняет GET запрос к core по указанному пути и возвращает тело и Content-Type
+func (c *CoreClient) DoRawGetFile(ctx context.Context, s *Session, path string) ([]byte, string, error) {
+	if s.Expire(c.expireDuration) {
+		if err := c.refreshToken(ctx, s); err != nil {
+			return nil, "", fmt.Errorf("refresh token: %w", err)
+		}
+	}
+	req := &request{
+		method:  "GET",
+		path:    path,
+		headers: map[string]string{"Authorization": "Bearer " + s.AccessToken},
+	}
+	return c.doRaw(ctx, req)
+}

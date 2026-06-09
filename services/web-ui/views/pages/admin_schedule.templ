@@ -1,0 +1,110 @@
+package pages
+
+import (
+	"web-ui/internal/models"
+	"web-ui/views"
+	"web-ui/views/components"
+	"strconv"
+)
+
+templ AdminSchedulePage(currentUser *models.User, groups []models.Group, audiences []models.Audience, periods []models.AcademicPeriod) {
+	@views.BasePrivate("Управление расписанием", "", components.AdminSidebar(currentUser, "/admin/schedule"), AdminScheduleContent(groups, audiences, periods))
+}
+
+templ AdminScheduleContent(groups []models.Group, audiences []models.Audience, periods []models.AcademicPeriod) {
+	<div class="container-fluid">
+		<h1 class="h3 mb-3">Расписание</h1>
+
+		<!-- Карточка просмотра расписания -->
+		<div class="card mb-4">
+			<div class="card-header">
+				<i class="bi bi-eye"></i> Просмотр расписания
+			</div>
+			<div class="card-body">
+				<form hx-get="/admin/schedule/view" hx-target="#scheduleViewContainer" hx-push-url="false" class="row g-3 align-items-end">
+					<div class="col-md-3">
+						<label class="form-label">Тип</label>
+						<select name="type" class="form-select" required>
+							<option value="group">Группа</option>
+							<option value="teacher">Преподаватель</option>
+							<option value="audience">Аудитория</option>
+						</select>
+					</div>
+					<div class="col-md-3">
+						<label class="form-label">Сущность</label>
+						<select name="id" class="form-select" required>
+							<option value="" disabled selected>-- Выберите --</option>
+							for _, g := range groups {
+								<option value={ strconv.Itoa(g.ID) } data-type="group">{ g.Name }</option>
+							}
+							for _, a := range audiences {
+								<option value={ strconv.Itoa(a.ID) } data-type="audience">{ a.Number } ({ a.Name })</option>
+							}
+						</select>
+					</div>
+					<div class="col-md-3">
+						<label class="form-label">Учебный период</label>
+						<select name="period_id" class="form-select">
+							<option value="">-- Все периоды --</option>
+							for _, p := range periods {
+								<option value={ strconv.Itoa(p.ID) }>{ p.Year }, { p.Semester } семестр</option>
+							}
+						</select>
+					</div>
+					<div class="col-md-3">
+						<button type="submit" class="btn btn-primary w-100">Показать</button>
+					</div>
+				</form>
+
+				<div class="mt-3">
+					<div id="scheduleViewContainer" class="schedule-view">
+						<!-- сюда подгрузится таблица расписания -->
+						<div class="alert alert-info">Выберите параметры и нажмите "Показать"</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Карточка генерации расписания через Excel -->
+		<div class="card">
+			<div class="card-header">
+				<i class="bi bi-magic"></i> Генерация расписания
+			</div>
+			<div class="card-body">
+				<div class="row">
+					<div class="col-md-6">
+						<h5>1. Скачать шаблон для планировщика</h5>
+						<form method="get" action="/admin/schedule/template" hx-boost="false" class="row g-2">
+							<div class="col-auto">
+								<select name="period_id" class="form-select" required>
+									<option value="" disabled selected>Выберите период</option>
+									for _, p := range periods {
+										<option value={ strconv.Itoa(p.ID) }>{ p.Year }, { p.Semester } семестр</option>
+									}
+								</select>
+							</div>
+							<div class="col-auto">
+								<button type="submit" class="btn btn-secondary">Скачать шаблон</button>
+							</div>
+						</form>
+					</div>
+					<div class="col-md-6">
+						<h5>2. Загрузить заполненный Excel</h5>
+						<button class="btn btn-success" hx-get="/admin/schedule/upload-form" hx-target="#modalContent" data-bs-toggle="modal" data-bs-target="#scheduleModal">
+							<i class="bi bi-upload"></i> Загрузить и сгенерировать
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Модальное окно для загрузки файла -->
+	<div class="modal fade" id="scheduleModal" tabindex="-1" data-bs-backdrop="static">
+		<div class="modal-dialog">
+			<div class="modal-content" id="modalContent">
+				<!-- сюда загрузится форма -->
+			</div>
+		</div>
+	</div>
+}
